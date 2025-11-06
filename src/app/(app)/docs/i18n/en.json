@@ -1,0 +1,137 @@
+{
+  "meta": {
+    "title": "DeepTrans Studio Documentation",
+    "description": "Welcome to the complete documentation for DeepTrans Studio. This is an intelligent translation workbench that integrates machine translation, quality assessment, post-editing, and project management. Whether you are a translation expert, project manager, or developer, you'll find the guides and references you need here."
+  },
+  "navigation": {
+    "overview": "Overview",
+    "gettingStarted": "Getting Started",
+    "installation": "Installation",
+    "concepts": "Core Concepts",
+    "workflows": "Workflows",
+    "ui": "UI Guide",
+    "serverActions": "API Reference",
+    "state": "State Management",
+    "ai": "AI Agents",
+    "database": "Database Design",
+    "troubleshooting": "Troubleshooting",
+    "faq": "FAQ"
+  },
+  "home": {
+    "title": "DeepTrans Studio Documentation",
+    "subtitle": "Welcome to the complete documentation for DeepTrans Studio. This is an intelligent translation workbench that integrates machine translation, quality assessment, post-editing, and project management. Whether you are a translation expert, project manager, or developer, you'll find the guides and references you need here.",
+    "cards": {
+      "gettingStarted": {
+        "title": "Getting Started",
+        "description": "5-minute quick start guide to understand basic features and workflows",
+        "badges": ["Essential", "Basics"]
+      },
+      "workflows": {
+        "title": "Translation Workflows",
+        "description": "Learn about pre-translation, QA, and post-editing workflows",
+        "badges": ["Core Features", "Workflows"]
+      },
+      "concepts": {
+        "title": "Core Concepts",
+        "description": "Understand projects, documents, segments, and other core concepts",
+        "badges": ["Fundamentals", "Terminology"]
+      },
+      "ai": {
+        "title": "AI Agents",
+        "description": "Learn about discourse query, quality assessment, and rewriting features",
+        "badges": ["AI Features", "Smart Assistants"]
+      },
+      "ui": {
+        "title": "UI Guide",
+        "description": "Get familiar with editors, panels, toolbars, and other UI elements",
+        "badges": ["Interface", "Tips"]
+      },
+      "troubleshooting": {
+        "title": "Troubleshooting",
+        "description": "Common issues and troubleshooting guides",
+        "badges": ["Problem Solving", "Maintenance"]
+      }
+    },
+    "features": {
+      "title": "Core Features",
+      "items": {
+        "workflow": {
+          "title": "Intelligent Translation Workflow",
+          "description": "From pre-translation to QA to post-editing, a complete translation production pipeline with AI assistants at every step."
+        },
+        "collaboration": {
+          "title": "Real-time Collaborative Editing",
+          "description": "Support for simultaneous multi-user editing with real-time synchronization, complete version control, and review processes."
+        },
+        "quality": {
+          "title": "Quality Assurance System",
+          "description": "Terminology consistency checks, grammar checks, translation quality scoring - multi-dimensional quality assurance."
+        },
+        "management": {
+          "title": "Project Management Integration",
+          "description": "Complete project lifecycle management from creation to delivery with full visibility and tracking."
+        }
+      }
+    },
+    "quickLinks": {
+      "title": "Quick Links",
+      "installation": "Installation & Setup",
+      "faq": "FAQ",
+      "api": "API Reference",
+      "database": "Database Design"
+    }
+  },
+  "gettingStarted": {
+    "title": "Getting Started",
+    "description": "Get up and running with DeepTrans Studio in 5 minutes"
+  },
+  "installation": {
+    "title": "Installation & Setup",
+    "description": "How to install and configure DeepTrans Studio"
+  },
+  "concepts": {
+    "title": "Core Concepts",
+    "description": "Understand the core concepts of DeepTrans Studio"
+  },
+  "workflows": {
+    "title": "Translation Workflows",
+    "description": "Learn about the complete translation workflow"
+  },
+  "ui": {
+    "title": "UI Guide",
+    "description": "Get familiar with the DeepTrans Studio interface"
+  },
+  "serverActions": {
+    "title": "Server Actions API",
+    "description": "API reference documentation"
+  },
+  "state": {
+    "title": "State Management",
+    "description": "Learn about application state management"
+  },
+  "ai": {
+    "title": "AI Agents",
+    "description": "Learn about AI features and smart assistants"
+  },
+  "database": {
+    "title": "Database Design",
+    "description": "Database architecture and design documentation"
+  },
+  "troubleshooting": {
+    "title": "Troubleshooting",
+    "description": "Common issues and solutions"
+  },
+  "faq": {
+    "title": "Frequently Asked Questions",
+    "description": "Common questions and answers"
+  },
+  "common": {
+    "readMore": "Read More",
+    "previous": "Previous",
+    "next": "Next",
+    "onThisPage": "On This Page",
+    "backToTop": "Back to Top",
+    "lastUpdated": "Last Updated"
+  }
+}
+

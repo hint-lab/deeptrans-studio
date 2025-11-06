@@ -1,0 +1,206 @@
+services:
+  db:
+    image: postgres:13
+    container_name: ${DB_CONTAINER_NAME:-postgres_db}
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres} # 使用 .env 中的 POSTGRES_USER 或默认值 postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-123456} # 使用 .env 中的 POSTGRES_PASSWORD 或默认值 123456
+      POSTGRES_DB: ${POSTGRES_DB:-deeptrans} # 使用 .env 中的 POSTGRES_DB 或默认值 deeptrans-studio
+    ports:
+      - "${DB_PORT:-5432}:5432" # 使用 .env 中的 DB_PORT 或默认值 5432
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  traefik:
+    image: traefik:v3.1
+    container_name: traefik
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik_data:/etc/traefik/acme
+    networks:
+      - web
+    command:
+      - "--api.insecure=false"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.network=web"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:latest
+    container_name: deeptrans-minio
+    restart: always
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+      MINIO_BUCKET_NAME: ${MINIO_BUCKET:-deeptrans}
+      MINIO_BROWSER_REDIRECT_URL: ${MINIO_BROWSER_REDIRECT_URL:-}
+    volumes:
+      - minio-data:/data
+    ports:
+      - "${MINIO_PORT:-9002}:9000" # API 端口（默认 9002→9000，避免与其他 9000 冲突）
+      - "${MINIO_CONSOLE_PORT:-9003}:9001" # 控制台端口（默认 9003→9001）
+    command: minio server /data --console-address ":9001"
+    healthcheck:
+      test: [ "CMD", "mc", "ready", "local" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    
+
+  redis:
+    image: redis:7-alpine
+    container_name: deeptrans-redis
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+
+  studio:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: deeptrans-studio
+    environment:
+      NODE_ENV: production
+      HOSTNAME: 0.0.0.0
+      PORT: 3000
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-123456}@db:5432/${POSTGRES_DB:-deeptrans}}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      AUTH_SECRET: ${AUTH_SECRET}
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL}
+      OPENAI_API_MODEL: ${OPENAI_API_MODEL}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+      MINIO_BUCKET: ${MINIO_BUCKET:-deeptrans}
+      MINIO_BROWSER_REDIRECT_URL: ${MINIO_BROWSER_REDIRECT_URL:-}
+    ports:
+      - "3000:3000"
+    depends_on:
+      - db
+      - redis
+    networks:
+      - web
+      - default
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=web"
+      - "traefik.http.services.studio.loadbalancer.server.port=3000"
+      - "traefik.http.routers.studio.rule=Host(`${STUDIO_HOST:-localhost}`)"
+      - "traefik.http.routers.studio.entrypoints=web"
+      - "traefik.http.routers.studio-secure.rule=Host(`${STUDIO_HOST:-localhost}`)"
+      - "traefik.http.routers.studio-secure.entrypoints=websecure"
+      - "traefik.http.routers.studio-secure.tls=true"
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: deeptrans-worker
+    environment:
+      NODE_ENV: production
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      # OpenAI API 配置
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL}
+      OPENAI_API_MODEL: ${OPENAI_API_MODEL}
+    depends_on:
+      - db
+      - redis
+    restart: unless-stopped
+
+
+  etcd:
+    container_name: deeptrans-milvus-etcd
+    image: quay.io/coreos/etcd:v3.5.18
+    restart: unless-stopped
+    environment:
+      - ETCD_AUTO_COMPACTION_MODE=revision
+      - ETCD_AUTO_COMPACTION_RETENTION=1000
+      - ETCD_QUOTA_BACKEND_BYTES=4294967296
+      - ETCD_SNAPSHOT_COUNT=50000
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/etcd:/etcd
+    command: etcd -advertise-client-urls=http://etcd:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
+    healthcheck:
+      test: ["CMD", "etcdctl", "endpoint", "health"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  
+
+  milvus:
+    container_name: milvus-standalone
+    image: milvusdb/milvus:v2.6.1
+    command: ["milvus", "run", "standalone"]
+    restart: unless-stopped
+    security_opt:
+    - seccomp:unconfined
+    environment:
+      ETCD_ENDPOINTS: etcd:2379
+      MINIO_ADDRESS: minio:9000
+      MQ_TYPE: woodpecker
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/milvus:/var/lib/milvus
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      interval: 30s
+      start_period: 90s
+      timeout: 20s
+      retries: 3
+    ports:
+      - "19530:19530"
+      - "19121:19121"
+      - "9091:9091"
+    depends_on:
+      - "etcd"
+      - "minio"
+ 
+
+  attu:
+    image: zilliz/attu:latest
+    container_name: attu
+    ports:
+      - "8001:3000"
+    environment:
+      MILVUS_URL: milvus:19530
+    depends_on:
+      - milvus
+    restart: unless-stopped
+
+  pdfmath:
+    build:
+      context: .
+      dockerfile: DockerFile.pdfMath
+    image: deeptrans-studio-pdfmath:latest
+    container_name: pdf2zh-next
+    command: ["pdf2zh_api"]
+    ports:
+      - "7861:7861"  # 仅暴露 API 端口
+    environment:
+      # 仅保留 GenericAPI 选择与固定 URL
+      TRANSLATE_ENGINE_TYPE: "GenericAPI"
+      GENERIC_API_URL: "http://deeptrans-worker:8000/v1/translate"
+    restart: unless-stopped
+
+networks:
+  web:
+    external: false
+
+volumes:
+  postgres_data:
+  minio-data:
+  traefik_data:
+  redis-data:

@@ -1,0 +1,33 @@
+# deps
+FROM node:20-bookworm AS deps
+WORKDIR /app
+RUN corepack enable && \
+    corepack prepare yarn@1.22.22 \
+    --activate && \
+    yarn config set registry https://registry.npmmirror.com
+COPY package.json yarn.lock ./
+RUN yarn install --frozen-lockfile --ignore-scripts
+
+# build
+FROM deps AS builder
+COPY . .
+RUN yarn prisma generate \
+ && yarn build:worker 
+# 产出 dist/worker.js
+
+# runtime
+FROM node:20-bookworm-slim
+WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends dumb-init && rm -rf /var/lib/apt/lists/*
+ENV NODE_ENV=production NODE_OPTIONS=--max-old-space-size=512 BULLMQ_CONCURRENCY=8
+COPY package.json yarn.lock ./
+RUN corepack enable && corepack prepare yarn@1.22.22 --activate && yarn config set registry https://registry.npmmirror.com \
+ && yarn install --frozen-lockfile --ignore-scripts --production=true
+COPY --from=builder /app/dist ./dist
+# 拷贝已经在 builder 阶段生成好的 Prisma Client（避免生产镜像忽略 postinstall 导致未生成）
+COPY --from=builder /app/node_modules/.prisma /app/node_modules/.prisma
+USER node
+ENTRYPOINT ["dumb-init","--"]
+CMD ["node","dist/worker.cjs"]
+
+
