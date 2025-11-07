@@ -33,6 +33,7 @@
         "goRegister": "Sign up",
         "hasAccount": "Already have an account?",
         "goLogin": "Sign in",
+        "demoAccount": "Demo Account",
         "email": "Email",
         "verificationCode": "Verification Code",
         "nickname": "Nickname (Optional)",

@@ -49,8 +49,12 @@ export const LoginCard = () => {
                         </div>
                     </TabsContent>
                 </Tabs>
-                <div className="text-center text-sm mt-4">
+                {/* Demo 版本禁用注册功能 */}
+                {/* <div className="text-center text-sm mt-4">
                     {t("noAccount")} <a className="underline" href="/auth/register">{t("goRegister")}</a>
+                </div> */}
+                <div className="text-center text-sm mt-4 text-muted-foreground">
+                    {t("demoAccount")}: test@example.com / 123456
                 </div>
             </CardContent>
         </Card>

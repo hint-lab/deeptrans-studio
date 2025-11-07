@@ -3,7 +3,9 @@ FROM node:20-slim AS builder
 WORKDIR /app 
 
 # 设置国内镜像源
-RUN npm config set registry https://registry.npmmirror.com
+# 阿里云镜像: https://registry.npmmirror.com
+# 腾讯云镜像: https://mirrors.cloud.tencent.com/npm/
+RUN npm config set registry https://mirrors.cloud.tencent.com/npm/
 
 # 复制 package.json 和 package-lock.json
 COPY package*.json ./
@@ -42,9 +44,10 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 
-# 复制 Prisma 生成的客户端
+# 复制 Prisma 相关文件
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+COPY --from=builder /app/prisma ./prisma
 
 # 暴露端口
 EXPOSE 3000
