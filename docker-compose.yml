@@ -151,7 +151,7 @@ services:
       test: ["CMD", "etcdctl", "endpoint", "health"]
       interval: 30s
       timeout: 20s
-      retries: 
+      retries: 3
     networks:
       - web
       - default
