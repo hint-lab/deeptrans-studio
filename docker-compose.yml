@@ -26,15 +26,12 @@ services:
     networks:
       - web
     command:
-      - "--log.level=DEBUG"
+      - "--log.level=INFO"
       - "--accesslog=true"
       - "--api.insecure=false"
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
-      - "--providers.docker.network=web"
       - "--entrypoints.web.address=:80"
-      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
-      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
       - "--entrypoints.websecure.address=:443"
       - "--certificatesresolvers.le.acme.tlschallenge=true"
       - "--certificatesresolvers.le.acme.email=wang-hao@deeptrans.studio"
@@ -108,7 +105,6 @@ services:
       - default
     labels:
       - "traefik.enable=true"
-      - "traefik.docker.network=web"
       - "traefik.http.services.studio.loadbalancer.server.port=3000"
       - "traefik.http.routers.studio.rule=Host(`${STUDIO_HOST:-localhost}`)"
       - "traefik.http.routers.studio.entrypoints=web"

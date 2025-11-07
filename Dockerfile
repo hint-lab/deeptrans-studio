@@ -31,13 +31,20 @@ RUN npm run build
 FROM node:20-slim AS runner
 WORKDIR /app
 
+# 安装 OpenSSL (Prisma 需要)
+RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
+
 # 设置环境变量
 ENV NODE_ENV production
 
-# 只复制 standalone 目录
+# 复制 standalone 目录
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
+
+# 复制 Prisma 生成的客户端
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 
 # 暴露端口
 EXPOSE 3000
