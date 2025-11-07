@@ -33,7 +33,7 @@
         "goRegister": "去注册",
         "hasAccount": "已有账号？",
         "goLogin": "去登录",
-        "demoAccount": "演示账号",
+        "demoAccount": "演示账号(邮箱/验证码)",
         "email": "邮箱",
         "verificationCode": "验证码",
         "nickname": "昵称（可选）",

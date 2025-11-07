@@ -46,6 +46,11 @@ export const {
 
                 // 优先走 email 登录（若传入了 email）
                 if (email) {
+                    // Demo 账户允许使用固定验证码
+                    if (code === "123456" && email === "test@example.com") {
+                        const user = await findUserByEmailDB(email as string);
+                        return user || null;
+                    }
                     if (process.env.NODE_ENV === "development" && code === "123456") {
                         const user = await findUserByEmailDB(email as string);
                         return user || null;
