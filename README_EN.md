@@ -8,7 +8,7 @@
 
 > 🚀 DeepTrans Studio is an intelligent translation platform designed for professional translation and localization teams, offering end-to-end capabilities including Translation IDE, terminology management, translation memory, quality assessment, and automated workflows.
 
-**Developed by**: [CogNLP Lab](https://hint-lab.github.io/people/wang_hao/), Shanghai University
+**Developed by**: [H!NT Lab](https://hint-lab.github.io/people/wang_hao/), Shanghai University
 
 [中文文档](./README.md) | **English**
 
@@ -246,7 +246,7 @@ The project uses [next-intl](https://next-intl-docs.vercel.app/) to manage multi
 
 ## About
 
-- This repository is developed by CogNLP Lab at Shanghai University for Demo Paper (2025) submission and reproduction demonstration.
+- This repository is developed by H!NT Lab at Shanghai University for Demo Paper (2025) submission and reproduction demonstration.
 - The repository does not include production keys and sensitive configurations by default. For deployment, create your own `.env` and replace service credentials.
 - If you encounter issues during reproduction, please communicate via GitHub Issues or contact information provided in the paper.
 
@@ -254,5 +254,5 @@ The project uses [next-intl](https://next-intl-docs.vercel.app/) to manage multi
 
 💡 If you have suggestions for improvement, welcome to submit Issues / PRs to help us improve the intelligent translation platform together.
 
-**CogNLP Lab, Shanghai University** © 2025
+**H!NT Lab, Shanghai University** © 2025
 
