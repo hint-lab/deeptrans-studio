@@ -150,9 +150,17 @@ export function FileUpload({ onUploadComplete, projectName }: FileUploadProps) {
             uploadFile(file);
         }
     }, [uploadFile]);
-
+    const onDropRejected = useCallback((rejections: FileRejection[]) => {
+      const first = rejections[0];
+      if (first.errors[0]?.code === 'file-too-large') {
+        toast.error(t('fileSizeExceeded')); 
+      } else {
+        toast.error(t('fileTypeNotSupported'));
+      }
+    }, [t]);
     const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
         onDrop,
+        onDropRejected,
         accept: ACCEPTED_FILE_TYPES,
         maxFiles: 1,
         maxSize: MAX_FILE_SIZE,
