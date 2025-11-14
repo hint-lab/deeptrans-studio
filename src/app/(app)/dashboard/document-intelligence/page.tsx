@@ -357,7 +357,7 @@ export default function DocumentIntelligencePage() {
           </div>
           <div className="p-4">
             <div className="w-full mb-3">
-              <FileUpload onUploadComplete={() => setTaskStatus("pending")} projectName={t("temporaryDocument")} />
+              <FileUpload onUploadComplete={() => setTaskStatus("pending")} projectName={t("temporaryDocument")} elementName="Dashboard.DocumentTranslate"/>
             </div>
             <div className="mt-2 text-sm text-purple-600">{t("supportedFileTypes")}</div>
           </div>

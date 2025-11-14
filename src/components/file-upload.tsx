@@ -14,19 +14,31 @@ interface FileUploadProps {
         size: number;
     }) => void;
     projectName: string;
+    elementName: string;
 }
 
 const ACCEPTED_FILE_TYPES = {
-    'text/plain': ['.txt'],
+    /* 图片 */
+    'image/jpeg': ['.jpg', '.jpeg'],
+    'image/png': ['.png'],
+    'image/webp': ['.webp'],
+
+    /* 文档 */
     'application/pdf': ['.pdf'],
     'application/msword': ['.doc'],
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+    'application/vnd.ms-powerpoint': ['.ppt'],
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation': ['.pptx'],
+
+    /* 文本 */
+    'text/plain': ['.txt'],
 };
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
-export function FileUpload({ onUploadComplete, projectName }: FileUploadProps) {
-    const t = useTranslations('FileUpload');
+export function FileUpload({ onUploadComplete, projectName, elementName='FileUpload' }: FileUploadProps) {
+    const t = useTranslations(elementName);
     const [isUploading, setIsUploading] = useState(false);
     const [uploadedFile, setUploadedFile] = useState<{
         fileName: string;
