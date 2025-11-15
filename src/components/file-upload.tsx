@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { useDropzone } from 'react-dropzone';
+import { FileRejection, useDropzone } from 'react-dropzone';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { getUploadUrlAction, uploadFileAction } from '@/actions/upload';
@@ -163,11 +163,12 @@ export function FileUpload({ onUploadComplete, projectName, elementName='FileUpl
         }
     }, [uploadFile]);
     const onDropRejected = useCallback((rejections: FileRejection[]) => {
-      const first = rejections[0];
-      if (first.errors[0]?.code === 'file-too-large') {
-        toast.error(t('fileSizeExceeded')); 
+        const first = rejections[0];
+        const errorCode = first?.errors[0]?.code;
+        if (errorCode === 'file-too-large') {
+            toast.error(t('fileSizeExceeded')); 
       } else {
-        toast.error(t('fileTypeNotSupported'));
+            toast.error(t('fileTypeNotSupported'));
       }
     }, [t]);
     const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
