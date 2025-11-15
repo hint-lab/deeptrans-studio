@@ -304,6 +304,7 @@ export function CreateProjectDialog({ onCreated, triggerVariant = 'default' }: {
               <FileUpload
                 onUploadComplete={handleFileUpload}
                 projectName={dialogState.projectName}
+                elementName="FileUpload"
               />
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
                 {t('supportedFormats')}
