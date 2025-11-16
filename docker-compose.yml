@@ -36,6 +36,7 @@ services:
       - "--certificatesresolvers.le.acme.tlschallenge=true"
       - "--certificatesresolvers.le.acme.email=wang-hao@deeptrans.studio"
       - "--certificatesresolvers.le.acme.storage=/etc/traefik/acme/acme.json"
+      - "--providers.docker.network=deeptrans-studio_web"
     restart: unless-stopped
 
   minio:
@@ -80,21 +81,8 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: deeptrans-studio
-    environment:
-      NODE_ENV: production
-      HOSTNAME: 0.0.0.0
-      PORT: 3000
-      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-123456}@db:5432/${POSTGRES_DB:-deeptrans}}
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
-      AUTH_SECRET: ${AUTH_SECRET}
-      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost}
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
-      OPENAI_BASE_URL: ${OPENAI_BASE_URL}
-      OPENAI_API_MODEL: ${OPENAI_API_MODEL}
-      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
-      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
-      MINIO_BUCKET: ${MINIO_BUCKET:-deeptrans}
-      MINIO_BROWSER_REDIRECT_URL: ${MINIO_BROWSER_REDIRECT_URL:-}
+    env_file:
+      - .env  # 导入文件中的所有环境变量
     ports:
       - "3000:3000"
     depends_on:
@@ -119,13 +107,8 @@ services:
       context: .
       dockerfile: Dockerfile.worker
     container_name: deeptrans-worker
-    environment:
-      NODE_ENV: production
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
-      # OpenAI API 配置
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
-      OPENAI_BASE_URL: ${OPENAI_BASE_URL}
-      OPENAI_API_MODEL: ${OPENAI_API_MODEL}
+    env_file:
+      - .env  # 导入文件中的所有环境变量
     depends_on:
       - db
       - redis
