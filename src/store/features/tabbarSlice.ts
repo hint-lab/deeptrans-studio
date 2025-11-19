@@ -1,5 +1,5 @@
-import { createSlice, PayloadAction } from '@reduxjs/toolkit';
-import { TabBarState } from '@/types/tabBar';
+import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
+import { type TabBarState } from '@/types/tabBar';
 
 const initialState: TabBarState = {
     tabBars: [],

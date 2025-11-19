@@ -11,7 +11,7 @@ export const listProjectDictionaryBindingsDB = async (projectId: string) => {
 
 export const updateProjectDictionaryBindingsDB = async (projectId: string, dictionaryIds: string[]) => {
     const unique = Array.from(new Set((dictionaryIds || []).map(String).filter(Boolean)))
-    return dbTry(async () => prisma.$transaction(async (tx) => {
+    return dbTry(async () => prisma.$transaction(async (tx: any) => {
         // 删除未在列表中的绑定
         await tx.projectDictionary.deleteMany({ where: { projectId, ...(unique.length ? { dictionaryId: { notIn: unique } } : {}) } })
         // 确保存在列表中的绑定
@@ -38,12 +38,13 @@ export const listProjectMemoryBindingsDB = async (projectId: string) => {
 export const updateProjectMemoryBindingsDB = async (projectId: string, memoryIds: string[]) => {
     const has = (prisma as any).projectMemory
     if (!has) return true
-    const unique = Array.from(new Set((memoryIds || []).map(String).filter(Boolean)))
-    return dbTry(async () => prisma.$transaction(async (tx) => {
-        await (tx as any).projectMemory.deleteMany({ where: { projectId, ...(unique.length ? { memoryId: { notIn: unique } } : {}) } })
+    const list = Array.isArray(memoryIds) ? memoryIds : []
+    const unique = Array.from(new Set(list.map((id) => String(id || "").trim()).filter(Boolean)))
+    return dbTry(async () => prisma.$transaction(async (tx: any) => {
+        await tx.projectMemory.deleteMany({ where: { projectId, ...(unique.length ? { memoryId: { notIn: unique } } : {}) } })
         for (const mid of unique) {
-            const exist = await (tx as any).projectMemory.findUnique({ where: { projectId_memoryId: { projectId, memoryId: mid } } })
-            if (!exist) await (tx as any).projectMemory.create({ data: { projectId, memoryId: mid } })
+            const exist = await tx.projectMemory.findUnique({ where: { projectId_memoryId: { projectId, memoryId: mid } } })
+            if (!exist) await tx.projectMemory.create({ data: { projectId, memoryId: mid } })
         }
         return true
     }))

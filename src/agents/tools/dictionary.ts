@@ -1,5 +1,5 @@
 // Dictionary Tool - 术语库查询工具
-import { DictEntry, TermCandidate } from '@/types/terms';
+import { type DictEntry, type TermCandidate } from '@/types/terms';
 
 export class DictionaryTool {
   private readonly apiBase: string;
@@ -46,8 +46,8 @@ export class DictionaryTool {
         // 构建安全 URL（服务端用绝对，客户端允许相对）
         const urlObj = baseUrl ? new URL('/api/dictionary/lookup', baseUrl) : new URL('/api/dictionary/lookup', 'http://localhost');
         urlObj.searchParams.set('q', term);
-        if (options?.tenantId) urlObj.searchParams.set('tenantId', options.tenantId);
-        if (options?.userId) urlObj.searchParams.set('userId', options.userId);
+        if (options?.tenantId) urlObj.searchParams.set('tenantId', options.tenantId ?? '');
+        if (options?.userId) urlObj.searchParams.set('userId', options.userId ?? '');
         const url = baseUrl ? urlObj.toString() : `${urlObj.pathname}${urlObj.search}`;
 
         console.log(`Dictionary lookup: Querying "${term}" at URL: ${url}`);

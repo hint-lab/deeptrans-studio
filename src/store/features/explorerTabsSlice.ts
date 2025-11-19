@@ -1,5 +1,5 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
-import { ExplorerTabs, DocumentItemTab } from '@/types/explorerTabs';
+import { type ExplorerTabs, type DocumentItemTab } from '@/types/explorerTabs';
 
 
 // 完整的项目结构  

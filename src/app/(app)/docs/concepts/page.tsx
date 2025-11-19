@@ -40,7 +40,7 @@ export default async function ConceptsPage() {
           <BookOpen className="h-8 w-8 text-purple-600" />
           <h1 className="scroll-m-20 text-4xl font-bold tracking-tight">{t('concepts.title')}</h1>
         </div>
-        <p className="text-lg text-muted-foreground">
+        <p className="text-lg text-muted-foreground max-w-3xl">
           {t('concepts.subtitle')}
         </p>
       </div>

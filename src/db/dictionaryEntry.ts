@@ -96,7 +96,8 @@ export const deleteDictionaryEntriesByDictionaryIdDB = async(dictionaryId: strin
 export const findExistingDictionaryEntriesMapDB = async(dictionaryId: string, sources: string[]): Promise<Map<string, string>> => {
   const rows = await dbTry(() => prisma.dictionaryEntry.findMany({ where: { dictionaryId, sourceText: { in: sources } }, select: { id: true, sourceText: true } }))
   if (!rows) return new Map<string, string>()
-  return new Map<string, string>(rows.map((r: { id: string; sourceText: string }) => [r.sourceText, r.id])) 
+  const list = Array.isArray(rows) ? rows : []
+  return new Map<string, string>(list.map((r: { id: string; sourceText: string }) => [r.sourceText, r.id])) 
 }
 
 // 创建
@@ -182,7 +183,8 @@ export const findByScopeDB = async(term: string, orScopes: any[], limit: number)
     select: { sourceText: true, targetText: true, notes: true, dictionary: { select: { name: true, visibility: true } } }
   }))
   if (!rows) return [] as Array<{ sourceText: string; targetText: string; notes: string | null; dictionary: { name: string; visibility: string } }>
-  return rows.map((r: { sourceText: string; targetText: string; notes: string | null; dictionary: { name: string; visibility: string } }) => ({
+  const list = Array.isArray(rows) ? rows : []
+  return list.map((r: { sourceText: string; targetText: string; notes: string | null; dictionary: { name: string; visibility: string } }) => ({
     sourceText: r.sourceText,
     targetText: r.targetText,
     notes: r.notes,
@@ -193,7 +195,7 @@ export const findByScopeDB = async(term: string, orScopes: any[], limit: number)
 
 /** 精确检索：sourceText 完全匹配（不区分大小写） */
 export const findExactByScopeDB = async(term: string, orScopes: any[], limit: number): Promise<Array<{ id: string; dictionaryId: string; sourceText: string; targetText: string; notes: string | null; origin: string | null; dictionary: { name: string; visibility: string } }>> => {
-  return dbTry(() => prisma.dictionaryEntry.findMany({
+  const rows = await dbTry(() => prisma.dictionaryEntry.findMany({
     where: {
       sourceText: { equals: term, mode: 'insensitive' as any },
       enabled: true,
@@ -202,5 +204,7 @@ export const findExactByScopeDB = async(term: string, orScopes: any[], limit: nu
     orderBy: { createdAt: 'desc' },
     take: limit,
     select: { id: true, dictionaryId: true, sourceText: true, targetText: true, notes: true, origin: true, dictionary: { select: { name: true, visibility: true } } }
-    })) 
+    }))
+  if (!rows) return []
+  return Array.isArray(rows) ? rows : []
 }

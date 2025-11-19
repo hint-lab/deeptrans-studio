@@ -40,7 +40,7 @@ i18n/
 
 ### 在首页和导航中使用
 
-\`\`\`tsx
+```typescript
 import { getDocsTranslations, getDocsT } from "./i18n";
 
 export default async function DocsHomePage() {
@@ -49,16 +49,16 @@ export default async function DocsHomePage() {
   
   return (
     <div>
-      <h1>\{t('home.title')\}</h1>
-      <p>\{t('home.subtitle')\}</p>
+      <h1>{t('home.title')}</h1>
+      <p>{t('home.subtitle')}</p>
     </div>
   );
 }
-\`\`\`
+```
 
 ### 在子页面中使用
 
-\`\`\`tsx
+```typescript
 import { getPageTranslations, getPageT } from "../i18n";
 
 export default async function GettingStartedPage() {
@@ -68,20 +68,20 @@ export default async function GettingStartedPage() {
   
   return (
     <div>
-      <h1>\{t('gettingStarted.title')\}</h1>
-      <p>\{t('gettingStarted.subtitle')\}</p>
+      <h1>{t('gettingStarted.title')}</h1>
+      <p>{t('gettingStarted.subtitle')}</p>
       
       {/* 访问复杂对象 */}
-      \{Object.entries(page.steps).map(([key, step]) => (
-        <div key=\{key\}>
-          <h2>\{step.title\}</h2>
-          <p>\{step.description\}</p>
+      {Object.entries(page.steps).map(([key, step]) => (
+        <div key={key}>
+          <h2>{step.title}</h2>
+          <p>{step.description}</p>
         </div>
-      ))\}
+      ))}
     </div>
   );
 }
-\`\`\`
+```
 
 ## JSON 文件结构
 
@@ -106,7 +106,7 @@ export default async function GettingStartedPage() {
 - `subtitle`: 页面副标题
 - 页面特定内容（如 steps、concepts 等）
 
-示例（gettingStarted-zh.json）：
+示例：
 ```json
 {
   "gettingStarted": {
@@ -122,8 +122,6 @@ export default async function GettingStartedPage() {
   }
 }
 ```
-
-**注意**：所有页面文件会在 `index.ts` 中自动合并，使用方式与之前相同。
 
 ## 已支持的页面
 

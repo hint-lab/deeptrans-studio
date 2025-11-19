@@ -1,11 +1,30 @@
-import { MilvusClient, DataType, IndexType } from '@zilliz/milvus2-sdk-node';
+import { MilvusClient as MilvusClientCtor, DataType, IndexType } from '@zilliz/milvus2-sdk-node';
 import { HybridSearchConfig, SearchResult, BM25Result, VectorResult, DEFAULT_HYBRID_CONFIG } from '@/types/hybrid-search';
+
+type MilvusClient = InstanceType<typeof MilvusClientCtor>;
+
+type MilvusStatsEntry = { key?: string; value?: string | number | null };
+
+const toStatsArray = (maybeArray: unknown): MilvusStatsEntry[] => {
+  return Array.isArray(maybeArray) ? (maybeArray as MilvusStatsEntry[]) : [];
+};
+
+const getRowCountFromStats = (stats: unknown): number => {
+  const data = stats as { data?: any; stats?: any; row_count?: any } | undefined;
+  const direct = Number((data?.data as any)?.row_count ?? (data as any)?.row_count);
+  if (Number.isFinite(direct) && direct >= 0) return direct;
+
+  const concatenated = [...toStatsArray(data?.stats), ...toStatsArray(data?.data)];
+  const entry = concatenated.find((item) => item?.key === 'row_count');
+  const value = typeof entry?.value === 'string' ? Number(entry.value) : Number(entry?.value ?? 0);
+  return Number.isFinite(value) && value >= 0 ? value : 0;
+};
 
 let client: MilvusClient | null = null;
 
 export function milvus(): MilvusClient {
   if (!client) {
-    client = new MilvusClient({
+    client = new MilvusClientCtor({
       address: process.env.MILVUS_URL || 'localhost:19530',
       ssl: false
     });
@@ -174,7 +193,7 @@ export async function upsertVectors(params: {
 
       try {
         const stats = await c.getCollectionStatistics({ collection_name: params.collection });
-        const rowCount = parseInt(stats?.data?.row_count || stats?.stats?.find(s => s.key === 'row_count')?.value || '0');
+        const rowCount = getRowCountFromStats(stats);
         console.log(`[MILVUS] Collection stats check ${21 - retries}: row_count = ${rowCount}, target = ${entities.length}`);
 
         if (rowCount >= entities.length) {
@@ -197,7 +216,7 @@ export async function upsertVectors(params: {
 
     // 最终检查
     const finalStats = await c.getCollectionStatistics({ collection_name: params.collection });
-    const finalRowCount = parseInt(finalStats?.data?.row_count || finalStats?.stats?.find(s => s.key === 'row_count')?.value || '0');
+    const finalRowCount = getRowCountFromStats(finalStats);
     console.log(`[MILVUS] Final row count: ${finalRowCount}/${entities.length}`);
 
     if (finalRowCount === 0) {
@@ -253,7 +272,7 @@ export async function searchVectors(params: {
     const stats = await c.getCollectionStatistics({ collection_name: params.collection });
     console.log(`[MILVUS] Collection stats before search:`, stats);
 
-    const rowCount = parseInt(stats?.data?.row_count || stats?.stats?.find(s => s.key === 'row_count')?.value || '0');
+    const rowCount = getRowCountFromStats(stats);
     if (rowCount === 0) {
       console.log(`[MILVUS] Collection is empty, skipping search`);
       return [];

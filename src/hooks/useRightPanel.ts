@@ -3,7 +3,7 @@
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { setRightPanelMode, toggleChat, togglePreview, toggleHelp, type RightPanelMode } from '@/store/features/rightPaneSlice';
 import { setContent, appendContent, clearContent, updateById } from '@/store/features/chatbarSlice';
-import { Message } from '@/types/chat';
+import { type Message } from '@/types/chat';
 
 export const useRightPanel = () => {
     const dispatch = useAppDispatch();

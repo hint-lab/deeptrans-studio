@@ -4,7 +4,7 @@
     "description": "欢迎来到 DeepTrans Studio 的完整文档。这是一个智能翻译工作台，集成了机器翻译、质量评估、译后编辑和项目管理功能。无论您是翻译专家、项目经理还是开发者，这里都有您需要的指南和参考资料。"
   },
   "navigation": {
-    "overview": "欢迎使用DeepTrans",
+    "overview": "概览",
     "gettingStarted": "快速开始",
     "installation": "安装与配置",
     "concepts": "核心概念",

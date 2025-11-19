@@ -13,6 +13,7 @@ RUN mkdir -p prisma
 
 # 复制 prisma 目录
 COPY prisma ./prisma/
+RUN apt-get update -y && apt-get install -y openssl libssl-dev
 
 # 修改这一行: 使用 npm install 替代 npm ci
 RUN npm install --legacy-peer-deps --ignore-scripts --no-audit --no-fund
@@ -30,13 +31,20 @@ RUN npm run build
 FROM node:20-slim AS runner
 WORKDIR /app
 
+# 安装 OpenSSL (Prisma 需要)
+RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
+
 # 设置环境变量
 ENV NODE_ENV production
 
-# 只复制 standalone 目录
+# 复制 standalone 目录
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
+
+# 复制 Prisma 生成的客户端
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 
 # 暴露端口
 EXPOSE 3000

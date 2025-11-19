@@ -11,9 +11,11 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     restart: unless-stopped
+    networks:
+      - web
 
-  traefik:
-    image: traefik:v3.1
+  traefik:             
+    image: traefik:v3.5
     container_name: traefik
     ports:
       - "80:80"
@@ -24,12 +26,17 @@ services:
     networks:
       - web
     command:
+      - "--log.level=INFO"
+      - "--accesslog=true"
       - "--api.insecure=false"
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
-      - "--providers.docker.network=web"
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.le.acme.tlschallenge=true"
+      - "--certificatesresolvers.le.acme.email=wang-hao@deeptrans.studio"
+      - "--certificatesresolvers.le.acme.storage=/etc/traefik/acme/acme.json"
+      - "--providers.docker.network=deeptrans-studio_web"
     restart: unless-stopped
 
   minio:
@@ -52,6 +59,9 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+    networks:
+      - web
+      - default
     
 
   redis:
@@ -63,27 +73,16 @@ services:
     volumes:
       - redis-data:/data
     restart: unless-stopped
+    networks:
+      - web
 
-  studio:
+  website:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: deeptrans-studio
-    environment:
-      NODE_ENV: production
-      HOSTNAME: 0.0.0.0
-      PORT: 3000
-      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-123456}@db:5432/${POSTGRES_DB:-deeptrans}}
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
-      AUTH_SECRET: ${AUTH_SECRET}
-      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost}
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
-      OPENAI_BASE_URL: ${OPENAI_BASE_URL}
-      OPENAI_API_MODEL: ${OPENAI_API_MODEL}
-      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
-      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
-      MINIO_BUCKET: ${MINIO_BUCKET:-deeptrans}
-      MINIO_BROWSER_REDIRECT_URL: ${MINIO_BROWSER_REDIRECT_URL:-}
+    env_file:
+      - .env  # 导入文件中的所有环境变量
     ports:
       - "3000:3000"
     depends_on:
@@ -94,13 +93,13 @@ services:
       - default
     labels:
       - "traefik.enable=true"
-      - "traefik.docker.network=web"
       - "traefik.http.services.studio.loadbalancer.server.port=3000"
       - "traefik.http.routers.studio.rule=Host(`${STUDIO_HOST:-localhost}`)"
       - "traefik.http.routers.studio.entrypoints=web"
       - "traefik.http.routers.studio-secure.rule=Host(`${STUDIO_HOST:-localhost}`)"
       - "traefik.http.routers.studio-secure.entrypoints=websecure"
       - "traefik.http.routers.studio-secure.tls=true"
+      - "traefik.http.routers.studio-secure.tls.certresolver=le"
     restart: unless-stopped
 
   worker:
@@ -108,16 +107,14 @@ services:
       context: .
       dockerfile: Dockerfile.worker
     container_name: deeptrans-worker
-    environment:
-      NODE_ENV: production
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
-      # OpenAI API 配置
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
-      OPENAI_BASE_URL: ${OPENAI_BASE_URL}
-      OPENAI_API_MODEL: ${OPENAI_API_MODEL}
+    env_file:
+      - .env  # 导入文件中的所有环境变量
     depends_on:
       - db
       - redis
+    networks:
+      - web
+      - default
     restart: unless-stopped
 
 
@@ -138,6 +135,9 @@ services:
       interval: 30s
       timeout: 20s
       retries: 3
+    networks:
+      - web
+      - default
 
   
 
@@ -167,6 +167,9 @@ services:
     depends_on:
       - "etcd"
       - "minio"
+    networks:
+      - web
+      - default
  
 
   attu:
@@ -179,21 +182,24 @@ services:
     depends_on:
       - milvus
     restart: unless-stopped
+    networks:
+      - web
+      - default
 
-  pdfmath:
-    build:
-      context: .
-      dockerfile: DockerFile.pdfMath
-    image: deeptrans-studio-pdfmath:latest
-    container_name: pdf2zh-next
-    command: ["pdf2zh_api"]
-    ports:
-      - "7861:7861"  # 仅暴露 API 端口
-    environment:
-      # 仅保留 GenericAPI 选择与固定 URL
-      TRANSLATE_ENGINE_TYPE: "GenericAPI"
-      GENERIC_API_URL: "http://deeptrans-worker:8000/v1/translate"
-    restart: unless-stopped
+  # pdfmath:
+  #   build:
+  #     context: .
+  #     dockerfile: DockerFile.pdfMath
+  #   image: deeptrans-studio-pdfmath:latest
+  #   container_name: pdf2zh-next
+  #   command: ["pdf2zh_api"]
+  #   ports:
+  #     - "7861:7861"  # 仅暴露 API 端口
+  #   environment:
+  #     # 仅保留 GenericAPI 选择与固定 URL
+  #     TRANSLATE_ENGINE_TYPE: "GenericAPI"
+  #     GENERIC_API_URL: "http://deeptrans-worker:8000/v1/translate"
+  #   restart: unless-stopped
 
 networks:
   web:

@@ -1,5 +1,5 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
-import { DocumentTab } from '@/types/explorerTabs';
+import { type DocumentTab } from '@/types/explorerTabs';
 interface ActiveDocumentState {
     activeDocument: DocumentTab;
 }

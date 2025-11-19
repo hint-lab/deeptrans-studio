@@ -37,8 +37,8 @@ export function buildStatCandidates(raw: string, chunkSize: number, overlap: num
       const key = String(tok).trim()
       if (!key) continue
 
-      tokenFreq.set(key, (tokenFreq.get(key) || 0) + 1)
-      unigramCounts.set(key, (unigramCounts.get(key) || 0) + 1)
+      tokenFreq.set(key, (tokenFreq.get(key) ?? 0) + 1)
+      unigramCounts.set(key, (unigramCounts.get(key) ?? 0) + 1)
       totalUnigrams += 1
 
       const left = tokens[i - 1]
@@ -54,11 +54,11 @@ export function buildStatCandidates(raw: string, chunkSize: number, overlap: num
 
       if (i + 1 < tokens.length && tokens[i] && tokens[i + 1]) {
         const bg = `${String(tokens[i])} ${String(tokens[i + 1])}`
-        bigramCounts.set(bg, (bigramCounts.get(bg) || 0) + 1)
+        bigramCounts.set(bg, (bigramCounts.get(bg) ?? 0) + 1)
       }
       if (i + 2 < tokens.length && tokens[i] && tokens[i + 1] && tokens[i + 2]) {
         const tg = `${String(tokens[i])} ${String(tokens[i + 1])} ${String(tokens[i + 2])}`
-        trigramCounts.set(tg, (trigramCounts.get(tg) || 0) + 1)
+        trigramCounts.set(tg, (trigramCounts.get(tg) ?? 0) + 1)
       }
 
       if (!seen.has(key)) {
@@ -72,11 +72,11 @@ export function buildStatCandidates(raw: string, chunkSize: number, overlap: num
   function computePMIForNgram(ngram: string): number {
     const parts = ngram.split(' ')
     if (parts.length === 2) {
-      const c12 = bigramCounts.get(ngram) || 0
+      const c12 = bigramCounts.get(ngram) ?? 0
       const p0 = String(parts[0] ?? '')
       const p1s = String(parts[1] ?? '')
-      const c1 = unigramCounts.get(p0) || 1
-      const c2 = unigramCounts.get(p1s) || 1
+      const c1 = unigramCounts.get(p0) ?? 1
+      const c2 = unigramCounts.get(p1s) ?? 1
       const p12 = c12 / Math.max(1, totalUnigrams)
       const p1 = c1 / Math.max(1, totalUnigrams)
       const p2 = c2 / Math.max(1, totalUnigrams)
@@ -86,12 +86,12 @@ export function buildStatCandidates(raw: string, chunkSize: number, overlap: num
       const p0 = String(parts[0] ?? '')
       const p1s = String(parts[1] ?? '')
       const p2s = String(parts[2] ?? '')
-      const c123 = trigramCounts.get(ngram) || 0
-      const c12 = bigramCounts.get(`${p0} ${p1s}`) || 1
-      const c23 = bigramCounts.get(`${p1s} ${p2s}`) || 1
-      const c1 = unigramCounts.get(p0) || 1
-      const c2 = unigramCounts.get(p1s) || 1
-      const c3 = unigramCounts.get(p2s) || 1
+      const c123 = trigramCounts.get(ngram) ?? 0
+      const c12 = bigramCounts.get(`${p0} ${p1s}`) ?? 1
+      const c23 = bigramCounts.get(`${p1s} ${p2s}`) ?? 1
+      const c1 = unigramCounts.get(p0) ?? 1
+      const c2 = unigramCounts.get(p1s) ?? 1
+      const c3 = unigramCounts.get(p2s) ?? 1
       const p123 = c123 / Math.max(1, totalUnigrams)
       const p12 = c12 / Math.max(1, totalUnigrams)
       const p23 = c23 / Math.max(1, totalUnigrams)
@@ -106,7 +106,7 @@ export function buildStatCandidates(raw: string, chunkSize: number, overlap: num
 
   const candidateMap = new Map<string, { freq: number; chunks: number }>()
   for (const [t, f] of tokenFreq.entries()) {
-    const present = tokenChunkPresence.get(t)?.size || 0
+    const present = tokenChunkPresence.get(t)?.size ?? 0
     const coverage = present / totalChunks
     if (coverage > 0.8) continue
     if (!/[\u4e00-\u9fff]/.test(t) && t.length < 3) continue
@@ -127,8 +127,8 @@ export function buildStatCandidates(raw: string, chunkSize: number, overlap: num
     const idf = Math.log((totalChunks + 1) / (df + 0.5)) + 1
     const tfidf = meta.freq * idf
     const lenBoost = Math.log2((/\s+/.test(term) ? term.split(/\s+/).length : term.length) + 1)
-    const ldiv = (leftNeighbors.get(term)?.size || 0)
-    const rdiv = (rightNeighbors.get(term)?.size || 0)
+    const ldiv = (leftNeighbors.get(term)?.size ?? 0)
+    const rdiv = (rightNeighbors.get(term)?.size ?? 0)
     const diversity = Math.log(1 + ldiv + rdiv)
     let pmiBoost = 0
     if (/\s/.test(term)) {

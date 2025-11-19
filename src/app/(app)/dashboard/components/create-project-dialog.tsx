@@ -127,7 +127,7 @@ export function CreateProjectDialog({ onCreated, triggerVariant = 'default' }: {
         } catch { }
       }, 3600);
     } catch (e: any) {
-      toast.error(e?.message || t('initFailed'));
+      toast.error((e as Error)?.message || t('initFailed'));
       setProgressOpen(false);
     }
   }
@@ -153,12 +153,12 @@ export function CreateProjectDialog({ onCreated, triggerVariant = 'default' }: {
         fileInfo: uploadedFile,
       });
 
-      const projectId = (project as any)?.id;
+      const projectId = (project as any)?.id ?? '';
       if (projectId) {
         toast.success(t('projectCreated'));
         router.push(`/dashboard/projects/${projectId}/init`);
       }
-      if (project && onCreated) onCreated(project as any);
+      if (project && onCreated) onCreated(project as CreatedProject);
       handleClose();
     } catch (error) {
       console.error('创建项目失败:', error);
@@ -304,6 +304,7 @@ export function CreateProjectDialog({ onCreated, triggerVariant = 'default' }: {
               <FileUpload
                 onUploadComplete={handleFileUpload}
                 projectName={dialogState.projectName}
+                elementName="FileUpload"
               />
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
                 {t('supportedFormats')}

@@ -1,5 +1,5 @@
 // Memory Tool - 记忆库查询工具
-import { HybridSearchConfig } from '@/types/hybrid-search';
+import {type HybridSearchConfig } from '@/types/hybrid-search';
 
 export interface MemoryHit {
   id: string;

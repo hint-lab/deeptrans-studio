@@ -1,6 +1,6 @@
 import { getCookie } from 'cookies-next';
 import { APIResponse } from './api';
-import { keysToSnake, keysToCamel, convertDatesToISOStrings } from 'src/utils/func';
+import { keysToSnake, keysToCamel, convertDatesToISOStrings } from '@/utils/func';
 // import { HeadersInit, RequestInit } from 'node-fetch';
 // 定义通用的请求函数
 
@@ -59,7 +59,7 @@ export async function APIRequestWithCredentials<T, B = unknown>(
     }
 
     const data: unknown = await response.json(); // 获取 JSON 格式的响应
-    const camelCaseData: T = keysToCamel(data); // 将下划线命名转换为驼峰命名
+    const camelCaseData = keysToCamel(data) as T; // 将下划线命名转换为驼峰命名
     return { data: camelCaseData }; // 返回转换后的数据
   } catch (error) {
     console.error('API request error:', error);

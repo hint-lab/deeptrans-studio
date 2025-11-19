@@ -1,7 +1,7 @@
 "use client";
 import { Button } from "@/components/ui/button";
 import { Play } from "lucide-react";
-import { Icons } from "@/components/extension/icons";
+import { Icons } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { TranslationStage } from "@/store/features/translationSlice";
 import { getTranslationStageLabel } from "@/constants/translationStages";

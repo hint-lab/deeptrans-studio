@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Zap,
@@ -26,9 +27,9 @@ export default async function GettingStartedPage() {
       <div className="space-y-4">
         <div className="flex items-center gap-2">
           <Zap className="h-8 w-8 text-green-600" />
-          <h1 id="快速开始" className="scroll-m-20 text-4xl font-bold tracking-tight">{t('gettingStarted.title')}</h1>
+          <h1 className="scroll-m-20 text-4xl font-bold tracking-tight">{t('gettingStarted.title')}</h1>
         </div>
-        <p className="text-lg text-muted-foreground">
+        <p className="text-lg text-muted-foreground max-w-3xl">
           {t('gettingStarted.subtitle')}
         </p>
       </div>
@@ -43,11 +44,10 @@ export default async function GettingStartedPage() {
 
       {/* 步骤指南 */}
       <div className="space-y-6">
-        <h2 id="分步指南" className="text-2xl font-bold tracking-tight">{t('gettingStarted.stepsTitle')}</h2>
+        <h2 className="text-2xl font-bold tracking-tight">{t('gettingStarted.stepsTitle')}</h2>
 
         {Object.entries(page.steps).map(([key, step], index) => {
-          const Icon = stepIcons[index] ?? Settings;
-          const stepId = step.title.toLowerCase().replace(/\s+/g, "-");
+          const Icon = stepIcons[index] || Settings;
           return (
             <Card key={key}>
               <CardHeader>
@@ -56,7 +56,7 @@ export default async function GettingStartedPage() {
                     {step.number}
                   </div>
                   <div className="flex-1">
-                    <h3 id={stepId} className="text-xl font-semibold scroll-mt-20">{step.title}</h3>
+                    <CardTitle className="text-xl">{step.title}</CardTitle>
                     <CardDescription className="mt-1">{step.description}</CardDescription>
                   </div>
                   <Icon className="h-5 w-5 text-muted-foreground" />

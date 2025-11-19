@@ -1,11 +1,11 @@
-import { Queue, Worker, JobsOptions } from 'bullmq';
+import { type Job, Queue, Worker, type JobsOptions } from 'bullmq';
 import IORedis from 'ioredis';
 
 if (typeof window !== 'undefined') {
   throw new Error('src/lib/queue.ts 仅允许在服务端使用');
 }
 
-const redisUrl = process.env.REDIS_URL || 'redis://127.0.0.1:6379';
+const redisUrl = process.env.REDIS_URL ?? 'redis://127.0.0.1:6379';
 export const connection = new IORedis(redisUrl, {
   // BullMQ 要求：阻塞命令需将 maxRetriesPerRequest 设为 null
   maxRetriesPerRequest: null,
@@ -21,7 +21,7 @@ export function getQueue(name: string) {
   return queues[name];
 }
 
-export function createWorker(name: string, processor: (job: any) => Promise<any>, concurrency = 10) {
+export function createWorker(name: string, processor: (job: Job) => Promise<void>, concurrency = 10) {
   return new Worker(name, processor, { connection, concurrency });
 }
 

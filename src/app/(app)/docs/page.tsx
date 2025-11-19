@@ -1,14 +1,18 @@
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
   BookOpen,
   Zap,
   Settings,
+  Users,
   ChevronRight,
   FileText,
   Workflow,
+  MessageSquare,
   Shield,
+  Database,
   Bot
 } from "lucide-react";
 import { getDocsTranslations, getDocsT } from "./i18n";
@@ -25,7 +29,7 @@ export default async function DocsHomePage() {
           <BookOpen className="h-8 w-8 text-primary" />
           <h1 className="scroll-m-20 text-4xl font-bold tracking-tight">{t('home.title')}</h1>
         </div>
-        <p className="text-lg text-muted-foreground">
+        <p className="text-lg text-muted-foreground max-w-3xl">
           {t('home.subtitle')}
         </p>
       </div>

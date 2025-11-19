@@ -1,4 +1,4 @@
-import { createSlice, PayloadAction } from '@reduxjs/toolkit';
+import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
 
 export type TranslationStage = 'NOT_STARTED' | 'MT' | 'MT_REVIEW' | 'QA' |  'QA_REVIEW'  | 'POST_EDIT' | 'POST_EDIT_REVIEW' | 'SIGN_OFF' | 'ERROR' | 'COMPLETED';
 

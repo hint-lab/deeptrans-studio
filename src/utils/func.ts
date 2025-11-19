@@ -4,7 +4,7 @@ export function toCamelCase(str: string) {
 }
 
 // 将对象中的键转换为驼峰命名
-export function keysToCamel(obj: any): any[] | Record<string, any> | any {
+export function keysToCamel(obj: any): any[] | Record<string, any> | unknown {
   if (Array.isArray(obj)) {
     return obj.map((v) => keysToCamel(v)); // 处理数组中的每个元素
   } else if (obj !== null && obj.constructor === Object) {

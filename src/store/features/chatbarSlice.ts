@@ -1,5 +1,5 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
-import { Message } from '@/types/chat';
+import { type Message } from '@/types/chat';
 
 interface ChatBarState {
     isOpen: boolean;

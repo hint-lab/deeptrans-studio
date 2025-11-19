@@ -16,7 +16,7 @@ import { Label } from "src/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "src/components/ui/select"
 import { PlusCircledIcon } from "@radix-ui/react-icons"
 import { createDictionaryAction } from "@/actions/dictionary"
-import { useToast } from "@/hooks/useToast"
+import { toast } from "sonner"
 import { DOMAINS, getDomainOptions } from "@/constants/domains"
 import { useTranslations } from "next-intl"
 
@@ -47,8 +47,7 @@ export function AddPublicDictionaryDialog({ onDictionaryAdded, userId }: AddPubl
         description: "",
         domain: "",
         isPublic: false
-    })
-    const { toast } = useToast()
+    }) 
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -80,25 +79,13 @@ export function AddPublicDictionaryDialog({ onDictionaryAdded, userId }: AddPubl
                 setFormData({ name: "", description: "", domain: "", isPublic: false })
                 setOpen(false)
 
-                toast({
-                    title: "成功",
-                    description: "词典创建成功！",
-                    variant: "default"
-                })
+                toast.success("词典创建成功！")
             } else {
-                toast({
-                    title: "错误",
-                    description: result.error ?? "创建词典失败",
-                    variant: "destructive"
-                })
-            }
+                toast.error(result.error ?? "创建词典失败")
+            }       
         } catch (error) {
             console.error("创建词典时出错:", error)
-            toast({
-                title: "错误",
-                description: "创建词典时发生错误",
-                variant: "destructive"
-            })
+            toast.error("创建词典时发生错误", { description: "创建词典时发生错误" as string })
         } finally {
             setLoading(false)
         }

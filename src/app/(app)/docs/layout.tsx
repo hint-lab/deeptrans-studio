@@ -48,14 +48,14 @@ export default async function LearnLayout({ children }: { children: ReactNode })
         </div>
       </div>
 
-      {/* 主体：左侧和右侧靠边，中间内容居中 */}
+      {/* 主体：左侧贴边（随页面左边缘对齐），中间内容居中限制宽度，右侧 OnThisPage */}
       <div className="px-4">
         <div className="grid grid-cols-1 gap-6 py-6 xl:grid-cols-[240px_minmax(0,1fr)_240px]">
           <aside className="hidden xl:block">
             <SidebarNav items={navItems} />
           </aside>
           <main className="min-w-0 w-full">
-            <div className="w-full max-w-7xl mx-auto">
+            <div className="max-w-3xl">
               {children}
               <DocsPager items={navItems} />
             </div>

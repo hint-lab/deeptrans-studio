@@ -35,7 +35,7 @@ import {
     ContextMenuTrigger,
 } from "@/components/ui/context-menu"
 import { updateDictionaryAction, deleteDictionaryAction} from "@/actions/dictionary"
-import { useToast } from "@/hooks/useToast"
+import { toast } from "sonner"
 
 // 定义Dictionary接口
 interface Dictionary {
@@ -85,8 +85,7 @@ export function DictionaryArtwork({
         description: dictionary.description ?? "",
         domain: dictionary.domain
     })
-    const [loading, setLoading] = useState(false)
-    const { toast } = useToast()
+    const [loading, setLoading] = useState(false) 
 
     const handleDelete = () => {
         setShowDeleteDialog(true)
@@ -113,25 +112,13 @@ export function DictionaryArtwork({
                     onDelete(dictionary.id)
                 }
                 
-                toast({
-                    title: "成功",
-                    description: "词典删除成功！",
-                    variant: "default"
-                })
+                toast.success("词典删除成功！")
             } else {
-                toast({
-                    title: "错误",
-                    description: result.error ?? "删除词典失败",
-                    variant: "destructive"
-                })
+                toast.error(result.error ?? "删除词典失败")
             }
         } catch (error) {
             console.error("删除词典失败:", error)
-            toast({
-                title: "错误",
-                description: "删除词典时发生错误",
-                variant: "destructive"
-            })
+            toast.error("删除词典时发生错误")
         } finally {
             setLoading(false)
             setShowDeleteDialog(false)
@@ -140,11 +127,7 @@ export function DictionaryArtwork({
 
     const confirmEdit = async () => {
         if (!editForm.name.trim()) {
-            toast({
-                title: "错误",
-                description: "词库名称不能为空",
-                variant: "destructive"
-            })
+            toast.error("词库名称不能为空")
             return
         }
 
@@ -157,11 +140,7 @@ export function DictionaryArtwork({
             })
 
             if (result.success && result.data) {
-                toast({
-                    title: "成功",
-                    description: "词典信息更新成功！",
-                    variant: "default"
-                })
+                toast.success("词典信息更新成功！")
                 
                 // 调用父组件的回调函数
                 if (onEdit) {
@@ -174,19 +153,11 @@ export function DictionaryArtwork({
                 
                 setShowEditDialog(false)
             } else {
-                toast({
-                    title: "错误",
-                    description: result.error ?? "更新词典失败",
-                    variant: "destructive"
-                })
+                toast.error(result.error ?? "更新词典失败")
             }
         } catch (error) {
             console.error("更新词典失败:", error)
-            toast({
-                title: "错误",
-                description: "更新词典时发生错误",
-                variant: "destructive"
-            })
+            toast.error("更新词典时发生错误")
         } finally {
             setLoading(false)
         }

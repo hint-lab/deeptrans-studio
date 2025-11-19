@@ -346,7 +346,7 @@ export default function ImageIntelligencePage() {
             <div className="text-lg font-medium">{t("imageUpload")}</div>
           </div>
           <div className="p-4">
-            <FileUpload onUploadComplete={() => setTaskStatus("pending")} projectName={t("temporaryImage")} />
+            <FileUpload onUploadComplete={() => setTaskStatus("pending")} projectName={t("temporaryImage")} elementName="Dashboard.ImageTranslate"/>
             <div className="mt-2 text-sm text-blue-600">{t("supportedImageTypes")}</div>
           </div>
         </div>

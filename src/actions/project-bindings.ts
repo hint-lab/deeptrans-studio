@@ -6,7 +6,8 @@ import { listProjectDictionaryBindingsDB, updateProjectDictionaryBindingsDB, lis
 export async function getProjectDictionaryBindingsAction(projectId: string) {
     if (!projectId) return { success: false, error: '缺少 projectId' } as const
     const rows = await listProjectDictionaryBindingsDB(projectId)
-    const ids = (rows || []).map((r: any) => r.dictionaryId)
+    const list = Array.isArray(rows) ? rows : []
+    const ids = list.map((r: any) => r.dictionaryId)
     return { success: true, data: ids } as const
 }
 
@@ -20,7 +21,8 @@ export async function updateProjectDictionaryBindingsAction(projectId: string, d
 export async function getProjectMemoryBindingsAction(projectId: string) {
     if (!projectId) return { success: false, error: '缺少 projectId' } as const
     const rows = await listProjectMemoryBindingsDB(projectId)
-    const ids = (rows || []).map((r: any) => r.memoryId)
+    const list = Array.isArray(rows) ? rows : []
+    const ids = list.map((r: any) => r.memoryId)
     return { success: true, data: ids } as const
 }
 

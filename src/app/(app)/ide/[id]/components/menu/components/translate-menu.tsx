@@ -1,7 +1,7 @@
 // 预翻译菜单组件
 import { MenubarMenu, MenubarTrigger, MenubarContent, MenubarItem } from "@/components/ui/menubar";
 import { cn } from "@/lib/utils";
-import { Icons } from "@/components/extension/icons";
+import { Icons } from "@/components/icons";
 import { BookText } from "lucide-react";
 import { useTranslationLanguage } from "@/hooks/useTranslation";
 import { useEffect } from "react";

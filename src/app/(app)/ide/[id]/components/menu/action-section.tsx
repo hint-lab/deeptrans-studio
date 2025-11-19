@@ -225,12 +225,12 @@ export function ActionSection() {
         // console.log(sourceLanguage, targetLanguage);
     }, [sourceLanguage, targetLanguage]);
 
-    const setPreRunning = useAgentWorkflowSteps(s => s.setPreRunning);
-    const setPreStep = useAgentWorkflowSteps(s => s.setPreStep);
-    const setPreOutputs = useAgentWorkflowSteps(s => s.setPreOutputs);
-    const setQARunning = useAgentWorkflowSteps(s => s.setQARunning);
-    const setQAStep = useAgentWorkflowSteps(s => s.setQAStep);
-    const setQAOutputs = useAgentWorkflowSteps(s => s.setQAOutputs);
+    const setPreRunning = useAgentWorkflowSteps((s: any) => s.setPreRunning);
+    const setPreStep = useAgentWorkflowSteps((s: any) => s.setPreStep);
+    const setPreOutputs = useAgentWorkflowSteps((s: any) => s.setPreOutputs);
+    const setQARunning = useAgentWorkflowSteps((s: any) => s.setQARunning);
+    const setQAStep = useAgentWorkflowSteps((s: any) => s.setQAStep);
+    const setQAOutputs = useAgentWorkflowSteps((s: any) => s.setQAOutputs);
 
     const handlePreTranslationAction = async (provider: string = 'openai') => {
         try {

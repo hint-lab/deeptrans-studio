@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { useDropzone } from 'react-dropzone';
+import { FileRejection, useDropzone } from 'react-dropzone';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { getUploadUrlAction, uploadFileAction } from '@/actions/upload';
@@ -14,19 +14,31 @@ interface FileUploadProps {
         size: number;
     }) => void;
     projectName: string;
+    elementName: string;
 }
 
 const ACCEPTED_FILE_TYPES = {
-    'text/plain': ['.txt'],
+    /* 图片 */
+    'image/jpeg': ['.jpg', '.jpeg'],
+    'image/png': ['.png'],
+    'image/webp': ['.webp'],
+
+    /* 文档 */
     'application/pdf': ['.pdf'],
     'application/msword': ['.doc'],
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+    'application/vnd.ms-powerpoint': ['.ppt'],
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation': ['.pptx'],
+
+    /* 文本 */
+    'text/plain': ['.txt'],
 };
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
-export function FileUpload({ onUploadComplete, projectName }: FileUploadProps) {
-    const t = useTranslations('FileUpload');
+export function FileUpload({ onUploadComplete, projectName, elementName='FileUpload' }: FileUploadProps) {
+    const t = useTranslations(elementName);
     const [isUploading, setIsUploading] = useState(false);
     const [uploadedFile, setUploadedFile] = useState<{
         fileName: string;
@@ -150,9 +162,18 @@ export function FileUpload({ onUploadComplete, projectName }: FileUploadProps) {
             uploadFile(file);
         }
     }, [uploadFile]);
-
+    const onDropRejected = useCallback((rejections: FileRejection[]) => {
+        const first = rejections[0];
+        const errorCode = first?.errors[0]?.code;
+        if (errorCode === 'file-too-large') {
+            toast.error(t('fileSizeExceeded')); 
+      } else {
+            toast.error(t('fileTypeNotSupported'));
+      }
+    }, [t]);
     const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
         onDrop,
+        onDropRejected,
         accept: ACCEPTED_FILE_TYPES,
         maxFiles: 1,
         maxSize: MAX_FILE_SIZE,

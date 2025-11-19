@@ -16,7 +16,7 @@ import { DictionaryArtwork } from "./components/dictionary-artwork"
 import { CreateDictionaryDialog } from "./components/create-dictionary-dialog"
 import { DictionaryEntriesManager } from "./components/dictionary-entries-manager"
 import { fetchDictionariesAction } from "@/actions/dictionary"
-import { useToast } from "@/hooks/useToast"
+import { toast } from "sonner"
 import ImportDictionaryDialog from "./components/import-dictionary-dialog"
 import { Skeleton } from "src/components/ui/skeleton"
 import { AddPublicDictionaryDialog } from "./components/add-public-dictionary-dialog"
@@ -34,7 +34,6 @@ export default function DictionariesPage() {
     const [activeTab, setActiveTab] = useState("private")
     const searchParams = useSearchParams()
     const [loading, setLoading] = useState(true)
-    const { toast } = useToast()
     const [reloadToken, setReloadToken] = useState(0)
 
     // 汇总可供导入的词库（全部）
@@ -123,11 +122,7 @@ export default function DictionariesPage() {
             }
         } catch (error) {
             console.error(t("loadErrorDesc"), error)
-            toast({
-                title: t("loadError"),
-                description: t("loadErrorDesc"),
-                variant: "destructive"
-            })
+            toast.error(t("loadError"), { description: t("loadErrorDesc") as string })
         } finally {
             setLoading(false)
         }
@@ -178,21 +173,13 @@ export default function DictionariesPage() {
     // 处理项目词典添加
     const handleTeamDictionaryAdded = (newDictionary: UIDictionary) => {
         setProjectDictionaries(prev => [newDictionary, ...prev])
-        toast({
-            title: t("success"),
-            description: t("projectAdded"),
-            variant: "default"
-        })
+        toast.success(t("projectAdded"), { description: t("projectAdded") as string })  
     }
 
     // 处理公共词典添加
     const handlePublicDictionaryAdded = (newDictionary: UIDictionary) => {
         setPublicDictionaries(prev => [newDictionary, ...prev])
-        toast({
-            title: t("success"),
-            description: t("publicAdded"),
-            variant: "default"
-        })
+        toast.success(t("publicAdded"), { description: t("publicAdded") as string }) 
     }
 
     // 处理词典条目更新
@@ -214,12 +201,8 @@ export default function DictionariesPage() {
             setActiveTab("private")
         }
 
-        toast({
-            title: t("success"),
-            description: t("deleteSuccess"),
-            variant: "default"
-        })
-    }
+        toast.success(t("deleteSuccess"), { description: t("deleteSuccess") as string }) 
+    }   
 
     // 处理词典编辑
     const handleDictionaryEdited = (dictionaryId: string, updatedData: Partial<UIDictionary>) => {
@@ -238,11 +221,7 @@ export default function DictionariesPage() {
             setSelectedDictionary(prev => prev ? { ...prev, ...updatedData, cover: getDictionaryCover(updatedData.domain ?? prev.domain) } : null)
         }
 
-        toast({
-            title: t("success"),
-            description: t("editSuccess"),
-            variant: "default"
-        })
+        toast.success(t("editSuccess"), { description: t("editSuccess") as string }) 
     }
 
     // 处理词典选择
@@ -371,7 +350,7 @@ export default function DictionariesPage() {
                                 onImported={() => {
                                     setReloadToken((t) => t + 1)
                                     void loadDictionaries()
-                                    toast({ title: "导入完成", description: "项目词库已更新" })
+                                    toast.success(t("importComplete"), { description: t("projectImported") as string }) 
                                 }}
                             />
                             <CreateDictionaryDialog
@@ -419,7 +398,7 @@ export default function DictionariesPage() {
                                     userId={session?.user?.id}
                                     onImported={() => {
                                         void loadDictionaries()
-                                        toast({ title: t("importComplete"), description: t("privateImported") })
+                                        toast.success(t("importComplete"), { description: t("privateImported") as string }) 
                                     }}
                                 />
                             </div>
@@ -446,7 +425,7 @@ export default function DictionariesPage() {
                                 onImported={() => {
                                     setReloadToken((t) => t + 1)
                                     void loadDictionaries()
-                                    toast({ title: t("importComplete"), description: t("projectImported") })
+                                    toast.success(t("importComplete"), { description: t("projectImported") as string }) 
                                 }}
                             />
 
@@ -496,7 +475,7 @@ export default function DictionariesPage() {
                                         userId={session?.user?.id}
                                         onImported={() => {
                                             void loadDictionaries()
-                                            toast({ title: t("importComplete"), description: t("projectImported") })
+                                            toast.success(t("importComplete"), { description: t("projectImported") as string }) 
                                         }}
                                     />
                                 </div>

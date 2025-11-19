@@ -8,7 +8,7 @@
 
 > 🚀 DeepTrans Studio 是一套面向专业翻译与本地化团队的智能工作平台，提供翻译 IDE、术语管理、翻译记忆、质量评估与自动化工作流等端到端能力。
 
-**开发单位**: [CogNLP Lab](https://hint-lab.github.io/people/wang_hao/), Shanghai University
+**开发单位**: [H!NT Lab](https://hint-lab.github.io/people/wang_hao/), Shanghai University
 
 **中文** | [English](./README_EN.md)
 
@@ -45,6 +45,12 @@ DeepTrans Studio 将 AI 翻译、本地化工程与团队协作能力整合在�
 - AI 辅助的质量评估、术语提取与语篇审校
 - 工作流自动化与队列任务处理
 - 统一的权限、日志、运营配置与对外 API
+
+<p align="center">
+  <img src="public/ui.png" alt="DeepTrans Studio UI" width="900">
+  <br/>
+  <em>DeepTrans Studio 界面示意</em>
+ </p>
 
 ## 核心能力
 
@@ -156,7 +162,7 @@ yarn db:seed                    # 可选：导入示例数据
    ```
 2. 启动 Next.js 应用（热更新）：
    ```bash
-yarn dev
+   yarn dev
    ```
 3. 若希望在本地 Node 环境运行 Worker，可执行 `yarn dev:worker`（默认通过 compose 的 `worker` 容器运行）。
 
@@ -240,7 +246,7 @@ deeptrans-studio/
 
 ## 项目说明
 
-- 本仓库由上海大学 CogNLP Lab 开发，用于 ACL Demo Paper（2025）投稿与复现示范。
+- 本仓库由上海大学 H!NT Lab 开发，用于 Demo Paper（2025）投稿与复现示范。
 - 仓库默认不包含生产密钥与敏感配置，若需部署请自建 `.env` 并替换相应服务凭据。
 - 如在复现过程中遇到问题，可在 GitHub Issues 或通过论文中提供的联系方式与我们沟通。
 
@@ -248,4 +254,4 @@ deeptrans-studio/
 
 💡 如对系统有改进建议，欢迎提交 Issue / PR，与我们一起完善智能翻译平台。
 
-**CogNLP Lab, Shanghai University** © 2025
+**H!NT Lab, Shanghai University** © 2025

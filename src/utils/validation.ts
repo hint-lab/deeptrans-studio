@@ -1,4 +1,4 @@
-
+import { z } from "zod";
 
 const registerSchema = z.object({
     name: z.string().min(6, "名字不能少于6个字符").default(""),

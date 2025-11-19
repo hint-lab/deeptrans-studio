@@ -23,7 +23,9 @@ export async function extractTextFromUrl(url: string): Promise<{ text: string; c
     } catch {}
 
     let contentType = '';
+    let contentLength = 0;
     let buffer: Buffer | null = null;
+    let localPath: string | null = null;
     if (localCandidate) {
       const abs = path.resolve(localCandidate);
       const rel = path.relative(baseDir, abs);
@@ -37,6 +39,7 @@ export async function extractTextFromUrl(url: string): Promise<{ text: string; c
         return { text: '', contentType: '' };
       }
       buffer = await fs.readFile(abs);
+      localPath = abs;
       const extname = path.extname(abs).toLowerCase();
       if (extname === '.txt' || extname === '.md' || extname === '.csv' || extname === '.log') {
         return { text: (await fs.readFile(abs, 'utf8')).toString(), contentType: 'text/plain' };
@@ -52,7 +55,7 @@ export async function extractTextFromUrl(url: string): Promise<{ text: string; c
         return { text: '', contentType: res?.headers?.get('content-type') || '' };
       }
       contentType = (res.headers.get('content-type') || '').toLowerCase();
-      const contentLength = Number(res.headers.get('content-length') || 0);
+      contentLength = Number(res.headers.get('content-length') || 0);
       if (contentLength && contentLength > 25 * 1024 * 1024) {
         console.error('[extract] File too large:', contentLength);
         return { text: '', contentType };
@@ -89,6 +92,12 @@ export async function extractTextFromUrl(url: string): Promise<{ text: string; c
 
     if (isText) {
       try {
+        if (buffer) {
+          return { text: buffer.toString('utf8'), contentType: contentType || 'text/plain' };
+        }
+        if (!res) {
+          return { text: '', contentType };
+        }
         const text = await res.text();
         return { text, contentType };
       } catch (err) {
@@ -120,7 +129,8 @@ export async function extractTextFromUrl(url: string): Promise<{ text: string; c
     }
 
     if (isDocx) {
-      const out = buffer && !/^https?:/i.test(url) ? await extractDocxFromUrl(path.resolve(url)) : await extractDocxFromUrl(url)
+      const target = buffer && localPath ? localPath : url;
+      const out = await extractDocxFromUrl(target);
       return { text: out.text || '', contentType }
     }
 

@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "s
 import { Edit3 } from "lucide-react"
 import { updateDictionaryAction } from "@/actions/dictionary"
 import { useTranslations } from "next-intl"
-import { useToast } from "@/hooks/useToast"
+import { toast } from "sonner"
 import { Dictionary } from "./dictionary-artwork"
 
 interface EditDictionaryDialogProps {
@@ -28,8 +28,6 @@ export function EditDictionaryDialog({ dictionary, onDictionaryEdited }: EditDic
         domain: dictionary.domain
     })
     const [loading, setLoading] = useState(false)
-    const { toast } = useToast()
-
     const handleOpen = () => {
         setEditForm({
             name: dictionary.name,
@@ -48,11 +46,7 @@ export function EditDictionaryDialog({ dictionary, onDictionaryEdited }: EditDic
 
     const handleSave = async () => {
         if (!editForm.name.trim()) {
-            toast({
-                title: t('error'),
-                description: t('nameRequired'),
-                variant: "destructive"
-            })
+            toast.error(t('nameRequired'), { description: t('error') as string })
             return
         }
 
@@ -65,11 +59,7 @@ export function EditDictionaryDialog({ dictionary, onDictionaryEdited }: EditDic
             })
 
             if (result.success && result.data) {
-                toast({
-                    title: t('success'),
-                    description: t('success'),
-                    variant: "default"
-                })
+                toast.success(t('success'), { description: t('success') as string })
 
                 // 调用父组件的回调函数
                 onDictionaryEdited(dictionary.id, {
@@ -80,19 +70,11 @@ export function EditDictionaryDialog({ dictionary, onDictionaryEdited }: EditDic
 
                 setOpen(false)
             } else {
-                toast({
-                    title: t('error'),
-                    description: result.error ?? t('updateFailed'),
-                    variant: "destructive"
-                })
+                toast.error(result.error ?? t('updateFailed'), { description: t('error') as string })
             }
         } catch (error) {
             console.error("更新词典失败:", error)
-            toast({
-                title: t('error'),
-                description: t('updateError'),
-                variant: "destructive"
-            })
+            toast.error(t('updateError'), { description: t('error') as string })
         } finally {
             setLoading(false)
         }

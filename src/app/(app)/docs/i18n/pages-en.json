@@ -1,0 +1,165 @@
+{
+  "gettingStarted": {
+    "title": "Getting Started",
+    "subtitle": "Through this 5-minute getting started guide, you'll learn how to create your first translation project, upload documents, and complete a full translation workflow.",
+    "alert": "Before you begin, make sure you have access to DeepTrans Studio. If not, please contact your administrator to create an account.",
+    "stepsTitle": "Step-by-Step Guide",
+    "steps": {
+      "step1": {
+        "number": "1",
+        "title": "Create Project",
+        "description": "After logging in, click the 'New Project' button to start. Fill in the project name and select source and target languages.",
+        "tips": ["Use meaningful project names", "You can create multiple language pairs simultaneously"]
+      },
+      "step2": {
+        "number": "2",
+        "title": "Upload Documents",
+        "description": "Supports multiple formats: DOCX, PDF, TXT, Markdown, etc. Drag and drop files or click the upload button.",
+        "tips": ["Supports batch upload", "Large files are automatically segmented"]
+      },
+      "step3": {
+        "number": "3",
+        "title": "Document Parsing",
+        "description": "The system automatically parses document structure, extracts translatable content, and performs intelligent segmentation.",
+        "tips": ["View parsing progress", "Supports manual segment adjustment"]
+      },
+      "step4": {
+        "number": "4",
+        "title": "Start Translation",
+        "description": "Enter the translation editor to use AI-assisted translation, terminology database, translation memory, and other features.",
+        "tips": ["Keyboard shortcuts improve efficiency", "Real-time saving prevents data loss"]
+      },
+      "step5": {
+        "number": "5",
+        "title": "Quality Check",
+        "description": "Use built-in quality assessment tools to check translation quality, including terminology consistency, grammar checks, etc.",
+        "tips": ["Automatically mark issues", "Supports batch fixes"]
+      },
+      "step6": {
+        "number": "6",
+        "title": "Export & Delivery",
+        "description": "After completing translation, export to original format or other formats while maintaining document style.",
+        "tips": ["Supports multiple export formats", "Can generate translation reports"]
+      }
+    },
+    "nextSteps": {
+      "title": "Next Steps",
+      "description": "Now that you understand the basic process, explore more advanced features:",
+      "links": {
+        "workflows": "Learn more about translation workflows",
+        "ai": "Explore AI smart assistants",
+        "ui": "Get familiar with the interface"
+      }
+    }
+  },
+  "concepts": {
+    "title": "Core Concepts",
+    "subtitle": "Understanding DeepTrans Studio's core concepts helps you use the system more efficiently. Here we introduce key terms, data structures, and working principles in the system.",
+    "hierarchyTitle": "Data Hierarchy",
+    "concepts": {
+      "project": {
+        "title": "Project",
+        "description": "Top-level organizational unit containing complete translation work",
+        "details": [
+          "One project corresponds to one translation task",
+          "Contains source language, target language, domain configurations",
+          "Can contain multiple documents",
+          "Supports team collaboration and permission management"
+        ]
+      },
+      "document": {
+        "title": "Document",
+        "description": "Individual file within a project",
+        "details": [
+          "Supports multiple formats: DOCX, PDF, TXT, etc.",
+          "Automatically parses document structure",
+          "Retains original format information",
+          "Can be previewed and downloaded"
+        ]
+      },
+      "segment": {
+        "title": "Segment",
+        "description": "Smallest translation unit in a document",
+        "details": [
+          "Usually a sentence or paragraph",
+          "Contains source text and target text",
+          "Has independent status and versions",
+          "Supports annotations and comments"
+        ]
+      },
+      "terminology": {
+        "title": "Term",
+        "description": "Professional domain vocabulary and translation pairs",
+        "details": [
+          "Can be project-level or global",
+          "Supports multilingual comparison",
+          "Automatic highlighting and prompts",
+          "Supports batch import/export"
+        ]
+      },
+      "memory": {
+        "title": "Translation Memory",
+        "description": "Database of historical translations",
+        "details": [
+          "Automatically matches similar sentences",
+          "Improves translation consistency",
+          "Reduces repetitive work",
+          "Supports fuzzy matching"
+        ]
+      },
+      "workflow": {
+        "title": "Workflow",
+        "description": "Process definition for translation",
+        "details": [
+          "Contains multiple stages: translation, review, finalization",
+          "Each stage has different permissions",
+          "Supports automated tasks",
+          "Customizable processes"
+        ]
+      }
+    }
+  },
+  "workflows": {
+    "title": "Workflows",
+    "subtitle": "Translation, evaluation, post-editing, review and other process nodes and transitions.",
+    "items": [
+      "Automatic pre-translation: Batch translate segments and update segment status.",
+      "Quality assessment: Call evaluation service, write results and logs.",
+      "Post-editing: Revise content in the editor and save.",
+      "Process review: Stage approval/rejection."
+    ]
+  },
+  "installation": {
+    "title": "Installation & Setup",
+    "subtitle": "How to install and configure DeepTrans Studio"
+  },
+  "ui": {
+    "title": "UI Guide",
+    "subtitle": "Get familiar with the DeepTrans Studio interface"
+  },
+  "serverActions": {
+    "title": "Server Actions API",
+    "subtitle": "API reference documentation"
+  },
+  "state": {
+    "title": "State Management",
+    "subtitle": "Learn about application state management"
+  },
+  "ai": {
+    "title": "AI Agents",
+    "subtitle": "Learn about AI features and smart assistants"
+  },
+  "database": {
+    "title": "Database Design",
+    "subtitle": "Database architecture and design documentation"
+  },
+  "troubleshooting": {
+    "title": "Troubleshooting",
+    "subtitle": "Common issues and solutions"
+  },
+  "faq": {
+    "title": "Frequently Asked Questions",
+    "subtitle": "Common questions and answers"
+  }
+}
+

@@ -29,7 +29,7 @@ const preWorker = createWorker('pretranslate', async (job) => {
   const done = Number(await connection.get(`batch:${batchId}:done`)) || 0;
   const percent = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
   await job.updateProgress(percent);
-  return { ok: true };
+  console.log(`[pre] job=${job.id} finished pre-translate pipeline`);
 }, 24);
 
 preWorker.on('active', (job) => {
@@ -85,7 +85,7 @@ const qaWorker = createWorker('qa', async (job) => {
   const done = Number(await connection.get(`qa:${batchId}:done`)) || 0;
   const percent = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
   await job.updateProgress(percent);
-  return { ok: true };
+  console.log(`[qa] job=${job.id} QA pipeline complete`);
 }, 16);
 
 qaWorker.on('active', (job) => {
@@ -103,7 +103,7 @@ qaWorker.on('failed', async (job, err) => {
     const batchId = (job?.data as any)?.batchId;
     if (batchId) {
       await connection.incr(`qa:${batchId}:failed`).catch(() => { });
-      await connection.set(`qa:${batchId}:fail:${job?.id}`, String(err?.message || err)).catch(() => { });
+      await connection.set(`qa:${batchId}:fail:${job?.id}`, String((err as Error)?.message || err)).catch(() => { });
     }
   } catch { }
 });
@@ -129,7 +129,7 @@ const docTermsWorker = createWorker('doc-terms', async (job) => {
   } else {
     await job.updateProgress(100);
   }
-  return { ok: true, count: Array.isArray(terms) ? terms.length : 0 };
+  console.log(`[doc-terms] job=${job.id} extracted ${Array.isArray(terms) ? terms.length : 0} terms`);
 }, 12);
 
 docTermsWorker.on('active', (job) => {
@@ -258,14 +258,17 @@ const memoryImportWorker = createWorker('memory-import', async (job) => {
         const s = String(kv[srcKey] ?? kv['源'] ?? kv['source'] ?? '').trim();
         const t = String(kv[tgtKey] ?? kv['译'] ?? kv['target'] ?? '').trim();
         const n = String(kv[noteKey] ?? kv['备注'] ?? kv['notes'] ?? '').trim();
-        if (s && t) pairs.push({ source: s, target: t, notes: n || undefined });
+        if (s && t) pairs.push({ source: s, target: t, notes: n ? n : undefined });
       }
     }
   } else {
     throw new Error('UNSUPPORTED_FILE_TYPE');
   }
 
-  if (!pairs.length) return { ok: true, created: 0 };
+  if (!pairs.length) {
+    console.warn('[WORKER_IMPORT] 未解析到有效的翻译对，跳过后续处理');
+    return;
+  }
 
   // embed in batches and upsert to milvus
   const texts = pairs.map(p => `${p.source}\n${p.target}`);
@@ -306,9 +309,9 @@ const memoryImportWorker = createWorker('memory-import', async (job) => {
 
   // write rows to DB
   await prisma.$transaction(
-    pairs.map((p) => (prisma as any).memoryEntry.create({ data: { memoryId, sourceText: p.source, targetText: p.target, notes: p.notes || null, sourceLang, targetLang } }))
+    pairs.map((p) => (prisma as any).memoryEntry.create({ data: { memoryId, sourceText: p.source, targetText: p.target, notes: p.notes ? p.notes : null, sourceLang, targetLang } }))
   );
-  return { ok: true, created: pairs.length };
+  console.log(`[WORKER_IMPORT] 导入成功，共写入 ${pairs.length} 条记忆数据`);
 }, 4);
 
 console.log('[worker] memory-import worker started');

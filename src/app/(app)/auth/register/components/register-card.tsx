@@ -25,7 +25,7 @@ export const RegisterCard = () => {
       setCooldown(60);
       const timer = setInterval(() => setCooldown(s => { if (s <= 1) { clearInterval(timer); return 0; } return s - 1; }), 1000);
     } catch (e: any) {
-      toast.error(e?.message || t("sendFailed"));
+      toast.error((e as Error)?.message || t("sendFailed"));
     }
   };
 
@@ -40,11 +40,11 @@ export const RegisterCard = () => {
         form.set('code', code.trim());
         const r = await fetch('/api/auth/register', { method: 'POST', body: form });
         const j = await r.json().catch(() => ({}));
-        if (!r.ok || j?.error) throw new Error(j?.error || t("registerFailed"));
+        if (!r.ok || j?.error) throw new Error((j as any)?.error || t("registerFailed"));
         toast.success(t("registerSuccess"));
         window.location.href = '/dashboard';
       } catch (e: any) {
-        toast.error(e?.message || t("registerFailed"));
+        toast.error((e as Error)?.message || t("registerFailed"));
       }
     });
   };

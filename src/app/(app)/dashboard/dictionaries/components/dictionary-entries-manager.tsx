@@ -19,7 +19,7 @@ import {
     deleteDictionaryAction,
     fetchDictionaryEntriesPagedAction
 } from "@/actions/dictionary"
-import { useToast } from "@/hooks/useToast"
+import { toast } from "sonner"
 import { ImportDictionaryEntriesDialog } from "./import-dictionary-entries-dialog"
 import { EditDictionaryDialog } from "./edit-dictionary-dialog"
 
@@ -50,8 +50,7 @@ export function DictionaryEntriesManager({
         sourceText: "",
         targetText: "",
         notes: ""
-    })
-    const { toast } = useToast()
+    }) 
 
     // 加载词典条目（分页）
     const loadEntries = async (opts?: { page?: number; pageSize?: number; term?: string }) => {
@@ -82,11 +81,7 @@ export function DictionaryEntriesManager({
             }
         } catch (error) {
             console.error("加载词典条目失败:", error)
-            toast({
-                title: "错误",
-                description: "加载词典条目失败",
-                variant: "destructive"
-            })
+            toast.error("加载词典条目失败")
         }
     }
 
@@ -144,11 +139,7 @@ export function DictionaryEntriesManager({
     const handleSaveEntry = async (entryId: string) => {
         if (dictionary.visibility === 'PUBLIC') return;
         if (!editForm.sourceText.trim() || !editForm.targetText.trim()) {
-            toast({
-                title: "错误",
-                description: "源语言和目标语言不能为空",
-                variant: "destructive"
-            })
+            toast.error("源语言和目标语言不能为空") 
             return
         }
 
@@ -164,19 +155,11 @@ export function DictionaryEntriesManager({
                 })
 
                 if (result.success && result.data) {
-                    toast({
-                        title: "成功",
-                        description: "词条创建成功！",
-                        variant: "default"
-                    })
+                    toast.success("词条创建成功！")
                     onEntriesUpdated()
                     await loadEntries()
                 } else {
-                    toast({
-                        title: "错误",
-                        description: result.error ?? "创建词条失败",
-                        variant: "destructive"
-                    })
+                    toast.error(result.error ?? "创建词条失败")
                 }
             } else {
                 // 更新现有条目
@@ -187,19 +170,11 @@ export function DictionaryEntriesManager({
                 })
 
                 if (result.success && result.data) {
-                    toast({
-                        title: "成功",
-                        description: "词条更新成功！",
-                        variant: "default"
-                    })
+                    toast.success("词条更新成功！")
                     onEntriesUpdated()
                     await loadEntries()
                 } else {
-                    toast({
-                        title: "错误",
-                        description: result.error ?? "更新词条失败",
-                        variant: "destructive"
-                    })
+                    toast.error(result.error ?? "更新词条失败")
                 }
             }
             
@@ -207,11 +182,7 @@ export function DictionaryEntriesManager({
             setEditForm({ sourceText: "", targetText: "", notes: "" })
         } catch (error) {
             console.error("保存词条失败:", error)
-            toast({
-                title: "错误",
-                description: "保存词条时发生错误",
-                variant: "destructive"
-            })
+            toast.error("保存词条时发生错误")
         } finally {
             setLoading(false)
         }
@@ -235,27 +206,15 @@ export function DictionaryEntriesManager({
         try {
             const result = await deleteDictionaryEntryAction(entryId)
             if (result.success) {
-                toast({
-                    title: "成功",
-                    description: "词条删除成功！",
-                    variant: "default"
-                })
+                toast.success("词条删除成功！")
                 onEntriesUpdated()
                 await loadEntries()
             } else {
-                toast({
-                    title: "错误",
-                    description: result.error ?? "删除词条失败",
-                    variant: "destructive"
-                })
+                toast.error(result.error ?? "删除词条失败")
             }
         } catch (error) {
             console.error("删除词条失败:", error)
-            toast({
-                title: "错误",
-                description: "删除词条时发生错误",
-                variant: "destructive"
-            })
+            toast.error("删除词条时发生错误")
         }
     }
 
@@ -270,13 +229,13 @@ export function DictionaryEntriesManager({
             const result = await updateDictionaryEntryAction(entry.id, { enabled: value })
             if (result.success) {
                 setEntries(prev => prev.map(e => e.id === entry.id ? { ...e, enabled: value } : e))
-                toast({ title: "成功", description: value ? "已启用词条" : "已禁用词条", variant: "default" })
+                toast.success(value ? "已启用词条" : "已禁用词条")
             } else {
-                toast({ title: "错误", description: result.error ?? "更新状态失败", variant: "destructive" })
+                toast.error(result.error ?? "更新状态失败")
             }
         } catch (error) {
             console.error("切换启用状态失败:", error)
-            toast({ title: "错误", description: "切换启用状态时发生错误", variant: "destructive" })
+            toast.error("切换启用状态时发生错误")
         } finally {
             setLoading(false)
         }
@@ -311,25 +270,13 @@ export function DictionaryEntriesManager({
                                             const result = await deleteDictionaryAction(dictionary.id)
                                             if (result.success) {
                                                 onDictionaryDeleted(dictionary.id)
-                                                toast({
-                                                    title: "成功",
-                                                    description: "词典删除成功！",
-                                                    variant: "default"
-                                                })
+                                                toast.success("词典删除成功！")
                                             } else {
-                                                toast({
-                                                    title: "错误",
-                                                    description: result.error ?? "删除词典失败",
-                                                    variant: "destructive"
-                                                })
+                                                toast.error(result.error ?? "删除词典失败") 
                                             }
                                         } catch (error) {
                                             console.error("删除词典失败:", error)
-                                            toast({
-                                                title: "错误",
-                                                description: "删除词典时发生错误",
-                                                variant: "destructive"
-                                            })
+                                            toast.error("删除词典时发生错误") 
                                         } finally {
                                             setLoading(false)
                                         }

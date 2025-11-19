@@ -1,5 +1,5 @@
 // utils/jwt.ts
-import jwt, { JwtPayload } from 'jsonwebtoken';
+import jwt, { type JwtPayload } from 'jsonwebtoken';
 
 // 定义接口以匹配你的 JWT 结构
 interface DecodedToken extends JwtPayload {
