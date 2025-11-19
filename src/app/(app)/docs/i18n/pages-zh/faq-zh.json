@@ -1,0 +1,209 @@
+{
+  "faq": {
+    "title": "常见问题",
+    "subtitle": "以下是 DeepTrans Studio 使用过程中最常见的问题和解答。如果您的问题不在此列表中，请查看故障排查文档或提交 Issue",
+    "labels": {
+      "error": "错误信息：",
+      "solution": "解决方案：",
+      "config": "配置说明："
+    },
+    "categories": [
+      {
+        "name": "安装与配置",
+        "description": "关于系统要求、环境配置和初始设置的问题",
+        "questions": [
+          {
+            "question": "DeepTrans Studio 支持哪些操作系统？",
+            "solution": "DeepTrans Studio 支持 macOS、Linux 和 Windows（通过 WSL 2）。\n推荐使用 macOS 或 Linux 进行开发，Windows 用户建议使用 WSL 2。"
+          },
+          {
+            "question": "最低系统要求是什么？",
+            "solution": "最低要求：Node.js ≥ 18.18、Docker 和 Docker Compose（用于依赖服务）、至少 4GB RAM。\n推荐配置：8GB+ RAM、多核 CPU，以获得更好的性能。"
+          },
+          {
+            "question": "必须使用 Docker 吗？",
+            "solution": "开发环境推荐使用 Docker Compose 运行依赖服务（PostgreSQL、Redis、Milvus 等），但 Next.js 应用和 Worker 可以在本地运行。生产环境建议使用 Docker 进行部署。"
+          },
+          {
+            "question": "如何配置 OpenAI API？",
+            "solution": "在 .env.local 中设置 OPENAI_API_KEY、OPENAI_BASE_URL 和 OPENAI_API_MODEL。\n如果使用其他兼容 OpenAI API 的服务（如 DeepSeek），只需修改 BASE_URL 即可。"
+          },
+          {
+            "question": "环境变量应该放在哪里？",
+            "solution": "开发环境使用 .env.local 文件，生产环境使用 .env 或 .env.production。\n确保这些文件已添加到 .gitignore，不要提交敏感信息到版本控制。"
+          }
+        ]
+      },
+      {
+        "name": "数据库与存储",
+        "description": "数据库备份、存储配置和数据管理相关问题",
+        "questions": [
+          {
+            "question": "如何备份数据库？",
+            "commands": [
+              {
+                "code": "pg_dump $DATABASE_URL > backup.sql",
+                "language": "bash",
+                "description": "使用 PostgreSQL 的 pg_dump 命令。定期备份是重要的，特别是在生产环境中。"
+              }
+            ]
+          },
+          {
+            "question": "如何重置数据库？",
+            "commands": [
+              {
+                "code": "yarn prisma migrate reset",
+                "language": "bash",
+                "description": "开发环境可以使用此命令，这会删除所有数据并重新运行迁移。生产环境请谨慎操作，建议先备份。"
+              }
+            ]
+          },
+          {
+            "question": "MinIO 存储的数据在哪里？",
+            "solution": "MinIO 数据默认存储在 Docker 卷中。可以通过 `docker volume ls` 查看，或配置自定义存储路径。"
+          },
+          {
+            "question": "如何清理 Milvus 向量数据？",
+            "solution": "可以通过 Attu UI（http://localhost:8001）删除集合，或使用 Milvus SDK 删除集合。删除后重新导入翻译记忆时会自动重建。"
+          }
+        ]
+      },
+      {
+        "name": "使用与功能",
+        "description": "功能使用、文档处理和翻译工作流相关问题",
+        "questions": [
+          {
+            "question": "支持哪些文档格式？",
+            "solution": "支持 DOCX、PDF、TXT、Markdown 等格式。PDF 解析通过 PDFMath 服务处理，支持数学公式和复杂布局。"
+          },
+          {
+            "question": "如何批量翻译多个文档？",
+            "solution": "在翻译 IDE 中选中多个文档项，使用批量预翻译功能。任务会通过 BullMQ 队列异步处理，可以在界面中查看进度。"
+          },
+          {
+            "question": "翻译记忆库如何工作？",
+            "solution": "翻译记忆库使用 Milvus 向量数据库存储源文-译文对照。\n在翻译过程中，系统会通过混合搜索（向量检索 + 关键词匹配）查找相似的翻译参考。"
+          },
+          {
+            "question": "如何导入术语词典？",
+            "solution": "支持 CSV、Excel 等格式的批量导入。在词典管理页面，选择导入功能，上传文件并映射字段即可。"
+          },
+          {
+            "question": "工作流有哪些类型？",
+            "solution": "主要包含三种工作流：预翻译工作流（批量翻译）、质量保证工作流（质量评估）、译后编辑工作流（人工审校和优化）。"
+          },
+          {
+            "question": "如何查看翻译历史？",
+            "solution": "在翻译流程面板中可以查看每个阶段的处理历史，包括预翻译、质量保证、后编辑等各个步骤的执行记录和结果。"
+          }
+        ]
+      },
+      {
+        "name": "性能与优化",
+        "description": "系统性能调优和效率提升相关问题",
+        "questions": [
+          {
+            "question": "翻译速度慢怎么办？",
+            "solution": "可以检查：1) API 响应时间，2) Worker 处理能力，3) 队列任务堆积情况，4) 数据库查询性能。考虑增加 Worker 实例或优化查询。"
+          },
+          {
+            "question": "如何提高批量翻译效率？",
+            "solution": "1) 增加 Worker 实例数量，2) 优化队列配置，3) 使用更快的 LLM API，4) 合理设置并发数，5) 确保 Redis 和数据库性能充足。"
+          },
+          {
+            "question": "内存使用过高怎么办？",
+            "solution": "检查：1) 数据库连接池大小，2) Redis 缓存数据量，3) Milvus 向量数据，4) Worker 并发数。适当调整配置或增加服务器资源。"
+          },
+          {
+            "question": "如何优化数据库性能？",
+            "solution": "1) 为常用查询字段添加索引，2) 使用 Prisma 的 select 和 include 优化查询，3) 启用数据库连接池，4) 定期清理历史数据。"
+          }
+        ]
+      },
+      {
+        "name": "部署与生产",
+        "description": "生产环境部署、配置和监控相关问题",
+        "questions": [
+          {
+            "question": "如何部署到生产环境？",
+            "solution": "1) 准备生产环境变量，2) 使用 Docker Compose 构建和启动服务，3) 配置 Traefik 反向代理和 HTTPS，4) 设置数据库备份，5) 配置监控和日志。"
+          },
+          {
+            "question": "生产环境需要哪些配置？",
+            "solution": "关键配置：1) 使用专用数据库和 Redis 实例，2) 设置强密码和 AUTH_SECRET，3) 配置 HTTPS，4) 设置环境变量 NODE_ENV=production，5) 配置日志和监控。"
+          },
+          {
+            "question": "如何设置 HTTPS？",
+            "solution": "使用 Traefik 配置 HTTPS，可以自动申请 Let's Encrypt 证书，或使用自定义证书。确保 STUDIO_HOST 指向正确的域名。"
+          },
+          {
+            "question": "如何监控系统状态？",
+            "solution": "可以：1) 使用 docker compose ps 查看服务状态，2) 查看各服务日志，3) 使用 Prisma Studio 监控数据库，4) 使用 Attu UI 监控 Milvus，5) 配置 Prometheus 等监控工具。"
+          }
+        ]
+      },
+      {
+        "name": "开发与扩展",
+        "description": "二次开发、自定义功能和代码贡献相关问题",
+        "questions": [
+          {
+            "question": "如何添加自定义 AI 代理？",
+            "solution": "继承 BaseAgent 基类，实现 execute 方法，在 src/agents 目录下创建新的代理类，然后在工作流中使用。"
+          },
+          {
+            "question": "如何扩展 API 端点？",
+            "solution": "在 src/app/api 目录下创建新的 Route Handler，或使用 Server Actions 在 src/actions 目录下创建。"
+          },
+          {
+            "question": "如何自定义翻译工作流？",
+            "solution": "工作流通过多个 AI 代理协作完成。可以修改代理配置、添加新的代理步骤，或调整工作流执行逻辑。"
+          },
+          {
+            "question": "如何贡献代码？",
+            "solution": "1) Fork 仓库，2) 创建功能分支（feat/*、fix/* 等），3) 遵循代码规范，4) 提交 PR 并描述变更。详见 README 中的贡献指引。"
+          }
+        ]
+      },
+      {
+        "name": "其他问题",
+        "description": "许可证、支持和更新等相关问题",
+        "questions": [
+          {
+            "question": "项目是开源的吗？",
+            "solution": "是的，项目使用 MIT 许可证开源。您可以自由使用、修改和分发。"
+          },
+          {
+            "question": "如何获取技术支持？",
+            "solution": "可以通过 GitHub Issues 提交问题，或在项目社区中寻求帮助。对于严重问题，请提供详细的错误信息和复现步骤。"
+          },
+          {
+            "question": "支持多语言界面吗？",
+            "solution": "是的，使用 next-intl 管理多语言。当前支持中文和英文，可以通过语言切换器切换。"
+          },
+          {
+            "question": "如何更新到最新版本？",
+            "solution": "1) 拉取最新代码，2) 运行 yarn install 更新依赖，3) 运行数据库迁移（如有），4) 重启服务。生产环境建议先在测试环境验证。"
+          }
+        ]
+      }
+    ],
+    "stillHaveQuestions": {
+      "title": "仍有问题？",
+      "description": "如果这里没有找到您需要的答案，可以：",
+      "options": [
+        {
+          "name": "查看完整文档",
+          "description": "浏览所有文档页面，了解更多详细信息"
+        },
+        {
+          "name": "提交 Issue",
+          "description": "在 GitHub 仓库提交问题，我们会尽快回复"
+        },
+        {
+          "name": "查看故障排查",
+          "description": "参考故障排查文档，获取详细的诊断和解决方案"
+        }
+      ]
+    }
+  }
+}

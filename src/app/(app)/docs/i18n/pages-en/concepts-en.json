@@ -1,0 +1,73 @@
+{
+  "concepts": {
+    "title": "Core Concepts",
+    "subtitle": "Understanding DeepTrans Studio's core concepts helps you use the system more efficiently. Here we introduce key terms, data structures, and working principles in the system.",
+    "hierarchyTitle": "Data Hierarchy",
+    "concepts": {
+      "project": {
+        "title": "Project",
+        "description": "Top-level organizational unit containing complete translation work",
+        "details": [
+          "One project corresponds to one translation task",
+          "Contains source language, target language, domain configurations",
+          "Can contain multiple documents",
+          "Supports team collaboration and permission management"
+        ]
+      },
+      "document": {
+        "title": "Document",
+        "description": "Individual file within a project",
+        "details": [
+          "Supports multiple formats: DOCX, PDF, TXT, etc.",
+          "Automatically parses document structure",
+          "Retains original format information",
+          "Can be previewed and downloaded"
+        ]
+      },
+      "segment": {
+        "title": "Segment",
+        "description": "Smallest translation unit in a document",
+        "details": [
+          "Usually a sentence or paragraph",
+          "Contains source text and target text",
+          "Has independent status and versions",
+          "Supports annotations and comments"
+        ],
+        "image": "/docs/en/concepts-en/pic1.png"
+      },
+      "terminology": {
+        "title": "Term",
+        "description": "Professional domain vocabulary and translation pairs",
+        "details": [
+          "Can be project-level or global",
+          "Supports multilingual comparison",
+          "Automatic highlighting and prompts",
+          "Supports batch import/export"
+        ],
+        "image": "/docs/en/concepts-en/pic2.png"
+      },
+      "memory": {
+        "title": "Translation Memory",
+        "description": "Database of historical translations",
+        "details": [
+          "Automatically matches similar sentences",
+          "Improves translation consistency",
+          "Reduces repetitive work",
+          "Supports fuzzy matching"
+        ],
+        "image": "/docs/en/concepts-en/pic3.png"
+      },
+      "workflow": {
+        "title": "Workflow",
+        "description": "Process definition for translation",
+        "details": [
+          "Contains multiple stages: translation, review, finalization",
+          "Each stage has different permissions",
+          "Supports automated tasks",
+          "Customizable processes"
+        ],
+        "image": "/docs/en/concepts-en/pic4.png"
+      }
+    }
+  }
+}

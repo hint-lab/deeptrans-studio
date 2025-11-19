@@ -1,0 +1,449 @@
+{
+  "troubleshooting": {
+    "title": "故障排查",
+    "subtitle": "常见问题和解决方案",
+    "labels": {
+      "Problems": "问题：",
+      "solutions": "解决方案："
+    },
+    "introduction": {
+      "title": "故障排查指南",
+      "description": "本文档帮助您诊断和解决 DeepTrans Studio 使用过程中可能遇到的常见问题。如果问题仍未解决，请查看日志或提交 Issue。"
+    },
+    "categories": [
+      {
+        "name": "安装与启动",
+        "description": "安装、配置和启动相关的问题",
+        "issues": [
+          {
+            "title": "Node.js 版本不兼容",
+            "Problems": [
+              "运行 yarn dev 时提示 Node.js 版本错误",
+              "某些依赖包安装失败",
+              "构建过程中出现语法错误"
+            ],
+            "solutions": [
+              "确保 Node.js 版本 ≥ 18.18",
+              "使用 nvm 或 corepack 管理 Node.js 版本",
+              "运行 `node --version` 检查当前版本",
+              "如果使用 corepack，运行 `corepack enable` 启用"
+            ]
+          },
+          {
+            "title": "Yarn 安装依赖失败",
+            "Problems": [
+              "yarn install 执行失败",
+              "依赖包下载超时",
+              "权限错误"
+            ],
+            "solutions": [
+              "检查网络连接，可能需要配置代理",
+              "清除缓存：`yarn cache clean`",
+              "删除 node_modules 和 yarn.lock，重新安装",
+              "使用 corepack 管理 Yarn：`corepack prepare yarn@1.22.22 --activate`"
+            ]
+          },
+          {
+            "title": "Docker Compose 服务启动失败",
+            "Problems": [
+              "docker compose up 报错",
+              "容器无法启动",
+              "端口被占用"
+            ],
+            "solutions": [
+              "检查 Docker 和 Docker Compose 是否正确安装",
+              "检查端口占用：`lsof -i :5432`（PostgreSQL）、`lsof -i :6379`（Redis）",
+              "查看容器日志：`docker compose logs [service-name]`",
+              "尝试重启服务：`docker compose restart [service-name]`",
+              "清理并重新创建：`docker compose down -v && docker compose up -d`"
+            ]
+          },
+          {
+            "title": "环境变量配置错误",
+            "Problems": [
+              "应用启动后无法连接数据库",
+              "Redis 连接失败",
+              "API 调用返回认证错误"
+            ],
+            "solutions": [
+              "检查 .env.local 文件是否存在且格式正确",
+              "确认 DATABASE_URL 格式：`postgresql://user:password@host:port/database`",
+              "确认 REDIS_URL 格式：`redis://host:port`",
+              "检查 AUTH_SECRET 是否已设置（运行 `openssl rand -base64 32` 生成）",
+              "重启开发服务器使环境变量生效"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "数据库问题",
+        "description": "PostgreSQL 和 Prisma 相关问题",
+        "issues": [
+          {
+            "title": "数据库连接失败",
+            "Problems": [
+              "应用启动时报错：无法连接到数据库",
+              "Prisma Client 初始化失败",
+              "数据库查询超时"
+            ],
+            "solutions": [
+              "检查 PostgreSQL 服务是否运行：`docker compose ps db`",
+              "验证 DATABASE_URL 环境变量是否正确",
+              "测试数据库连接：`psql $DATABASE_URL`",
+              "检查数据库是否已创建：`psql -l`",
+              "查看数据库日志：`docker compose logs db`"
+            ]
+          },
+          {
+            "title": "Prisma 迁移失败",
+            "Problems": [
+              "yarn prisma migrate deploy 执行失败",
+              "数据库架构不匹配",
+              "迁移文件冲突"
+            ],
+            "solutions": [
+              "检查数据库连接是否正常",
+              "查看迁移历史：`yarn prisma migrate status`",
+              "重置数据库（开发环境）：`yarn prisma migrate reset`",
+              "手动应用迁移：`yarn prisma migrate deploy`",
+              "重新生成 Prisma Client：`yarn prisma generate`"
+            ]
+          },
+          {
+            "title": "Prisma Studio 无法打开",
+            "Problems": [
+              "yarn prisma studio 命令无响应",
+              "浏览器无法访问 Prisma Studio"
+            ],
+            "solutions": [
+              "检查数据库连接",
+              "确认端口 5555 未被占用",
+              "尝试使用其他端口：`yarn prisma studio --port 5556`",
+              "检查防火墙设置"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Redis 和队列问题",
+        "description": "Redis 连接和 BullMQ 队列相关问题",
+        "issues": [
+          {
+            "title": "Redis 连接失败",
+            "Problems": [
+              "应用启动时报 Redis 连接错误",
+              "队列任务无法执行",
+              "Worker 无法消费任务"
+            ],
+            "solutions": [
+              "检查 Redis 服务是否运行：`docker compose ps redis`",
+              "验证 REDIS_URL 环境变量",
+              "测试 Redis 连接：`redis-cli -u $REDIS_URL ping`",
+              "查看 Redis 日志：`docker compose logs redis`",
+              "检查 Redis 内存使用：`redis-cli info memory`"
+            ]
+          },
+          {
+            "title": "队列任务堆积",
+            "Problems": [
+              "任务执行缓慢",
+              "队列中任务数量持续增长",
+              "Worker 处理速度跟不上"
+            ],
+            "solutions": [
+              "检查 Worker 服务是否正常运行",
+              "增加 Worker 实例数量",
+              "查看队列状态：`yarn queue:ui`（如果配置了 Bull Board）",
+              "检查 Redis 内存使用情况",
+              "清理失败的任务：`redis-cli FLUSHDB`（谨慎使用）"
+            ]
+          },
+          {
+            "title": "任务执行失败",
+            "Problems": [
+              "批量翻译任务失败",
+              "Worker 日志显示错误",
+              "任务状态一直为 PENDING"
+            ],
+            "solutions": [
+              "查看 Worker 日志：`docker compose logs worker`",
+              "检查任务数据格式是否正确",
+              "验证相关服务（Milvus、MinIO、PDFMath）是否正常",
+              "检查 API 密钥和配置是否正确",
+              "查看 Redis 中的失败任务：`redis-cli KEYS 'bull:*:failed'`"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Milvus 向量库问题",
+        "description": "Milvus 向量数据库相关问题",
+        "issues": [
+          {
+            "title": "Milvus 连接失败",
+            "Problems": [
+              "翻译记忆库搜索失败",
+              "向量写入失败",
+              "Milvus 服务无法访问"
+            ],
+            "solutions": [
+              "检查 Milvus 和 etcd 服务是否运行：`docker compose ps milvus etcd`",
+              "验证 Milvus 连接配置",
+              "查看 Milvus 日志：`docker compose logs milvus`",
+              "检查 etcd 状态：`docker compose logs etcd`",
+              "访问 Attu UI（http://localhost:8001）检查 Milvus 状态"
+            ]
+          },
+          {
+            "title": "向量集合不存在",
+            "Problems": [
+              "搜索时提示集合不存在",
+              "向量写入失败，提示集合未找到"
+            ],
+            "solutions": [
+              "检查集合是否已创建",
+              "在 Attu UI 中查看集合列表",
+              "重新初始化集合（应用会自动创建）",
+              "检查集合名称是否正确"
+            ]
+          },
+          {
+            "title": "向量维度不匹配",
+            "Problems": [
+              "向量写入失败，提示维度错误",
+              "搜索时返回维度不匹配错误"
+            ],
+            "solutions": [
+              "检查嵌入模型配置，确保维度一致（默认 1536）",
+              "删除并重建集合（开发环境）",
+              "验证向量生成代码中的维度设置"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "PDFMath 服务问题",
+        "description": "PDF 解析服务相关问题",
+        "issues": [
+          {
+            "title": "PDFMath 服务无法访问",
+            "Problems": [
+              "文档解析失败",
+              "PDF 文件上传后无法处理",
+              "解析任务一直处于 PENDING 状态"
+            ],
+            "solutions": [
+              "检查 PDFMath 服务是否运行：`docker compose ps pdfmath`",
+              "查看 PDFMath 日志：`docker compose logs pdfmath`",
+              "验证 PDFMath 服务 URL 配置",
+              "测试服务连接：`curl http://localhost:8000/health`（如果配置了健康检查）",
+              "检查 PDF 文件是否损坏或格式不支持"
+            ]
+          },
+          {
+            "title": "PDF 解析超时",
+            "Problems": [
+              "大文件解析时间过长",
+              "解析任务超时失败"
+            ],
+            "solutions": [
+              "检查文件大小（建议不超过 100MB）",
+              "增加超时时间配置",
+              "检查 PDFMath 服务资源使用情况",
+              "考虑将大文件拆分为多个小文件"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "MinIO 对象存储问题",
+        "description": "MinIO 存储服务相关问题",
+        "issues": [
+          {
+            "title": "MinIO 连接失败",
+            "Problems": [
+              "文件上传失败",
+              "文档预览无法加载",
+              "存储操作报错"
+            ],
+            "solutions": [
+              "检查 MinIO 服务是否运行：`docker compose ps minio`",
+              "验证 MINIO_ACCESS_KEY 和 MINIO_SECRET_KEY 配置",
+              "检查 MINIO_BUCKET 是否存在",
+              "查看 MinIO 日志：`docker compose logs minio`",
+              "访问 MinIO Console（默认 http://localhost:9001）检查状态"
+            ]
+          },
+          {
+            "title": "文件上传失败",
+            "Problems": [
+              "文档上传后无法保存",
+              "上传进度卡住",
+              "存储空间不足错误"
+            ],
+            "solutions": [
+              "检查磁盘空间：`df -h`",
+              "验证 MinIO 存储路径权限",
+              "检查文件大小限制",
+              "查看 MinIO 错误日志",
+              "验证 S3 兼容 API 配置"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Worker 服务问题",
+        "description": "后台 Worker 服务相关问题",
+        "issues": [
+          {
+            "title": "Worker 无法启动",
+            "Problems": [
+              "docker compose up worker 失败",
+              "本地 yarn dev:worker 报错",
+              "Worker 进程立即退出"
+            ],
+            "solutions": [
+              "检查环境变量配置",
+              "验证 Redis 连接",
+              "查看 Worker 日志：`docker compose logs worker`",
+              "检查 Node.js 版本",
+              "验证依赖是否正确安装",
+              "检查构建产物：`yarn build:worker`"
+            ]
+          },
+          {
+            "title": "Worker 不处理任务",
+            "Problems": [
+              "任务一直处于 PENDING 状态",
+              "队列中有任务但 Worker 不消费"
+            ],
+            "solutions": [
+              "检查 Worker 是否正常运行",
+              "验证队列名称配置是否正确",
+              "检查 Worker 日志中的错误信息",
+              "确认 Worker 订阅了正确的队列",
+              "重启 Worker 服务"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "应用运行时问题",
+        "description": "Next.js 应用运行时相关问题",
+        "issues": [
+          {
+            "title": "页面加载缓慢",
+            "Problems": [
+              "页面响应时间长",
+              "首次加载很慢",
+              "API 请求超时"
+            ],
+            "solutions": [
+              "检查数据库查询性能，使用 Prisma Studio 分析",
+              "优化数据库索引",
+              "检查 Redis 缓存是否正常工作",
+              "查看浏览器网络面板分析请求时间",
+              "检查服务器资源使用情况（CPU、内存）"
+            ]
+          },
+          {
+            "title": "认证失败",
+            "Problems": [
+              "登录后立即退出",
+              "Session 无法保持",
+              "API 请求返回 401"
+            ],
+            "solutions": [
+              "检查 AUTH_SECRET 是否已设置",
+              "验证 NEXTAUTH_URL 配置是否正确",
+              "清除浏览器 Cookie 和 LocalStorage",
+              "检查 NextAuth 配置",
+              "查看服务器日志中的认证错误"
+            ]
+          },
+          {
+            "title": "API 路由错误",
+            "Problems": [
+              "API 请求返回 404",
+              "Server Actions 执行失败",
+              "路由无法访问"
+            ],
+            "solutions": [
+              "检查路由文件是否存在",
+              "验证 API 路径是否正确",
+              "查看 Next.js 构建日志",
+              "检查中间件配置",
+              "验证请求方法和参数"
+            ]
+          }
+        ]
+      }
+    ],
+    "debugging": {
+      "title": "调试技巧",
+      "description": "常用的调试方法和工具",
+      "tips": [
+        {
+          "title": "查看日志",
+          "description": "查看各服务的日志信息",
+          "commands": [
+            "docker compose logs [service-name] -f",
+            "docker compose logs --tail=100 [service-name]",
+            "查看 Next.js 控制台输出",
+            "查看浏览器开发者工具 Console"
+          ]
+        },
+        {
+          "title": "检查服务状态",
+          "description": "验证各个服务是否正常运行",
+          "commands": [
+            "docker compose ps",
+            "docker compose top",
+            "检查端口占用：lsof -i :PORT",
+            "测试服务连接：curl http://localhost:PORT"
+          ]
+        },
+        {
+          "title": "数据库调试",
+          "description": "使用 Prisma Studio 查看和调试数据库",
+          "commands": [
+            "yarn prisma studio",
+            "yarn prisma migrate status",
+            "psql $DATABASE_URL（直接连接数据库）"
+          ]
+        },
+        {
+          "title": "队列调试",
+          "description": "监控和调试 BullMQ 队列",
+          "commands": [
+            "yarn queue:ui（如果配置了 Bull Board）",
+            "redis-cli KEYS 'bull:*'",
+            "redis-cli GET 'bull:queue:job:ID'"
+          ]
+        }
+      ]
+    },
+    "gettingHelp": {
+      "title": "获取帮助",
+      "description": "如果问题仍未解决，可以通过以下方式获取帮助：",
+      "options": [
+        {
+          "name": "查看文档",
+          "description": "查阅完整的文档和 API 参考"
+        },
+        {
+          "name": "GitHub Issues",
+          "description": "在 GitHub 仓库提交 Issue，详细描述问题现象、错误信息和复现步骤"
+        },
+        {
+          "name": "检查日志",
+          "description": "收集相关服务的日志信息，有助于问题诊断"
+        },
+        {
+          "name": "社区支持",
+          "description": "在项目社区中寻求帮助，分享问题和解决方案"
+        }
+      ]
+    }
+  }
+}

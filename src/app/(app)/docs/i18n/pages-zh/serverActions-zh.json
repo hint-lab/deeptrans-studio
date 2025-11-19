@@ -1,0 +1,342 @@
+{
+  "serverActions": {
+    "title": "Server Actions API",
+    "subtitle": "欢迎来到 DeepTrans Studio Server Actions API 文档中心！本指南旨在帮助您快速上手，了解如何有效地使用本文档提供的交互功能来测试和理解 DeepTrans Studio Server Actions，并掌握 API 访问的关键要素。",
+    "importantNote": {
+      "title": "重要提示：",
+      "content": [
+        "本页内容：主要介绍 Server Actions 文档的交互方式、全局访问配置（如 Base URL、认证信息）以及文档贡献流程。",
+        "API 端点详情：所有具体的 Server Actions（包括其参数、请求/响应结构、功能描述及示例）内容是根据我们的代码自动生成的，并包含了最新的功能注释。请务必查阅这些自动生成的页面以获取最准确和详细的端点信息。"
+      ]
+    },
+    "accessApi": {
+      "title": "访问 API",
+      "description": "或点击顶部导航栏的\"访问 API\"标签页查看完整的 API 文档。"
+    },
+    "interactiveTesting": {
+      "title": "交互式 API 测试",
+      "description": "为了方便您快速验证和理解 API，本文档中大部分 Server Actions 端点页面都内嵌了\"Try It\"的交互式测试功能。",
+      "steps": [
+        {
+          "title": "定位 'Try It' 功能",
+          "description": "在您希望测试的 Server Actions 端点文档页面，通常在页面顶部或右侧区域，您会找到一个明显的\"Try It\"按钮或直接可交互的参数输入区域。"
+        },
+        {
+          "title": "配置请求参数",
+          "items": [
+            "服务器地址 (Base URL)",
+            "认证信息 (Session Token)",
+            "路径与查询参数",
+            "请求体 (Request Body)"
+          ]
+        },
+        {
+          "title": "发送请求并查看结果",
+          "description": "所有参数配置完毕后，点击\"Send\"(或\"Execute\")按钮发起 API 调用。稍后，您将在同一区域看到 API 返回的完整响应，包括 HTTP 状态码、响应头和响应体。"
+        }
+      ]
+    },
+    "apiConfig": {
+      "title": "API 访问配置",
+      "baseUrl": {
+        "title": "服务器地址 (Base URL)",
+        "description": "Server Actions 请求的基础 URL 因您的 DeepTrans Studio 部署环境而异：",
+        "options": [
+          {
+            "name": "本地开发环境",
+            "code": "http://localhost:3000"
+          },
+          {
+            "name": "生产环境",
+            "code": "https://your-domain.com"
+          }
+        ],
+        "note": "在进行 Server Actions 调用时，请务必确认您配置的 Base URL 是正确的。"
+      },
+      "authentication": {
+        "title": "认证信息 (Session Token)",
+        "description": "DeepTrans Studio 使用 NextAuth 进行身份验证，Server Actions 会自动从会话中获取用户信息。",
+        "methods": [
+          "浏览器环境：Server Actions 会自动使用当前登录用户的会话信息，无需手动传递认证信息。",
+          "服务器端调用：如果您在服务器端调用 Server Actions，需要确保请求上下文中包含有效的用户会话。",
+          "API 路由：对于需要通过 API 路由访问的功能，请使用 NextAuth 的 Session Token 进行认证。"
+        ],
+        "securityNote": {
+          "title": "重要安全提示：",
+          "content": [
+            "Session Token 是访问您应用数据的凭证，具有较高权限。请务必将其视为敏感信息并妥善保管，严禁在任何客户端（如浏览器、移动应用前端）代码中硬编码或直接暴露。",
+            "推荐将认证信息存储在安全的服务器端环境，并通过后端服务代理对 DeepTrans Studio Server Actions 的调用。"
+          ]
+        }
+      }
+    },
+    "aboutDocs": {
+      "title": "关于 Server Actions 以及本文档",
+      "composition": {
+        "title": "文档的组成与来源",
+        "items": [
+          {
+            "name": "本指南页",
+            "description": "提供如何使用 Server Actions 文档、进行交互测试以及 API 访问的通用配置信息。"
+          },
+          {
+            "name": "Server Actions 端点详情页",
+            "description": "侧边栏\"API 端点\"分组下的所有页面，均由我们的代码自动生成。这些页面包含了每个端点的详细描述、参数、请求/响应示例和最新的功能注解。"
+          }
+        ]
+      }
+    },
+    "apiEndpoints": {
+      "title": "API 端点",
+      "description": "以下是 DeepTrans Studio 提供的所有 API 端点，按功能分类组织。所有 API 端点均基于 Next.js App Router 的 Route Handlers 实现。",
+      "categories": [
+        {
+          "name": "认证与授权",
+          "description": "用户认证、登录和授权相关的 API",
+          "endpoints": [
+            {
+              "method": "GET/POST",
+              "path": "/api/auth/[...nextauth]",
+              "title": "NextAuth 认证",
+              "description": "NextAuth.js 提供的认证端点，支持多种认证方式"
+            },
+            {
+              "method": "POST",
+              "path": "/api/auth/email-login",
+              "title": "邮箱登录",
+              "description": "使用邮箱和验证码登录"
+            },
+            {
+              "method": "POST",
+              "path": "/api/auth/send-code",
+              "title": "发送验证码",
+              "description": "向指定邮箱发送登录验证码"
+            },
+            {
+              "method": "GET",
+              "path": "/api/auth/oauth/[provider]",
+              "title": "OAuth 登录",
+              "description": "支持 GitHub、Google 等 OAuth 提供商登录"
+            }
+          ]
+        },
+        {
+          "name": "项目管理",
+          "description": "项目、文档、分段等项目管理相关的 API",
+          "endpoints": [
+            {
+              "method": "POST",
+              "path": "/api/projects/[id]/init",
+              "title": "项目初始化",
+              "description": "初始化项目，持久化解析产物。支持通过 action 参数执行 persist 操作"
+            },
+            {
+              "method": "GET",
+              "path": "/api/projects/[id]/init",
+              "title": "查询初始化状态",
+              "description": "查询项目初始化过程中的状态，包括分段进度、术语提取进度、预览内容等"
+            },
+            {
+              "method": "POST",
+              "path": "/api/projects/[id]/parse",
+              "title": "文档解析",
+              "description": "解析项目中的文档，提取文本内容（支持 DOCX、PDF 等格式）"
+            },
+            {
+              "method": "POST",
+              "path": "/api/projects/[id]/segment",
+              "title": "文档分段",
+              "description": "将文档内容分段，支持预览模式和完整模式"
+            },
+            {
+              "method": "GET",
+              "path": "/api/projects/[id]/segment",
+              "title": "查询分段进度",
+              "description": "查询文档分段的进度和结果"
+            },
+            {
+              "method": "POST",
+              "path": "/api/projects/[id]/terms",
+              "title": "术语提取",
+              "description": "从文档中提取术语"
+            },
+            {
+              "method": "POST",
+              "path": "/api/projects/[id]/terms/apply",
+              "title": "应用术语",
+              "description": "将术语应用到文档中"
+            },
+            {
+              "method": "POST",
+              "path": "/api/projects/[id]/terms/preview",
+              "title": "术语预览",
+              "description": "预览术语应用效果"
+            },
+            {
+              "method": "GET",
+              "path": "/api/projects/[id]/doc",
+              "title": "获取项目文档",
+              "description": "获取项目中的文档信息"
+            }
+          ]
+        },
+        {
+          "name": "批量操作",
+          "description": "批量预翻译、批量质量保证等批量处理任务相关的 API",
+          "endpoints": [
+            {
+              "method": "POST",
+              "path": "/api/batch-pre-translate/start",
+              "title": "启动批量预翻译",
+              "description": "启动批量预翻译任务"
+            },
+            {
+              "method": "GET",
+              "path": "/api/batch-pre-translate/progress",
+              "title": "查询批量预翻译进度",
+              "description": "查询批量预翻译任务的进度"
+            },
+            {
+              "method": "POST",
+              "path": "/api/batch-pre-translate/persist",
+              "title": "持久化批量预翻译结果",
+              "description": "将批量预翻译结果持久化到数据库"
+            },
+            {
+              "method": "POST",
+              "path": "/api/batch-quality-assure/start",
+              "title": "启动批量质量保证",
+              "description": "启动批量质量保证任务"
+            },
+            {
+              "method": "GET",
+              "path": "/api/batch-quality-assure/progress",
+              "title": "查询批量质量保证进度",
+              "description": "查询批量质量保证任务的进度"
+            },
+            {
+              "method": "POST",
+              "path": "/api/batch-quality-assure/persist",
+              "title": "持久化批量质量保证结果",
+              "description": "将批量质量保证结果持久化到数据库"
+            },
+            {
+              "method": "POST",
+              "path": "/api/batch-quality-assure/cancel",
+              "title": "取消批量质量保证任务",
+              "description": "取消正在进行的批量质量保证任务"
+            }
+          ]
+        },
+        {
+          "name": "词典",
+          "description": "词典查询和管理相关的 API",
+          "endpoints": [
+            {
+              "method": "GET",
+              "path": "/api/dictionary/lookup",
+              "title": "词典查询",
+              "description": "查询词典中的术语，支持公共、项目和私有词典的联合查询"
+            }
+          ]
+        },
+        {
+          "name": "记忆库",
+          "description": "翻译记忆库导入、搜索和管理相关的 API",
+          "endpoints": [
+            {
+              "method": "POST",
+              "path": "/api/memories/import",
+              "title": "导入记忆库",
+              "description": "导入翻译记忆库文件（支持 TMX、CSV 等格式）"
+            },
+            {
+              "method": "POST",
+              "path": "/api/memories/import-progress",
+              "title": "查询导入进度",
+              "description": "查询记忆库导入任务的进度"
+            },
+            {
+              "method": "POST",
+              "path": "/api/memories/hybrid-search",
+              "title": "混合搜索",
+              "description": "在记忆库中进行混合搜索（向量检索 + 关键词匹配）"
+            },
+            {
+              "method": "GET",
+              "path": "/api/memories/hybrid-search",
+              "title": "获取搜索统计",
+              "description": "获取记忆库搜索的统计信息"
+            }
+          ]
+        },
+        {
+          "name": "文档处理",
+          "description": "文档预览、导出等文档处理相关的 API",
+          "endpoints": [
+            {
+              "method": "GET",
+              "path": "/api/document/preview/[itemId]",
+              "title": "文档预览",
+              "description": "预览文档项的内容"
+            },
+            {
+              "method": "GET",
+              "path": "/api/export/markdown",
+              "title": "导出 Markdown",
+              "description": "将文档导出为 Markdown 格式"
+            },
+            {
+              "method": "GET",
+              "path": "/api/export/word",
+              "title": "导出 Word",
+              "description": "将文档导出为 Word 格式"
+            }
+          ]
+        },
+        {
+          "name": "工作流",
+          "description": "工作流执行相关的 API",
+          "endpoints": [
+            {
+              "method": "POST",
+              "path": "/api/items/[id]/workflow",
+              "title": "执行工作流",
+              "description": "对指定的文档项执行工作流（预翻译、质量保证、后编辑等）"
+            }
+          ]
+        },
+        {
+          "name": "其他服务",
+          "description": "文件上传、聊天、邮件等辅助服务相关的 API",
+          "endpoints": [
+            {
+              "method": "POST",
+              "path": "/api/upload-proxy",
+              "title": "文件上传代理",
+              "description": "代理文件上传到对象存储（MinIO）"
+            },
+            {
+              "method": "POST",
+              "path": "/api/chat",
+              "title": "聊天",
+              "description": "AI 聊天对话接口"
+            },
+            {
+              "method": "GET",
+              "path": "/api/explorer-tabs",
+              "title": "资源管理器标签",
+              "description": "获取资源管理器的标签页信息"
+            },
+            {
+              "method": "POST",
+              "path": "/api/send-email",
+              "title": "发送邮件",
+              "description": "发送邮件通知"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

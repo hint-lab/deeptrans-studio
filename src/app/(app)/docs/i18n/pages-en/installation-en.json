@@ -1,0 +1,90 @@
+{
+  "installation": {
+    "title": "Installation & Setup",
+    "subtitle": "Through this guide, you'll learn how to install and configure DeepTrans Studio development environment.",
+    "prerequisites": {
+      "title": "Prerequisites",
+      "description": "Before installing DeepTrans Studio, please ensure the following tools are installed:",
+      "items": [
+        "Node.js ≥ 18.18 (recommended to use corepack to manage Yarn 1.22.22)",
+        "Yarn (enabled via corepack enable)",
+        "Docker / Docker Compose (for local dependency services or one-click deployment)",
+        "Git and other common tools"
+      ]
+    },
+    "installDeps": {
+      "title": "Install Dependencies",
+      "description": "Use corepack to manage Yarn, then install project dependencies.",
+      "commands": {
+        "enableCorepack": "corepack enable",
+        "prepareYarn": "corepack prepare yarn@1.22.22 --activate",
+        "install": "yarn install"
+      }
+    },
+    "envConfig": {
+      "title": "Configure Environment Variables",
+      "description": "Copy or create .env.local and fill in according to your actual environment:",
+      "note": "💡 For production environments, please change the database, Redis, Milvus, and object storage to dedicated instances and keep credentials secure.",
+      "example": "# Database & Cache\nDATABASE_URL=\"postgresql://postgres:123456@localhost:5432/deeptrans\"\nREDIS_URL=\"redis://127.0.0.1:6379\"\n\n# Authentication & Site Config\nAUTH_SECRET=\"Please generate a random string\"\nNEXTAUTH_URL=\"http://localhost:3000\"\nNODE_ENV=development\n\n# LLM / AI Services\nOPENAI_API_KEY=\"sk-xxxx\"\nOPENAI_BASE_URL=\"https://api.openai.com/v1\"\nOPENAI_API_MODEL=\"gpt-4o-mini\"\n\n# Object Storage & Resources\nMINIO_ACCESS_KEY=minioadmin\nMINIO_SECRET_KEY=minioadmin\nMINIO_BUCKET=deeptrans\n\n# Other Services\nSTUDIO_HOST=localhost        # Used for Traefik/HTTPS deployment\n\n# Optional: GitHub OAuth, SMTP, Milvus access info, etc."
+    },
+    "initDb": {
+      "title": "Initialize Database",
+      "description": "Execute database migrations and generate Prisma Client.",
+      "commands": {
+        "migrate": "yarn prisma migrate deploy      # or yarn db:push to initialize structure",
+        "generate": "yarn prisma generate            # Generate Prisma Client",
+        "seed": "yarn db:seed                    # Optional: Import sample data"
+      }
+    },
+    "startDev": {
+      "title": "Start Local Development Environment",
+      "description": "Start dependency services and run the Next.js development server.",
+      "step1": {
+        "title": "Start Dependency Services",
+        "description": "Recommended to use services from Docker Compose:",
+        "command": "docker compose up -d db redis etcd milvus minio pdfmath worker\n# If you need Attu UI or Traefik, append attu traefik"
+      },
+      "step2": {
+        "title": "Start Next.js Application",
+        "description": "Start the development server (with hot reload):",
+        "command": "yarn dev"
+      },
+      "step3": {
+        "title": "Start Worker Service (Optional)",
+        "description": "If you want to run Worker in local Node environment, execute:",
+        "command": "yarn dev:worker",
+        "note": "By default, it runs through the worker container in compose."
+      },
+      "access": {
+        "title": "Access Application",
+        "description": "Visit http://localhost:3000 to access Studio; Attu (Milvus UI) is exposed at http://localhost:8001 by default."
+      }
+    },
+    "dockerCompose": {
+      "title": "Run with Docker Compose",
+      "description": "Deploy all services with Docker Compose in one command.",
+      "step1": {
+        "title": "Prepare Environment Variables",
+        "description": "Prepare .env / .env.production and ensure STUDIO_HOST points to the external domain."
+      },
+      "step2": {
+        "title": "Build Images",
+        "command": "docker compose build studio worker pdfmath"
+      },
+      "step3": {
+        "title": "Start Main Services",
+        "command": "docker compose up -d traefik studio worker",
+        "note": "Traefik will map ports 80/443 to Studio. Dependency components like Milvus/MinIO/Attu can be started as needed."
+      }
+    },
+    "nextSteps": {
+      "title": "Next Steps",
+      "description": "After installation, you can:",
+      "links": {
+        "gettingStarted": "View Getting Started Guide",
+        "concepts": "Learn Core Concepts",
+        "workflows": "Learn Workflows"
+      }
+    }
+  }
+}

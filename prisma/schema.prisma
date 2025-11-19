@@ -1,0 +1,342 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String        @id @default(cuid())
+  name          String?
+  email         String?       @unique
+  emailVerified DateTime?
+  avatar        String?
+  password      String?
+  role          UserRole      @default(USER)
+  tenantId      String?
+  tenant        Tenant?       @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+
+  accounts      Account[]
+
+  // Projects & Documents
+  projects      Project[]     @relation("ProjectCreatedBy")
+  documents     Document[]    @relation("DocumentCreatedBy")
+  documentItems DocumentItem[] @relation("DocumentItemCreatedBy")
+
+  // Lexical Resources
+  dictionaries  Dictionary[]  @relation("DictionaryCreatedBy")
+  dictionaryEntriesCreated DictionaryEntry[] @relation("DictionaryEntryCreatedBy")
+  dictionaryEntriesUpdated DictionaryEntry[] @relation("DictionaryEntryUpdatedBy")
+
+  // Translation Memory
+  translationMemories   TranslationMemory[]      @relation("TranslationMemoryCreatedBy")
+  translationMemoriesUpdated TranslationMemory[] @relation("TranslationMemoryUpdatedBy")
+  memoryEntriesCreated  TranslationMemoryEntry[] @relation("MemoryEntryCreatedBy")
+  memoryEntriesUpdated  TranslationMemoryEntry[] @relation("MemoryEntryUpdatedBy")
+
+  // Timeline
+  translationStageRecords TranslationStageRecord[] @relation("TranslationStageRecordCreatedBy") 
+
+  @@index([email])
+  @@index([tenantId])
+}
+
+model Tenant {
+  id          String              @id @default(cuid())
+  name        String
+  description String?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  users               User[]
+  projects            Project[]
+  dictionaries        Dictionary[]
+  translationMemories TranslationMemory[]
+
+  @@index([name])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  id_token          String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  session_state     String?
+
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Project {
+  id             String     @id @default(cuid())
+  name           String
+  domain         String
+  sourceLanguage String
+  targetLanguage String
+  date           DateTime
+  tenantId       String?
+  userId         String?
+
+  tenant         Tenant?    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user           User?      @relation("ProjectCreatedBy", fields: [userId], references: [id], onDelete: Cascade)
+
+  documents      Document[]
+  projectDictionaries ProjectDictionary[]
+  projectMemories     ProjectMemory[]
+
+  @@index([userId, date])
+  @@index([tenantId])
+}
+
+model Document {
+  id            String      @id @default(cuid())
+  name          String
+  originalName  String
+  url           String
+  mimeType      String
+  size          Int
+  projectId     String
+  uploadedAt    DateTime    @default(now())
+  status        DocumentStatus @default(WAITING)
+  userId        String? 
+  structured    Json?
+
+  project       Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user          User?       @relation("DocumentCreatedBy", fields: [userId], references: [id], onDelete: SetNull)
+
+  documentItems DocumentItem[] @relation("DocumentBelongTo")
+
+  @@index([projectId])
+  @@index([projectId, uploadedAt])
+}
+
+model DocumentItem {
+  id           String         @id @default(cuid())
+  documentId   String
+  order        Int
+  sourceText   String
+  targetText   String?
+  status       TranslationStage  @default(NOT_STARTED)
+  type         String         @default("TEXT")
+  metadata     Json?
+  preTranslateTerms    Json?
+  preTranslateDict     Json?
+  preTranslateEmbedded Json?
+  qualityAssureBiTerm  Json?
+  qualityAssureSyntax  Json?
+  qualityAssureSyntaxEmbedded Json?
+  postEditDiscourse   Json?
+  postEditEmbedded    Json?
+  userId       String?
+  needsReview  Boolean        @default(false)
+  locked       Boolean        @default(false)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  document     Document       @relation("DocumentBelongTo", fields: [documentId], references: [id], onDelete: Cascade)
+  user         User?          @relation("DocumentItemCreatedBy", fields: [userId], references: [id], onDelete: SetNull)
+
+  translationStageTimelines TranslationStageRecord[] @relation("TranslationStageRecordDocumentItem")
+
+  @@unique([documentId, order])
+}
+
+model Dictionary {
+  id          String       @id @default(cuid())
+  name        String
+  description String?
+  domain      String
+  visibility  DictionaryVisibility   @default(PRIVATE)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  tenantId    String?
+  userId      String?
+
+  tenant      Tenant?      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user        User?        @relation("DictionaryCreatedBy", fields: [userId], references: [id], onDelete: SetNull)
+
+  entries     DictionaryEntry[]
+  projectBindings ProjectDictionary[]
+
+  @@index([userId])
+  @@index([domain])
+  @@index([tenantId])
+}
+
+model DictionaryEntry {
+  id           String     @id @default(cuid())
+  sourceText   String
+  targetText   String
+  explanation  String?
+  context      String?
+  notes        String?
+  origin       String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  createdById  String?
+  updatedById  String?
+  dictionaryId String
+  enabled      Boolean    @default(true)
+
+  dictionary   Dictionary @relation(fields: [dictionaryId], references: [id], onDelete: Cascade)
+  createdBy    User?      @relation("DictionaryEntryCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy    User?      @relation("DictionaryEntryUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@index([dictionaryId])
+  @@index([sourceText])
+}
+
+model TranslationMemory {
+  id          String        @id @default(cuid())
+  name        String        
+  sourceText   String       @default("auto") 
+  targetText   String       @default("auto")
+  description String?
+  tenantId    String?
+  userId      String?      // 创建者
+  updatedById String?      // 最后更新人
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt 
+
+  tenant      Tenant?       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user        User?         @relation("TranslationMemoryCreatedBy", fields: [userId], references: [id], onDelete: SetNull)
+  updatedBy   User?         @relation("TranslationMemoryUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  entries     TranslationMemoryEntry[]
+  projectBindings ProjectMemory[]
+
+  @@index([userId])
+  @@index([tenantId])
+}
+
+model TranslationMemoryEntry {
+  id         String            @id @default(cuid())
+  memoryId   String
+  sourceText String
+  targetText String
+  sourceLang String?
+  targetLang String?
+  notes      String?
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+  createdById String?
+  updatedById String?
+
+  memory     TranslationMemory @relation(fields: [memoryId], references: [id], onDelete: Cascade)
+  createdBy  User?             @relation("MemoryEntryCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy  User?             @relation("MemoryEntryUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@index([memoryId])
+  @@index([sourceLang, targetLang])
+}
+
+model TranslationStageRecord {
+  id             String             @id @default(cuid())
+  documentItemId String?
+  stepKey        TranslationStage
+  actorType      TranslationProcessActorType  @default(AGENT)
+  actorId        String?
+  userId         String?
+  model          String?
+  status         TranslationProcessStepStatus @default(STARTED)
+  startedAt      DateTime           @default(now())
+  finishedAt     DateTime?
+  metadata       Json?
+  createdAt      DateTime           @default(now())
+
+  documentItem   DocumentItem?      @relation("TranslationStageRecordDocumentItem", fields: [documentItemId], references: [id], onDelete: SetNull)
+  user           User?              @relation("TranslationStageRecordCreatedBy", fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([documentItemId])
+  @@index([documentItemId, stepKey, status])
+}
+
+// Enums
+enum TranslationStage {
+  NOT_STARTED
+  MT
+  MT_REVIEW
+  QA
+  QA_REVIEW
+  POST_EDIT
+  POST_EDIT_REVIEW
+  SIGN_OFF
+  COMPLETED
+  ERROR
+  CANCELED
+}
+
+enum DictionaryVisibility {
+  PUBLIC
+  PROJECT
+  PRIVATE
+}
+
+enum UserRole {
+  ADMIN
+  USER
+}
+
+enum TranslationProcessActorType {
+  AGENT
+  USER
+}
+
+enum TranslationProcessStepStatus {
+  STARTED
+  SUCCESS
+  FAILED
+}
+
+enum DocumentStatus {
+  WAITING
+  PARSING
+  SEGMENTING
+  TERMS_EXTRACTING
+  PREPROCESSED
+  TRANSLATING
+  COMPLETED
+  ERROR 
+}
+
+// —— Project Bindings ——
+
+model ProjectDictionary {
+  id           String     @id @default(cuid())
+  projectId    String
+  dictionaryId String
+  createdAt    DateTime   @default(now())
+
+  project      Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  dictionary   Dictionary @relation(fields: [dictionaryId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, dictionaryId])
+  @@index([projectId])
+  @@index([dictionaryId])
+}
+
+model ProjectMemory {
+  id         String             @id @default(cuid())
+  projectId  String
+  memoryId   String
+  createdAt  DateTime           @default(now())
+
+  project    Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  memory     TranslationMemory  @relation(fields: [memoryId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, memoryId])
+  @@index([projectId])
+  @@index([memoryId])
+}
+

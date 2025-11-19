@@ -1,0 +1,73 @@
+{
+  "workflows": {
+    "title": "Workflows",
+    "subtitle": "Translation, evaluation, post-editing, review and other process nodes and transitions.",
+    "image": "/docs/en/workflows-en/pic1.png",
+    "introduction": {
+      "title": "Introduction",
+      "description": "Workflows reduce system complexity by breaking down complex translation tasks into smaller steps (nodes), reducing dependence on prompt engineering and model inference capabilities, improving the performance of AI translation applications for complex tasks, and enhancing system interpretability, stability, and fault tolerance.",
+      "types": {
+        "title": "DeepTrans Studio Workflow Types",
+        "preTranslate": {
+          "name": "Pre-translation Workflow",
+          "description": "For batch translation scenarios, including document parsing, automatic pre-translation, terminology matching, translation memory retrieval, etc., suitable for large-scale document translation and batch processing tasks."
+        },
+        "qualityAssurance": {
+          "name": "Quality Assurance Workflow",
+          "description": "For quality assessment scenarios, including terminology consistency checks, grammar checks, discourse evaluation, quality scoring, etc., ensuring translation quality and consistency."
+        },
+        "postEdit": {
+          "name": "Post-editing Workflow",
+          "description": "For human review scenarios, including post-editing, review, finalization, etc., supporting multi-user collaboration and version management."
+        }
+      }
+    },
+    "features": {
+      "title": "Core Features",
+      "items": [
+        "Automatic pre-translation: Batch translate segments and update segment status.",
+        "Quality assessment: Call evaluation service, write results and logs.",
+        "Post-editing: Revise content in the editor and save.",
+        "Process review: Stage approval/rejection.",
+        "Terminology matching: Automatically match project and global terminology databases.",
+        "Translation memory: Retrieve similar historical translations to improve consistency.",
+        "Queue processing: BullMQ queue-driven Worker handles time-consuming tasks."
+      ]
+    },
+    "useCases": {
+      "title": "Common Use Cases",
+      "cases": [
+        {
+          "title": "Batch Document Translation",
+          "description": "Automate translation tasks for large volumes of documents through workflows, including document parsing, segmentation, batch translation, quality checks, etc., significantly improving translation efficiency."
+        },
+        {
+          "title": "Terminology Consistency",
+          "description": "Automatically match terminology databases during translation to ensure consistency of professional terms, especially suitable for technical documents, legal documents, and other scenarios with strict terminology requirements."
+        },
+        {
+          "title": "Multilingual Localization",
+          "description": "Support simultaneous processing of translation tasks for multiple target languages, managing translation processes uniformly through workflows to ensure quality and progress of all language versions."
+        },
+        {
+          "title": "Collaborative Translation Process",
+          "description": "Support multi-stage collaborative processes such as translation, review, and finalization, with each stage assignable to different team members for standardized management of translation projects."
+        },
+        {
+          "title": "Automated Quality Assessment",
+          "description": "Automatically call quality assessment services to evaluate translation results across multiple dimensions such as terminology consistency, grammar, and discourse, generating quality reports and improvement suggestions."
+        }
+      ]
+    },
+    "gettingStarted": {
+      "title": "Getting Started",
+      "steps": [
+        "Create a translation project and select source and target languages.",
+        "Upload documents to be translated, and the system will automatically parse document structure.",
+        "Configure workflow: Select pre-translation, quality assurance, or post-editing workflow.",
+        "Start the workflow, and the system will automatically execute each step.",
+        "View workflow execution history and results, and make necessary adjustments and optimizations."
+      ]
+    }
+  }
+}

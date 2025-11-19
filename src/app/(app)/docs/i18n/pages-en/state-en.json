@@ -1,0 +1,141 @@
+{
+  "state": {
+    "title": "State Management",
+    "subtitle": "Learn about DeepTrans Studio's state management architecture and implementation",
+    "introduction": {
+      "title": "State Management Overview",
+      "description": "DeepTrans Studio uses Redux Toolkit for global state management, combined with React Hooks and local storage, providing an efficient and predictable state management solution."
+    },
+    "architecture": {
+      "title": "Architecture Design",
+      "description": "State management adopts a layered architecture, including global state (Redux), local state (React Hooks), and persistent storage (LocalStorage).",
+      "layers": [
+        {
+          "name": "Redux Store",
+          "description": "Uses Redux Toolkit to manage global application state, including editor state, translation state, UI state, etc.",
+          "features": [
+            "Use @reduxjs/toolkit's configureStore to create store",
+            "Create state slices (Slice) through createSlice",
+            "Support TypeScript type inference",
+            "Provide time-travel debugging capabilities"
+          ]
+        },
+        {
+          "name": "React Hooks",
+          "description": "Use custom Hooks to encapsulate state logic, providing concise component interfaces.",
+          "features": [
+            "useTranslationState - Translation state management",
+            "useSidebar - Sidebar state",
+            "useRightPanel - Right panel state",
+            "useBottomPanel - Bottom panel state",
+            "useUserSettings - User settings (persisted to LocalStorage)"
+          ]
+        },
+        {
+          "name": "Local Storage",
+          "description": "Use LocalStorage to persist user settings and preferences.",
+          "features": [
+            "User settings (translation engine, dictionary selection, memory selection)",
+            "Layout configuration (panel size, sidebar state)",
+            "Theme preferences"
+          ]
+        }
+      ]
+    },
+    "storeStructure": {
+      "title": "Store Structure",
+      "description": "Redux Store contains the following main state slices:",
+      "slices": [
+        {
+          "name": "editor",
+          "description": "Editor state, managing rich text editor content and formatting"
+        },
+        {
+          "name": "translation",
+          "description": "Translation state, including current translation stage, source text, target text, language settings"
+        },
+        {
+          "name": "workFlowStep",
+          "description": "Workflow step state, managing states and data for pre-translation, quality assurance, post-editing, and other processes"
+        },
+        {
+          "name": "activeDocumentItem",
+          "description": "Currently active document item, tracking the paragraph the user is editing"
+        },
+        {
+          "name": "activeDocument",
+          "description": "Currently active document, managing document-level state"
+        },
+        {
+          "name": "explorerTabs",
+          "description": "Explorer tabs, managing document tree structure"
+        },
+        {
+          "name": "sidebar",
+          "description": "Sidebar state, controlling the display and collapse of the left Explorer"
+        },
+        {
+          "name": "rightPane",
+          "description": "Right panel state, managing the display of AI chat, preview, and other panels"
+        },
+        {
+          "name": "panel",
+          "description": "Bottom panel state, controlling the display of the translation workflow panel"
+        },
+        {
+          "name": "running",
+          "description": "Running state, tracking execution status of various tasks (translation, quality assurance, post-editing, etc.)"
+        },
+        {
+          "name": "projectInit",
+          "description": "Project initialization state, managing steps and data for project initialization process"
+        },
+        {
+          "name": "dialog",
+          "description": "Dialog state, managing the display of various modal dialogs"
+        },
+        {
+          "name": "log",
+          "description": "Log state, storing operation logs and debugging information"
+        },
+        {
+          "name": "chatbar",
+          "description": "Chat bar state, managing AI chat assistant state"
+        },
+        {
+          "name": "tabBar",
+          "description": "Tab bar state, managing document tabs"
+        }
+      ]
+    },
+    "usage": {
+      "title": "Usage",
+      "description": "Ways to use state management in components:",
+      "examples": [
+        {
+          "title": "Using Redux Hooks",
+          "code": "import { useAppSelector, useAppDispatch } from '@/store/hooks';\nimport { setTranslationStage } from '@/store/features/translationSlice';\n\nconst stage = useAppSelector(state => state.translation.currentStage);\nconst dispatch = useAppDispatch();\ndispatch(setTranslationStage('MT'));"
+        },
+        {
+          "title": "Using Custom Hooks",
+          "code": "import { useTranslationState } from '@/hooks/useTranslation';\n\nconst { currentStage, sourceText, targetText } = useTranslationState();"
+        },
+        {
+          "title": "Using User Settings Hook",
+          "code": "import { useUserSettings } from '@/hooks/useUserSettings';\n\nconst { settings, updateProvider } = useUserSettings();\nupdateProvider('openai');"
+        }
+      ]
+    },
+    "bestPractices": {
+      "title": "Best Practices",
+      "items": [
+        "Place globally shared state in Redux Store, use useState for component internal state",
+        "Use createSlice to create state slices, leveraging Redux Toolkit's simplified API",
+        "Encapsulate complex state logic through custom Hooks to improve code reusability",
+        "Use LocalStorage to persist user preferences to avoid loss on each refresh",
+        "Avoid storing non-serializable data (such as functions, class instances) in Redux",
+        "Use TypeScript type definitions to ensure state type safety"
+      ]
+    }
+  }
+}

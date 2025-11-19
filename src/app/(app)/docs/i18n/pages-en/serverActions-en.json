@@ -1,0 +1,342 @@
+{
+  "serverActions": {
+    "title": "Server Actions API",
+    "subtitle": "Welcome to the DeepTrans Studio Server Actions API documentation center! This guide aims to help you get started quickly, understand how to effectively use the interactive features provided in this documentation to test and understand DeepTrans Studio Server Actions, and master the key elements of API access.",
+    "importantNote": {
+      "title": "Important Note:",
+      "content": [
+        "This page content: Mainly introduces the interactive methods of Server Actions documentation, global access configuration (such as Base URL, authentication information), and documentation contribution process.",
+        "API endpoint details: All specific Server Actions (including their parameters, request/response structures, function descriptions, and examples) are automatically generated from our code and include the latest feature annotations. Please be sure to consult these auto-generated pages to get the most accurate and detailed endpoint information."
+      ]
+    },
+    "accessApi": {
+      "title": "Access API",
+      "description": "Or click the \"Access API\" tab in the top navigation bar to view the complete API documentation."
+    },
+    "interactiveTesting": {
+      "title": "Interactive API Testing",
+      "description": "To help you quickly verify and understand the API, most Server Actions endpoint pages in this documentation have embedded \"Try It\" interactive testing functionality.",
+      "steps": [
+        {
+          "title": "Locate 'Try It' Feature",
+          "description": "On the Server Actions endpoint documentation page you want to test, usually at the top or right side of the page, you will find an obvious \"Try It\" button or directly interactive parameter input area."
+        },
+        {
+          "title": "Configure Request Parameters",
+          "items": [
+            "Server Address (Base URL)",
+            "Authentication Information (Session Token)",
+            "Path and Query Parameters",
+            "Request Body"
+          ]
+        },
+        {
+          "title": "Send Request and View Results",
+          "description": "After all parameters are configured, click the \"Send\" (or \"Execute\") button to initiate the API call. Shortly after, you will see the complete response returned by the API in the same area, including HTTP status code, response headers, and response body."
+        }
+      ]
+    },
+    "apiConfig": {
+      "title": "🔑 API Access Configuration",
+      "baseUrl": {
+        "title": "Server Address (Base URL)",
+        "description": "The base URL for Server Actions requests varies depending on your DeepTrans Studio deployment environment:",
+        "options": [
+          {
+            "name": "Local Development Environment",
+            "code": "http://localhost:3000"
+          },
+          {
+            "name": "Production Environment",
+            "code": "https://your-domain.com"
+          }
+        ],
+        "note": "When making Server Actions calls or using the \"Try It\" feature, please make sure the Base URL you configured is correct."
+      },
+      "authentication": {
+        "title": "Authentication Information (Session Token)",
+        "description": "DeepTrans Studio uses NextAuth for authentication, and Server Actions automatically obtain user information from the session.",
+        "methods": [
+          "Browser Environment: Server Actions automatically use the current logged-in user's session information, no need to manually pass authentication information.",
+          "Server-side Calls: If you are calling Server Actions on the server side, you need to ensure that the request context includes a valid user session.",
+          "API Routes: For features that need to be accessed through API routes, please use NextAuth's Session Token for authentication."
+        ],
+        "securityNote": {
+          "title": "Important Security Note:",
+          "content": [
+            "Session Token is a credential for accessing your application data and has high permissions. Please treat it as sensitive information and keep it safe. Never hardcode or directly expose it in any client-side code (such as browser or mobile app frontend).",
+            "It is recommended to store authentication information in a secure server-side environment and proxy calls to DeepTrans Studio Server Actions through backend services."
+          ]
+        }
+      }
+    },
+    "aboutDocs": {
+      "title": "📚 About Server Actions and This Documentation",
+      "composition": {
+        "title": "Documentation Composition and Sources",
+        "items": [
+          {
+            "name": "This Guide Page",
+            "description": "Provides general configuration information on how to use Server Actions documentation, perform interactive testing, and API access."
+          },
+          {
+            "name": "Server Actions Endpoint Detail Pages",
+            "description": "All pages under the \"API Endpoints\" group in the sidebar are automatically generated from our code. These pages include detailed descriptions, parameters, request/response examples, and the latest feature annotations for each endpoint."
+          }
+        ]
+      }
+    },
+    "apiEndpoints": {
+      "title": "API Endpoints",
+      "description": "The following are all API endpoints provided by DeepTrans Studio, organized by functionality. All API endpoints are implemented based on Next.js App Router Route Handlers.",
+      "categories": [
+        {
+          "name": "Authentication & Authorization",
+          "description": "User authentication, login, and authorization related APIs",
+          "endpoints": [
+            {
+              "method": "GET/POST",
+              "path": "/api/auth/[...nextauth]",
+              "title": "NextAuth Authentication",
+              "description": "Authentication endpoint provided by NextAuth.js, supporting multiple authentication methods"
+            },
+            {
+              "method": "POST",
+              "path": "/api/auth/email-login",
+              "title": "Email Login",
+              "description": "Login using email and verification code"
+            },
+            {
+              "method": "POST",
+              "path": "/api/auth/send-code",
+              "title": "Send Verification Code",
+              "description": "Send login verification code to specified email"
+            },
+            {
+              "method": "GET",
+              "path": "/api/auth/oauth/[provider]",
+              "title": "OAuth Login",
+              "description": "Support GitHub, Google, and other OAuth provider login"
+            }
+          ]
+        },
+        {
+          "name": "Project Management",
+          "description": "Project, document, segment, and other project management related APIs",
+          "endpoints": [
+            {
+              "method": "POST",
+              "path": "/api/projects/[id]/init",
+              "title": "Project Initialization",
+              "description": "Initialize project, persist parsing artifacts. Supports executing persist operation through action parameter"
+            },
+            {
+              "method": "GET",
+              "path": "/api/projects/[id]/init",
+              "title": "Query Initialization Status",
+              "description": "Query status during project initialization process, including segmentation progress, terminology extraction progress, preview content, etc."
+            },
+            {
+              "method": "POST",
+              "path": "/api/projects/[id]/parse",
+              "title": "Document Parsing",
+              "description": "Parse documents in project, extract text content (supports DOCX, PDF, and other formats)"
+            },
+            {
+              "method": "POST",
+              "path": "/api/projects/[id]/segment",
+              "title": "Document Segmentation",
+              "description": "Segment document content, supports preview mode and full mode"
+            },
+            {
+              "method": "GET",
+              "path": "/api/projects/[id]/segment",
+              "title": "Query Segmentation Progress",
+              "description": "Query document segmentation progress and results"
+            },
+            {
+              "method": "POST",
+              "path": "/api/projects/[id]/terms",
+              "title": "Terminology Extraction",
+              "description": "Extract terms from documents"
+            },
+            {
+              "method": "POST",
+              "path": "/api/projects/[id]/terms/apply",
+              "title": "Apply Terms",
+              "description": "Apply terms to documents"
+            },
+            {
+              "method": "POST",
+              "path": "/api/projects/[id]/terms/preview",
+              "title": "Term Preview",
+              "description": "Preview term application effects"
+            },
+            {
+              "method": "GET",
+              "path": "/api/projects/[id]/doc",
+              "title": "Get Project Documents",
+              "description": "Get document information in project"
+            }
+          ]
+        },
+        {
+          "name": "Batch Operations",
+          "description": "Batch pre-translation, batch quality assurance, and other batch processing task related APIs",
+          "endpoints": [
+            {
+              "method": "POST",
+              "path": "/api/batch-pre-translate/start",
+              "title": "Start Batch Pre-translation",
+              "description": "Start batch pre-translation task"
+            },
+            {
+              "method": "GET",
+              "path": "/api/batch-pre-translate/progress",
+              "title": "Query Batch Pre-translation Progress",
+              "description": "Query batch pre-translation task progress"
+            },
+            {
+              "method": "POST",
+              "path": "/api/batch-pre-translate/persist",
+              "title": "Persist Batch Pre-translation Results",
+              "description": "Persist batch pre-translation results to database"
+            },
+            {
+              "method": "POST",
+              "path": "/api/batch-quality-assure/start",
+              "title": "Start Batch Quality Assurance",
+              "description": "Start batch quality assurance task"
+            },
+            {
+              "method": "GET",
+              "path": "/api/batch-quality-assure/progress",
+              "title": "Query Batch Quality Assurance Progress",
+              "description": "Query batch quality assurance task progress"
+            },
+            {
+              "method": "POST",
+              "path": "/api/batch-quality-assure/persist",
+              "title": "Persist Batch Quality Assurance Results",
+              "description": "Persist batch quality assurance results to database"
+            },
+            {
+              "method": "POST",
+              "path": "/api/batch-quality-assure/cancel",
+              "title": "Cancel Batch Quality Assurance Task",
+              "description": "Cancel ongoing batch quality assurance task"
+            }
+          ]
+        },
+        {
+          "name": "Dictionary",
+          "description": "Dictionary query and management related APIs",
+          "endpoints": [
+            {
+              "method": "GET",
+              "path": "/api/dictionary/lookup",
+              "title": "Dictionary Lookup",
+              "description": "Query terms in dictionaries, supporting joint queries of public, project, and private dictionaries"
+            }
+          ]
+        },
+        {
+          "name": "Translation Memory",
+          "description": "Translation memory import, search, and management related APIs",
+          "endpoints": [
+            {
+              "method": "POST",
+              "path": "/api/memories/import",
+              "title": "Import Memory",
+              "description": "Import translation memory files (supports TMX, CSV, and other formats)"
+            },
+            {
+              "method": "POST",
+              "path": "/api/memories/import-progress",
+              "title": "Query Import Progress",
+              "description": "Query translation memory import task progress"
+            },
+            {
+              "method": "POST",
+              "path": "/api/memories/hybrid-search",
+              "title": "Hybrid Search",
+              "description": "Perform hybrid search in memory (vector retrieval + keyword matching)"
+            },
+            {
+              "method": "GET",
+              "path": "/api/memories/hybrid-search",
+              "title": "Get Search Statistics",
+              "description": "Get translation memory search statistics"
+            }
+          ]
+        },
+        {
+          "name": "Document Processing",
+          "description": "Document preview, export, and other document processing related APIs",
+          "endpoints": [
+            {
+              "method": "GET",
+              "path": "/api/document/preview/[itemId]",
+              "title": "Document Preview",
+              "description": "Preview document item content"
+            },
+            {
+              "method": "GET",
+              "path": "/api/export/markdown",
+              "title": "Export Markdown",
+              "description": "Export documents as Markdown format"
+            },
+            {
+              "method": "GET",
+              "path": "/api/export/word",
+              "title": "Export Word",
+              "description": "Export documents as Word format"
+            }
+          ]
+        },
+        {
+          "name": "Workflow",
+          "description": "Workflow execution related APIs",
+          "endpoints": [
+            {
+              "method": "POST",
+              "path": "/api/items/[id]/workflow",
+              "title": "Execute Workflow",
+              "description": "Execute workflow on specified document item (pre-translation, quality assurance, post-editing, etc.)"
+            }
+          ]
+        },
+        {
+          "name": "Other Services",
+          "description": "File upload, chat, email, and other auxiliary service related APIs",
+          "endpoints": [
+            {
+              "method": "POST",
+              "path": "/api/upload-proxy",
+              "title": "File Upload Proxy",
+              "description": "Proxy file upload to object storage (MinIO)"
+            },
+            {
+              "method": "POST",
+              "path": "/api/chat",
+              "title": "Chat",
+              "description": "AI chat conversation interface"
+            },
+            {
+              "method": "GET",
+              "path": "/api/explorer-tabs",
+              "title": "Explorer Tabs",
+              "description": "Get Explorer tab information"
+            },
+            {
+              "method": "POST",
+              "path": "/api/send-email",
+              "title": "Send Email",
+              "description": "Send email notifications"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

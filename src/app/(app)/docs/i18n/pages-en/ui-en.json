@@ -1,0 +1,173 @@
+{
+  "ui": {
+    "title": "UI Guide",
+    "subtitle": "Get familiar with the DeepTrans Studio interface and learn how to use each functional area",
+    "introduction": {
+      "title": "Interface Overview",
+      "description": "DeepTrans Studio provides an intuitive and efficient translation workspace, mainly including core functional areas such as translation IDE, project management, terminology and translation memory management."
+    },
+    "sections": [
+      {
+        "name": "Translation IDE",
+        "description": "Professional translation workbench with paragraph alignment, version tracking, keyboard shortcuts, and multi-agent collaboration",
+        "features": [
+          {
+            "title": "Explorer",
+            "description": "Located on the left side of the interface, used to browse and manage documents and segments in projects. Supports expand/collapse folders, quick document item location, and translation status viewing."
+          },
+          {
+            "title": "Parallel Editor",
+            "description": "The main editing area in the center of the interface, displaying source and target text side by side. Supports rich text editing, terminology highlighting, real-time saving, version comparison, and more."
+          },
+          {
+            "title": "Translation Workflow Panel",
+            "description": "The bottom panel displays the complete translation workflow, including pre-translation process, MT review, quality assurance process, QA review, post-editing process, post-editing review, sign-off, and output logs."
+          },
+          {
+            "title": "Right Side Panel",
+            "description": "Contains AI chat assistant, document preview, help panel, and other functions that can be toggled as needed."
+          },
+          {
+            "title": "Top Menu Bar",
+            "description": "Provides quick access to translation, quality assurance, post-editing, export, search, view settings, and other operations."
+          }
+        ]
+      },
+      {
+        "name": "Project Management",
+        "description": "Full lifecycle project management, including creation, initialization, and document processing",
+        "features": [
+          {
+            "title": "Project List",
+            "description": "View all projects in the Dashboard, supporting functions such as creating new projects, filtering, and searching."
+          },
+          {
+            "title": "Project Initialization",
+            "description": "Initialization process after creating a new project, including document parsing, segmentation, terminology extraction, etc., guided through visual steps."
+          },
+          {
+            "title": "Document Preview",
+            "description": "Supports previewing original documents and translated documents for comparison and checking."
+          }
+        ]
+      },
+      {
+        "name": "Terminology Management",
+        "description": "Professional domain dictionary management, supporting project/personal dictionaries and terminology import/export",
+        "features": [
+          {
+            "title": "Dictionary List",
+            "description": "Manage public dictionaries, project dictionaries, and personal dictionaries, supporting create, edit, and delete operations."
+          },
+          {
+            "title": "Term Entry Management",
+            "description": "Add, edit, and delete term entries in dictionaries, supporting batch import (CSV, Excel, and other formats)."
+          },
+          {
+            "title": "Term Application",
+            "description": "Automatically identify and apply terms during translation, supporting term highlighting and quick replacement."
+          }
+        ]
+      },
+      {
+        "name": "Translation Memory",
+        "description": "Translation memory import/export, Milvus vector retrieval, and visualization",
+        "features": [
+          {
+            "title": "Memory Management",
+            "description": "Create and manage translation memories, supporting import/export in TMX, CSV, and other formats."
+          },
+          {
+            "title": "Hybrid Search",
+            "description": "Perform memory retrieval during translation, supporting hybrid search mode combining vector retrieval and keyword matching."
+          },
+          {
+            "title": "Search Results",
+            "description": "Display matching translation memories, including similarity scores, source-target text pairs, supporting quick application."
+          }
+        ]
+      },
+      {
+        "name": "AI Assistance",
+        "description": "Built-in translation, terminology extraction, grammar/discourse evaluation, word count statistics, and multi-engine comparison",
+        "features": [
+          {
+            "title": "AI Chat Assistant",
+            "description": "AI assistant in the right panel for translation consultation, terminology queries, translation suggestions, and other interactions."
+          },
+          {
+            "title": "Smart Translation",
+            "description": "Supports multiple translation engines (OpenAI, DeepSeek, etc.), enabling batch pre-translation and real-time translation."
+          },
+          {
+            "title": "Quality Assessment",
+            "description": "Automatically perform grammar checks, discourse evaluation, terminology consistency checks, and other quality assurance operations."
+          },
+          {
+            "title": "Terminology Extraction",
+            "description": "Automatically extract terms from documents, generate term candidate lists, supporting batch addition to dictionaries."
+          }
+        ]
+      },
+      {
+        "name": "Workflow Automation",
+        "description": "Automated task processing for batch translation, evaluation, document parsing, etc.",
+        "features": [
+          {
+            "title": "Batch Pre-translation",
+            "description": "Batch pre-translate multiple selected document items, supporting progress tracking and result persistence."
+          },
+          {
+            "title": "Batch Quality Assurance",
+            "description": "Batch execute quality assessment tasks, checking translation quality, terminology consistency, and other issues."
+          },
+          {
+            "title": "Task Queue",
+            "description": "Manage background tasks through BullMQ queues, supporting task status queries and cancellation operations."
+          }
+        ]
+      }
+    ],
+    "keyboardShortcuts": {
+      "title": "Keyboard Shortcuts",
+      "description": "Keyboard shortcuts to improve work efficiency",
+      "shortcuts": [
+        {
+          "key": "Ctrl/Cmd + S",
+          "action": "Save current translation"
+        },
+        {
+          "key": "Ctrl/Cmd + Enter",
+          "action": "Execute current workflow step"
+        },
+        {
+          "key": "Ctrl/Cmd + K",
+          "action": "Open command palette"
+        },
+        {
+          "key": "Ctrl/Cmd + B",
+          "action": "Toggle sidebar display"
+        },
+        {
+          "key": "Ctrl/Cmd + J",
+          "action": "Toggle right panel"
+        },
+        {
+          "key": "Ctrl/Cmd + /",
+          "action": "Show keyboard shortcuts help"
+        }
+      ]
+    },
+    "tips": {
+      "title": "Usage Tips",
+      "items": [
+        "Use Explorer to quickly locate documents: Expand folders in the left Explorer, click document items to open them in the editor.",
+        "Leverage terminology highlighting: Terms added to dictionaries are automatically highlighted in the editor for easy identification and application.",
+        "View translation history: Check the processing history and results of each stage in the translation workflow panel.",
+        "Use AI assistant: Open the AI chat assistant in the right panel to get translation suggestions, terminology explanations, and other help.",
+        "Batch operations: After selecting multiple document items, perform batch translation, quality assurance, and other operations through the menu bar.",
+        "Customize layout: Adjust panel sizes by dragging to fit personal work habits."
+      ]
+    }
+  }
+}

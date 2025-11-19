@@ -1,0 +1,186 @@
+{
+  "ai": {
+    "title": "AI 智能代理",
+    "subtitle": "了解 DeepTrans Studio 的 AI 智能代理架构和工作原理",
+    "labels": {
+      "purpose": "用途："
+    },
+    "introduction": {
+      "title": "AI 代理概述",
+      "description": "DeepTrans Studio 采用基于 Agent 的架构，将翻译流程拆分为多个专门的智能代理，每个代理负责特定的任务，通过协作完成完整的翻译工作流。"
+    },
+    "architecture": {
+      "title": "代理架构",
+      "description": "所有 AI 代理都继承自 BaseAgent 基类，提供统一的接口和配置方式。",
+      "baseAgent": {
+        "title": "BaseAgent 基类",
+        "description": "所有代理的基类，提供统一的配置、提示词构建和执行接口。",
+        "features": [
+          "支持多语言配置（sourceLanguage、targetLanguage、locale）",
+          "可配置角色、领域、专业方向",
+          "支持质量等级（draft、review、final）和正式度（informal、neutral、formal）",
+          "统一的提示词构建机制，支持国际化",
+          "集成 LLM 调用接口（text 方法）"
+        ]
+      },
+      "agentTypes": {
+        "title": "代理类型",
+        "description": "根据功能分类，系统包含以下类型的代理："
+      }
+    },
+    "agentCategories": [
+      {
+        "name": "预处理代理（Preprocess Agents）",
+        "description": "文档预处理相关的代理，用于提取和处理文档内容",
+        "agents": [
+          {
+            "name": "DocumentTermExtractAgent",
+            "description": "文档术语提取代理，从文档中提取专业术语",
+            "purpose": "在项目初始化阶段，从文档中自动识别和提取术语候选"
+          },
+          {
+            "name": "DocumentTermTranslateAgent",
+            "description": "文档术语翻译代理，将提取的术语翻译为目标语言",
+            "purpose": "批量翻译提取的术语，生成术语对照表"
+          }
+        ]
+      },
+      {
+        "name": "预翻译代理（Pre-translate Agents）",
+        "description": "预翻译阶段的代理，负责术语处理和初始翻译",
+        "agents": [
+          {
+            "name": "MonoTermExtractAgent",
+            "description": "单语术语提取代理，从源文本中提取术语候选",
+            "purpose": "识别源文本中的专业术语，为后续词典查询和翻译做准备"
+          },
+          {
+            "name": "DictLookupAgent",
+            "description": "词典查询代理，在词典中查找术语的翻译",
+            "purpose": "查询项目词典、公共词典和私有词典，获取术语的标准翻译"
+          },
+          {
+            "name": "TermEmbedTranslateAgent",
+            "description": "术语嵌入翻译代理，将术语嵌入到文本中进行翻译",
+            "purpose": "在翻译过程中应用术语，确保术语翻译的一致性和准确性"
+          }
+        ]
+      },
+      {
+        "name": "质量保证代理（QA Agents）",
+        "description": "质量评估和检查相关的代理",
+        "agents": [
+          {
+            "name": "SyntaxMarkerExtractAgent",
+            "description": "语法标记提取代理，提取源文和译文中的语法标记",
+            "purpose": "识别语法结构，为语法评估做准备"
+          },
+          {
+            "name": "SyntaxEvaluateAgent",
+            "description": "语法评估代理，评估译文的语法正确性",
+            "purpose": "检查译文的语法问题，识别语法错误和不一致"
+          },
+          {
+            "name": "SyntaxAdviceEmbedAgent",
+            "description": "语法建议嵌入代理，根据评估结果生成改进建议",
+            "purpose": "基于语法评估结果，生成语法改进的译文版本"
+          }
+        ]
+      },
+      {
+        "name": "后编辑代理（Post-edit Agents）",
+        "description": "后编辑阶段的代理，负责语篇优化和润色",
+        "agents": [
+          {
+            "name": "DiscourseQueryAgent",
+            "description": "语篇查询代理，在翻译记忆库中搜索相似的语段",
+            "purpose": "通过混合搜索（向量检索 + 关键词匹配）找到相关的翻译参考"
+          },
+          {
+            "name": "DiscourseEvaluateAgent",
+            "description": "语篇评估代理，评估译文的语篇质量",
+            "purpose": "检查译文的连贯性、流畅性和语篇层面的问题"
+          },
+          {
+            "name": "DiscourseEmbedAgent",
+            "description": "语篇嵌入代理，基于评估结果和参考语段优化译文",
+            "purpose": "结合翻译记忆和语篇评估结果，生成更自然、流畅的译文"
+          }
+        ]
+      }
+    ],
+    "tools": {
+      "title": "代理工具",
+      "description": "代理可以使用以下工具来增强能力：",
+      "items": [
+        {
+          "name": "Dictionary Tool",
+          "description": "词典查询工具，支持在公共、项目和私有词典中查询术语"
+        },
+        {
+          "name": "Memory Tool",
+          "description": "翻译记忆库工具，支持混合搜索（向量检索 + 关键词匹配），返回相关的翻译记忆"
+        }
+      ]
+    },
+    "workflow": {
+      "title": "代理工作流",
+      "description": "代理在翻译工作流中的执行顺序：",
+      "steps": [
+        {
+          "step": 1,
+          "stage": "预处理",
+          "agents": [
+            "DocumentTermExtractAgent",
+            "DocumentTermTranslateAgent"
+          ],
+          "description": "提取文档术语并翻译"
+        },
+        {
+          "step": 2,
+          "stage": "预翻译",
+          "agents": [
+            "MonoTermExtractAgent",
+            "DictLookupAgent",
+            "TermEmbedTranslateAgent"
+          ],
+          "description": "提取术语、查询词典、应用术语进行翻译"
+        },
+        {
+          "step": 3,
+          "stage": "质量保证",
+          "agents": [
+            "SyntaxMarkerExtractAgent",
+            "SyntaxEvaluateAgent",
+            "SyntaxAdviceEmbedAgent"
+          ],
+          "description": "提取语法标记、评估语法、生成改进建议"
+        },
+        {
+          "step": 4,
+          "stage": "后编辑",
+          "agents": [
+            "DiscourseQueryAgent",
+            "DiscourseEvaluateAgent",
+            "DiscourseEmbedAgent"
+          ],
+          "description": "查询相似语段、评估语篇、优化译文"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "代理配置",
+      "description": "每个代理都可以通过 AgentConfig 进行配置：",
+      "options": [
+        "name - 代理名称",
+        "role - 代理角色（如 professional_translator、terminology_assistant）",
+        "domain - 专业领域（如 general、discourse）",
+        "sourceLanguage / targetLanguage - 语言对设置",
+        "specialty - 专业方向描述",
+        "quality - 质量等级（draft、review、final）",
+        "formality - 正式度（informal、neutral、formal）",
+        "locale - 本地化设置（用于提示词国际化）"
+      ]
+    }
+  }
+}

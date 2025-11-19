@@ -1,0 +1,171 @@
+{
+  "ai": {
+    "title": "AI Agents",
+    "subtitle": "Learn about DeepTrans Studio's AI agent architecture and how it works",
+    "labels": {
+      "purpose": "Purpose:"
+    },
+    "introduction": {
+      "title": "AI Agent Overview",
+      "description": "DeepTrans Studio adopts an Agent-based architecture, breaking down the translation process into multiple specialized intelligent agents. Each agent is responsible for specific tasks, completing the full translation workflow through collaboration."
+    },
+    "architecture": {
+      "title": "Agent Architecture",
+      "description": "All AI agents inherit from the BaseAgent base class, providing a unified interface and configuration method.",
+      "baseAgent": {
+        "title": "BaseAgent Base Class",
+        "description": "The base class for all agents, providing unified configuration, prompt building, and execution interface.",
+        "features": [
+          "Support multi-language configuration (sourceLanguage, targetLanguage, locale)",
+          "Configurable role, domain, and specialty",
+          "Support quality levels (draft, review, final) and formality (informal, neutral, formal)",
+          "Unified prompt building mechanism with internationalization support",
+          "Integrated LLM calling interface (text method)"
+        ]
+      },
+      "agentTypes": {
+        "title": "Agent Types",
+        "description": "Based on functionality, the system includes the following types of agents:"
+      }
+    },
+    "agentCategories": [
+      {
+        "name": "Preprocess Agents",
+        "description": "Document preprocessing-related agents for extracting and processing document content",
+        "agents": [
+          {
+            "name": "DocumentTermExtractAgent",
+            "description": "Document terminology extraction agent that extracts professional terms from documents",
+            "purpose": "Automatically identify and extract term candidates from documents during project initialization"
+          },
+          {
+            "name": "DocumentTermTranslateAgent",
+            "description": "Document terminology translation agent that translates extracted terms into target language",
+            "purpose": "Batch translate extracted terms to generate terminology comparison tables"
+          }
+        ]
+      },
+      {
+        "name": "Pre-translate Agents",
+        "description": "Pre-translation stage agents responsible for terminology processing and initial translation",
+        "agents": [
+          {
+            "name": "MonoTermExtractAgent",
+            "description": "Monolingual terminology extraction agent that extracts term candidates from source text",
+            "purpose": "Identify professional terms in source text, preparing for subsequent dictionary queries and translation"
+          },
+          {
+            "name": "DictLookupAgent",
+            "description": "Dictionary lookup agent that searches for term translations in dictionaries",
+            "purpose": "Query project dictionaries, public dictionaries, and private dictionaries to obtain standard term translations"
+          },
+          {
+            "name": "TermEmbedTranslateAgent",
+            "description": "Terminology embedding translation agent that embeds terms into text for translation",
+            "purpose": "Apply terms during translation to ensure consistency and accuracy of term translation"
+          }
+        ]
+      },
+      {
+        "name": "QA Agents",
+        "description": "Quality assessment and checking related agents",
+        "agents": [
+          {
+            "name": "SyntaxMarkerExtractAgent",
+            "description": "Syntax marker extraction agent that extracts syntax markers from source and target text",
+            "purpose": "Identify syntax structure, preparing for syntax evaluation"
+          },
+          {
+            "name": "SyntaxEvaluateAgent",
+            "description": "Syntax evaluation agent that evaluates the grammatical correctness of translations",
+            "purpose": "Check grammatical issues in translations, identifying syntax errors and inconsistencies"
+          },
+          {
+            "name": "SyntaxAdviceEmbedAgent",
+            "description": "Syntax advice embedding agent that generates improvement suggestions based on evaluation results",
+            "purpose": "Generate syntax-improved translation versions based on syntax evaluation results"
+          }
+        ]
+      },
+      {
+        "name": "Post-edit Agents",
+        "description": "Post-editing stage agents responsible for discourse optimization and polishing",
+        "agents": [
+          {
+            "name": "DiscourseQueryAgent",
+            "description": "Discourse query agent that searches for similar segments in translation memory",
+            "purpose": "Find relevant translation references through hybrid search (vector retrieval + keyword matching)"
+          },
+          {
+            "name": "DiscourseEvaluateAgent",
+            "description": "Discourse evaluation agent that evaluates the discourse quality of translations",
+            "purpose": "Check translation coherence, fluency, and discourse-level issues"
+          },
+          {
+            "name": "DiscourseEmbedAgent",
+            "description": "Discourse embedding agent that optimizes translations based on evaluation results and reference segments",
+            "purpose": "Combine translation memory and discourse evaluation results to generate more natural and fluent translations"
+          }
+        ]
+      }
+    ],
+    "tools": {
+      "title": "Agent Tools",
+      "description": "Agents can use the following tools to enhance capabilities:",
+      "items": [
+        {
+          "name": "Dictionary Tool",
+          "description": "Dictionary query tool supporting term queries in public, project, and private dictionaries"
+        },
+        {
+          "name": "Memory Tool",
+          "description": "Translation memory tool supporting hybrid search (vector retrieval + keyword matching), returning relevant translation memories"
+        }
+      ]
+    },
+    "workflow": {
+      "title": "Agent Workflow",
+      "description": "Execution order of agents in the translation workflow:",
+      "steps": [
+        {
+          "step": 1,
+          "stage": "Preprocessing",
+          "agents": ["DocumentTermExtractAgent", "DocumentTermTranslateAgent"],
+          "description": "Extract document terms and translate"
+        },
+        {
+          "step": 2,
+          "stage": "Pre-translation",
+          "agents": ["MonoTermExtractAgent", "DictLookupAgent", "TermEmbedTranslateAgent"],
+          "description": "Extract terms, query dictionaries, apply terms for translation"
+        },
+        {
+          "step": 3,
+          "stage": "Quality Assurance",
+          "agents": ["SyntaxMarkerExtractAgent", "SyntaxEvaluateAgent", "SyntaxAdviceEmbedAgent"],
+          "description": "Extract syntax markers, evaluate syntax, generate improvement suggestions"
+        },
+        {
+          "step": 4,
+          "stage": "Post-editing",
+          "agents": ["DiscourseQueryAgent", "DiscourseEvaluateAgent", "DiscourseEmbedAgent"],
+          "description": "Query similar segments, evaluate discourse, optimize translation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Agent Configuration",
+      "description": "Each agent can be configured through AgentConfig:",
+      "options": [
+        "name - Agent name",
+        "role - Agent role (e.g., professional_translator, terminology_assistant)",
+        "domain - Professional domain (e.g., general, discourse)",
+        "sourceLanguage / targetLanguage - Language pair settings",
+        "specialty - Specialty description",
+        "quality - Quality level (draft, review, final)",
+        "formality - Formality (informal, neutral, formal)",
+        "locale - Localization settings (for prompt internationalization)"
+      ]
+    }
+  }
+}

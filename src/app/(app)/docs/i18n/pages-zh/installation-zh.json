@@ -1,0 +1,90 @@
+{
+  "installation": {
+    "title": "安装与配置",
+    "subtitle": "通过本指南，您将学会如何安装和配置 DeepTrans Studio 开发环境。",
+    "prerequisites": {
+      "title": "前置要求",
+      "description": "在安装 DeepTrans Studio 之前，请确保已安装以下工具：",
+      "items": [
+        "Node.js ≥ 18.18（推荐使用 corepack 管理 Yarn 1.22.22）",
+        "Yarn（通过 corepack enable 启用）",
+        "Docker / Docker Compose（用于本地依赖服务或一键部署）",
+        "Git 等常用工具"
+      ]
+    },
+    "installDeps": {
+      "title": "安装依赖",
+      "description": "使用 corepack 管理 Yarn，然后安装项目依赖。",
+      "commands": {
+        "enableCorepack": "corepack enable",
+        "prepareYarn": "corepack prepare yarn@1.22.22 --activate",
+        "install": "yarn install"
+      }
+    },
+    "envConfig": {
+      "title": "配置环境变量",
+      "description": "复制或创建 .env.local 并依据实际环境填写：",
+      "note": "💡 生产环境请将数据库、Redis、Milvus、对象存储改为专用实例，并妥善保管密钥。",
+      "example": "# 数据库与缓存\nDATABASE_URL=\"postgresql://postgres:123456@localhost:5432/deeptrans\"\nREDIS_URL=\"redis://127.0.0.1:6379\"\n\n# 鉴权 & 站点配置\nAUTH_SECRET=\"请生成随机字符串\"\nNEXTAUTH_URL=\"http://localhost:3000\"\nNODE_ENV=development\n\n# LLM / AI 服务\nOPENAI_API_KEY=\"sk-xxxx\"\nOPENAI_BASE_URL=\"https://api.openai.com/v1\"\nOPENAI_API_MODEL=\"gpt-4o-mini\"\n\n# 对象存储 & 资源\nMINIO_ACCESS_KEY=minioadmin\nMINIO_SECRET_KEY=minioadmin\nMINIO_BUCKET=deeptrans\n\n# 其他服务\nSTUDIO_HOST=localhost        # Traefik/HTTPS 部署时使用\n\n# 可选：GitHub OAuth、SMTP、Milvus 访问信息等"
+    },
+    "initDb": {
+      "title": "初始化数据库",
+      "description": "执行数据库迁移并生成 Prisma Client。",
+      "commands": {
+        "migrate": "yarn prisma migrate deploy      # 或 yarn db:push 初始化结构",
+        "generate": "yarn prisma generate            # 生成 Prisma Client",
+        "seed": "yarn db:seed                    # 可选：导入示例数据"
+      }
+    },
+    "startDev": {
+      "title": "启动本地开发环境",
+      "description": "启动依赖服务并运行 Next.js 开发服务器。",
+      "step1": {
+        "title": "启动依赖服务",
+        "description": "推荐使用 Docker Compose 中的服务：",
+        "command": "docker compose up -d db redis etcd milvus minio pdfmath worker\n# 如需 Attu UI 或 Traefik，请追加 attu traefik"
+      },
+      "step2": {
+        "title": "启动 Next.js 应用",
+        "description": "启动开发服务器（支持热更新）：",
+        "command": "yarn dev"
+      },
+      "step3": {
+        "title": "启动 Worker 服务（可选）",
+        "description": "若希望在本地 Node 环境运行 Worker，可执行：",
+        "command": "yarn dev:worker",
+        "note": "默认通过 compose 的 worker 容器运行。"
+      },
+      "access": {
+        "title": "访问应用",
+        "description": "访问 http://localhost:3000 即可进入 Studio；Attu（Milvus UI）默认暴露在 http://localhost:8001。"
+      }
+    },
+    "dockerCompose": {
+      "title": "使用 Docker Compose 运行",
+      "description": "使用 Docker Compose 一键部署所有服务。",
+      "step1": {
+        "title": "准备环境变量",
+        "description": "准备 .env / .env.production 并确保 STUDIO_HOST 指向对外域名。"
+      },
+      "step2": {
+        "title": "构建镜像",
+        "command": "docker compose build studio worker pdfmath"
+      },
+      "step3": {
+        "title": "启动主要服务",
+        "command": "docker compose up -d traefik studio worker",
+        "note": "Traefik 会将 80/443 端口映射到 Studio，Milvus/MinIO/Attu 等依赖组件可按需启动。"
+      }
+    },
+    "nextSteps": {
+      "title": "下一步",
+      "description": "安装完成后，您可以：",
+      "links": {
+        "gettingStarted": "查看快速开始指南",
+        "concepts": "了解核心概念",
+        "workflows": "学习工作流程"
+      }
+    }
+  }
+}

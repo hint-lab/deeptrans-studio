@@ -1,0 +1,449 @@
+{
+  "troubleshooting": {
+    "title": "Troubleshooting",
+    "subtitle": "Common issues and solutions",
+    "labels": {
+      "Problems": "Problems:",
+      "solutions": "Solutions:"
+    },
+    "introduction": {
+      "title": "Troubleshooting Guide",
+      "description": "This document helps you diagnose and resolve common issues you may encounter while using DeepTrans Studio. If the problem persists, please check logs or submit an Issue."
+    },
+    "categories": [
+      {
+        "name": "Installation & Startup",
+        "description": "Issues related to installation, configuration, and startup",
+        "issues": [
+          {
+            "title": "Node.js Version Incompatibility",
+            "Problems": [
+              "Node.js version error when running yarn dev",
+              "Some dependency packages fail to install",
+              "Syntax errors during build process"
+            ],
+            "solutions": [
+              "Ensure Node.js version ≥ 18.18",
+              "Use nvm or corepack to manage Node.js version",
+              "Run `node --version` to check current version",
+              "If using corepack, run `corepack enable` to enable"
+            ]
+          },
+          {
+            "title": "Yarn Dependency Installation Failure",
+            "Problems": [
+              "yarn install execution fails",
+              "Dependency package download timeout",
+              "Permission errors"
+            ],
+            "solutions": [
+              "Check network connection, may need to configure proxy",
+              "Clear cache: `yarn cache clean`",
+              "Delete node_modules and yarn.lock, reinstall",
+              "Use corepack to manage Yarn: `corepack prepare yarn@1.22.22 --activate`"
+            ]
+          },
+          {
+            "title": "Docker Compose Service Startup Failure",
+            "Problems": [
+              "docker compose up reports errors",
+              "Containers cannot start",
+              "Ports are occupied"
+            ],
+            "solutions": [
+              "Check if Docker and Docker Compose are correctly installed",
+              "Check port occupancy: `lsof -i :5432` (PostgreSQL), `lsof -i :6379` (Redis)",
+              "View container logs: `docker compose logs [service-name]`",
+              "Try restarting service: `docker compose restart [service-name]`",
+              "Clean and recreate: `docker compose down -v && docker compose up -d`"
+            ]
+          },
+          {
+            "title": "Environment Variable Configuration Error",
+            "Problems": [
+              "Cannot connect to database after application startup",
+              "Redis connection failure",
+              "API calls return authentication errors"
+            ],
+            "solutions": [
+              "Check if .env.local file exists and format is correct",
+              "Verify DATABASE_URL format: `postgresql://user:password@host:port/database`",
+              "Verify REDIS_URL format: `redis://host:port`",
+              "Check if AUTH_SECRET is set (run `openssl rand -base64 32` to generate)",
+              "Restart development server for environment variables to take effect"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Database Issues",
+        "description": "PostgreSQL and Prisma related issues",
+        "issues": [
+          {
+            "title": "Database Connection Failure",
+            "Problems": [
+              "Error when application starts: cannot connect to database",
+              "Prisma Client initialization failure",
+              "Database query timeout"
+            ],
+            "solutions": [
+              "Check if PostgreSQL service is running: `docker compose ps db`",
+              "Verify DATABASE_URL environment variable is correct",
+              "Test database connection: `psql $DATABASE_URL`",
+              "Check if database is created: `psql -l`",
+              "View database logs: `docker compose logs db`"
+            ]
+          },
+          {
+            "title": "Prisma Migration Failure",
+            "Problems": [
+              "yarn prisma migrate deploy execution fails",
+              "Database schema mismatch",
+              "Migration file conflicts"
+            ],
+            "solutions": [
+              "Check if database connection is normal",
+              "View migration history: `yarn prisma migrate status`",
+              "Reset database (development environment): `yarn prisma migrate reset`",
+              "Manually apply migrations: `yarn prisma migrate deploy`",
+              "Regenerate Prisma Client: `yarn prisma generate`"
+            ]
+          },
+          {
+            "title": "Prisma Studio Cannot Open",
+            "Problems": [
+              "yarn prisma studio command no response",
+              "Browser cannot access Prisma Studio"
+            ],
+            "solutions": [
+              "Check database connection",
+              "Confirm port 5555 is not occupied",
+              "Try using another port: `yarn prisma studio --port 5556`",
+              "Check firewall settings"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Redis & Queue Issues",
+        "description": "Redis connection and BullMQ queue related issues",
+        "issues": [
+          {
+            "title": "Redis Connection Failure",
+            "Problems": [
+              "Redis connection error when application starts",
+              "Queue tasks cannot execute",
+              "Worker cannot consume tasks"
+            ],
+            "solutions": [
+              "Check if Redis service is running: `docker compose ps redis`",
+              "Verify REDIS_URL environment variable",
+              "Test Redis connection: `redis-cli -u $REDIS_URL ping`",
+              "View Redis logs: `docker compose logs redis`",
+              "Check Redis memory usage: `redis-cli info memory`"
+            ]
+          },
+          {
+            "title": "Queue Task Backlog",
+            "Problems": [
+              "Slow task execution",
+              "Number of tasks in queue keeps growing",
+              "Worker processing speed cannot keep up"
+            ],
+            "solutions": [
+              "Check if Worker service is running normally",
+              "Increase number of Worker instances",
+              "View queue status: `yarn queue:ui` (if Bull Board is configured)",
+              "Check Redis memory usage",
+              "Clean failed tasks: `redis-cli FLUSHDB` (use with caution)"
+            ]
+          },
+          {
+            "title": "Task Execution Failure",
+            "Problems": [
+              "Batch translation tasks fail",
+              "Worker logs show errors",
+              "Task status remains PENDING"
+            ],
+            "solutions": [
+              "View Worker logs: `docker compose logs worker`",
+              "Check if task data format is correct",
+              "Verify related services (Milvus, MinIO, PDFMath) are normal",
+              "Check if API keys and configuration are correct",
+              "View failed tasks in Redis: `redis-cli KEYS 'bull:*:failed'`"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Milvus Vector Database Issues",
+        "description": "Milvus vector database related issues",
+        "issues": [
+          {
+            "title": "Milvus Connection Failure",
+            "Problems": [
+              "Translation memory search failure",
+              "Vector write failure",
+              "Milvus service cannot be accessed"
+            ],
+            "solutions": [
+              "Check if Milvus and etcd services are running: `docker compose ps milvus etcd`",
+              "Verify Milvus connection configuration",
+              "View Milvus logs: `docker compose logs milvus`",
+              "Check etcd status: `docker compose logs etcd`",
+              "Access Attu UI (http://localhost:8001) to check Milvus status"
+            ]
+          },
+          {
+            "title": "Vector Collection Does Not Exist",
+            "Problems": [
+              "Collection does not exist error when searching",
+              "Vector write failure, collection not found"
+            ],
+            "solutions": [
+              "Check if collection is created",
+              "View collection list in Attu UI",
+              "Reinitialize collection (application will auto-create)",
+              "Check if collection name is correct"
+            ]
+          },
+          {
+            "title": "Vector Dimension Mismatch",
+            "Problems": [
+              "Vector write failure, dimension error",
+              "Dimension mismatch error when searching"
+            ],
+            "solutions": [
+              "Check embedding model configuration, ensure dimensions are consistent (default 1536)",
+              "Delete and rebuild collection (development environment)",
+              "Verify dimension settings in vector generation code"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "PDFMath Service Issues",
+        "description": "PDF parsing service related issues",
+        "issues": [
+          {
+            "title": "PDFMath Service Cannot Be Accessed",
+            "Problems": [
+              "Document parsing failure",
+              "PDF files cannot be processed after upload",
+              "Parsing tasks remain in PENDING status"
+            ],
+            "solutions": [
+              "Check if PDFMath service is running: `docker compose ps pdfmath`",
+              "View PDFMath logs: `docker compose logs pdfmath`",
+              "Verify PDFMath service URL configuration",
+              "Test service connection: `curl http://localhost:8000/health` (if health check is configured)",
+              "Check if PDF file is corrupted or format is not supported"
+            ]
+          },
+          {
+            "title": "PDF Parsing Timeout",
+            "Problems": [
+              "Large file parsing takes too long",
+              "Parsing task timeout failure"
+            ],
+            "solutions": [
+              "Check file size (recommended not exceeding 100MB)",
+              "Increase timeout configuration",
+              "Check PDFMath service resource usage",
+              "Consider splitting large files into multiple smaller files"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "MinIO Object Storage Issues",
+        "description": "MinIO storage service related issues",
+        "issues": [
+          {
+            "title": "MinIO Connection Failure",
+            "Problems": [
+              "File upload failure",
+              "Document preview cannot load",
+              "Storage operations report errors"
+            ],
+            "solutions": [
+              "Check if MinIO service is running: `docker compose ps minio`",
+              "Verify MINIO_ACCESS_KEY and MINIO_SECRET_KEY configuration",
+              "Check if MINIO_BUCKET exists",
+              "View MinIO logs: `docker compose logs minio`",
+              "Access MinIO Console (default http://localhost:9001) to check status"
+            ]
+          },
+          {
+            "title": "File Upload Failure",
+            "Problems": [
+              "Documents cannot be saved after upload",
+              "Upload progress stuck",
+              "Insufficient storage space error"
+            ],
+            "solutions": [
+              "Check disk space: `df -h`",
+              "Verify MinIO storage path permissions",
+              "Check file size limits",
+              "View MinIO error logs",
+              "Verify S3-compatible API configuration"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Worker Service Issues",
+        "description": "Background Worker service related issues",
+        "issues": [
+          {
+            "title": "Worker Cannot Start",
+            "Problems": [
+              "docker compose up worker fails",
+              "Local yarn dev:worker reports errors",
+              "Worker process exits immediately"
+            ],
+            "solutions": [
+              "Check environment variable configuration",
+              "Verify Redis connection",
+              "View Worker logs: `docker compose logs worker`",
+              "Check Node.js version",
+              "Verify dependencies are correctly installed",
+              "Check build artifacts: `yarn build:worker`"
+            ]
+          },
+          {
+            "title": "Worker Not Processing Tasks",
+            "Problems": [
+              "Tasks remain in PENDING status",
+              "Tasks in queue but Worker does not consume"
+            ],
+            "solutions": [
+              "Check if Worker is running normally",
+              "Verify queue name configuration is correct",
+              "Check error messages in Worker logs",
+              "Confirm Worker is subscribed to correct queue",
+              "Restart Worker service"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Application Runtime Issues",
+        "description": "Next.js application runtime related issues",
+        "issues": [
+          {
+            "title": "Slow Page Loading",
+            "Problems": [
+              "Long page response time",
+              "Very slow first load",
+              "API request timeout"
+            ],
+            "solutions": [
+              "Check database query performance, analyze using Prisma Studio",
+              "Optimize database indexes",
+              "Check if Redis cache is working normally",
+              "View browser network panel to analyze request time",
+              "Check server resource usage (CPU, memory)"
+            ]
+          },
+          {
+            "title": "Authentication Failure",
+            "Problems": [
+              "Logout immediately after login",
+              "Session cannot be maintained",
+              "API requests return 401"
+            ],
+            "solutions": [
+              "Check if AUTH_SECRET is set",
+              "Verify NEXTAUTH_URL configuration is correct",
+              "Clear browser Cookies and LocalStorage",
+              "Check NextAuth configuration",
+              "View authentication errors in server logs"
+            ]
+          },
+          {
+            "title": "API Route Errors",
+            "Problems": [
+              "API requests return 404",
+              "Server Actions execution failure",
+              "Routes cannot be accessed"
+            ],
+            "solutions": [
+              "Check if route files exist",
+              "Verify API paths are correct",
+              "View Next.js build logs",
+              "Check middleware configuration",
+              "Verify request methods and parameters"
+            ]
+          }
+        ]
+      }
+    ],
+    "debugging": {
+      "title": "Debugging Tips",
+      "description": "Common debugging methods and tools",
+      "tips": [
+        {
+          "title": "View Logs",
+          "description": "View log information for each service",
+          "commands": [
+            "docker compose logs [service-name] -f",
+            "docker compose logs --tail=100 [service-name]",
+            "View Next.js console output",
+            "View browser developer tools Console"
+          ]
+        },
+        {
+          "title": "Check Service Status",
+          "description": "Verify if each service is running normally",
+          "commands": [
+            "docker compose ps",
+            "docker compose top",
+            "Check port occupancy: lsof -i :PORT",
+            "Test service connection: curl http://localhost:PORT"
+          ]
+        },
+        {
+          "title": "Database Debugging",
+          "description": "Use Prisma Studio to view and debug database",
+          "commands": [
+            "yarn prisma studio",
+            "yarn prisma migrate status",
+            "psql $DATABASE_URL (direct database connection)"
+          ]
+        },
+        {
+          "title": "Queue Debugging",
+          "description": "Monitor and debug BullMQ queues",
+          "commands": [
+            "yarn queue:ui (if Bull Board is configured)",
+            "redis-cli KEYS 'bull:*'",
+            "redis-cli GET 'bull:queue:job:ID'"
+          ]
+        }
+      ]
+    },
+    "gettingHelp": {
+      "title": "Getting Help",
+      "description": "If the problem still persists, you can get help through the following ways:",
+      "options": [
+        {
+          "name": "View Documentation",
+          "description": "Consult complete documentation and API references"
+        },
+        {
+          "name": "GitHub Issues",
+          "description": "Submit an Issue in the GitHub repository with detailed description of problem Problems, error messages, and reproduction steps"
+        },
+        {
+          "name": "Check Logs",
+          "description": "Collect log information from related services to help with problem diagnosis"
+        },
+        {
+          "name": "Community Support",
+          "description": "Seek help in the project community, share Problems and solutions"
+        }
+      ]
+    }
+  }
+}

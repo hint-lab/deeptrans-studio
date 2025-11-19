@@ -1,0 +1,173 @@
+{
+  "database": {
+    "title": "Database Design",
+    "subtitle": "Learn about DeepTrans Studio's database architecture and table structure design",
+    "introduction": {
+      "title": "Database Overview",
+      "description": "DeepTrans Studio uses PostgreSQL as the main database, accessing and managing data through Prisma ORM. The database design supports core functions such as multi-tenancy, user permissions, project management, and translation workflows."
+    },
+    "technology": {
+      "title": "Technology Stack",
+      "description": "Database-related technology choices:",
+      "items": [
+        {
+          "name": "PostgreSQL",
+          "description": "Main database storing structured data such as users, projects, documents, dictionaries, and translation memories"
+        },
+        {
+          "name": "Prisma ORM",
+          "description": "Type-safe ORM providing database access, migration management, and type generation"
+        },
+        {
+          "name": "Redis",
+          "description": "Cache and task queue for storing temporary data and BullMQ task queues"
+        },
+        {
+          "name": "Milvus",
+          "description": "Vector database for vector retrieval and semantic search of translation memories"
+        },
+        {
+          "name": "MinIO",
+          "description": "Object storage for document files, parsing artifacts, static resources, etc."
+        }
+      ]
+    },
+    "coreModels": {
+      "title": "Core Data Models",
+      "description": "Main data models in the database:",
+      "models": [
+        {
+          "name": "User",
+          "description": "User account information supporting multi-tenancy and role management",
+          "keyFields": ["id", "email", "name", "role", "tenantId"],
+          "relations": ["projects", "documents", "dictionaries", "translationMemories"]
+        },
+        {
+          "name": "Tenant",
+          "description": "Multi-tenancy support, organization-level data isolation",
+          "keyFields": ["id", "name", "description"],
+          "relations": ["users", "projects", "dictionaries", "translationMemories"]
+        },
+        {
+          "name": "Project",
+          "description": "Translation project containing project basic information and language settings",
+          "keyFields": ["id", "name", "domain", "sourceLanguage", "targetLanguage"],
+          "relations": ["documents", "projectDictionaries", "projectMemories"]
+        },
+        {
+          "name": "Document",
+          "description": "Document in a project storing document metadata and file information",
+          "keyFields": ["id", "name", "originalName", "url", "status", "structured"],
+          "relations": ["documentItems", "project"],
+          "notes": "structured field stores parsing artifact information in JSON format"
+        },
+        {
+          "name": "DocumentItem",
+          "description": "Paragraphs/fragments in documents, the basic unit of translation",
+          "keyFields": ["id", "documentId", "order", "sourceText", "targetText", "status", "type"],
+          "relations": ["document", "translationStageTimelines"],
+          "notes": "Contains intermediate results from each stage (preTranslateTerms, qualityAssureSyntax, etc.)"
+        },
+        {
+          "name": "Dictionary",
+          "description": "Terminology dictionary supporting three visibility levels: public, project, and private",
+          "keyFields": ["id", "name", "domain", "visibility", "tenantId", "userId"],
+          "relations": ["entries", "projectBindings"]
+        },
+        {
+          "name": "DictionaryEntry",
+          "description": "Term comparison in dictionaries",
+          "keyFields": ["id", "sourceText", "targetText", "notes", "dictionaryId"],
+          "relations": ["dictionary"]
+        },
+        {
+          "name": "TranslationMemory",
+          "description": "Translation memory storing source-target text pairs",
+          "keyFields": ["id", "name", "sourceText", "targetText", "tenantId", "userId"],
+          "relations": ["entries", "projectBindings"]
+        },
+        {
+          "name": "TranslationMemoryEntry",
+          "description": "Specific entries in translation memory",
+          "keyFields": ["id", "memoryId", "sourceText", "targetText", "sourceLang", "targetLang"],
+          "relations": ["memory"]
+        },
+        {
+          "name": "TranslationStageRecord",
+          "description": "Records execution history of each stage in the translation process",
+          "keyFields": ["id", "documentItemId", "stepKey", "actorType", "status", "metadata"],
+          "relations": ["documentItem"],
+          "notes": "Used for tracking translation workflows, debugging, and auditing"
+        },
+        {
+          "name": "ProjectDictionary",
+          "description": "Many-to-many relationship between projects and dictionaries",
+          "keyFields": ["projectId", "dictionaryId"]
+        },
+        {
+          "name": "ProjectMemory",
+          "description": "Many-to-many relationship between projects and translation memories",
+          "keyFields": ["projectId", "memoryId"]
+        }
+      ]
+    },
+    "enums": {
+      "title": "Enum Types",
+      "description": "Enum types defined in the database:",
+      "items": [
+        {
+          "name": "TranslationStage",
+          "values": ["NOT_STARTED", "MT", "MT_REVIEW", "QA", "QA_REVIEW", "POST_EDIT", "POST_EDIT_REVIEW", "SIGN_OFF", "COMPLETED", "ERROR", "CANCELED"],
+          "description": "Translation stage enum representing the translation status of document items"
+        },
+        {
+          "name": "DictionaryVisibility",
+          "values": ["PUBLIC", "PROJECT", "PRIVATE"],
+          "description": "Dictionary visibility controlling dictionary access scope"
+        },
+        {
+          "name": "DocumentStatus",
+          "values": ["WAITING", "PARSING", "SEGMENTING", "TERMS_EXTRACTING", "PREPROCESSED", "TRANSLATING", "COMPLETED", "ERROR"],
+          "description": "Document processing status tracking document processing progress"
+        },
+        {
+          "name": "TranslationProcessActorType",
+          "values": ["AGENT", "USER"],
+          "description": "Translation process actor type distinguishing AI agents from manual operations"
+        },
+        {
+          "name": "TranslationProcessStepStatus",
+          "values": ["STARTED", "SUCCESS", "FAILED"],
+          "description": "Translation step execution status"
+        },
+        {
+          "name": "UserRole",
+          "values": ["ADMIN", "USER"],
+          "description": "User role"
+        }
+      ]
+    },
+    "migrations": {
+      "title": "Database Migrations",
+      "description": "Use Prisma Migrate to manage database schema changes:",
+      "commands": [
+        {
+          "command": "yarn prisma migrate dev",
+          "description": "Create new migration in development environment"
+        },
+        {
+          "command": "yarn prisma migrate deploy",
+          "description": "Apply migrations in production environment"
+        },
+        {
+          "command": "yarn prisma generate",
+          "description": "Generate Prisma Client"
+        },
+        {
+          "command": "yarn prisma studio",
+          "description": "Open Prisma Studio to visualize database"
+        }
+      ]
+    }
+  }
+}

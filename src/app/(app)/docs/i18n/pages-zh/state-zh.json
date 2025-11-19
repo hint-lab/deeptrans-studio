@@ -1,0 +1,141 @@
+{
+  "state": {
+    "title": "状态管理",
+    "subtitle": "了解 DeepTrans Studio 的状态管理架构和实现方式",
+    "introduction": {
+      "title": "状态管理概述",
+      "description": "DeepTrans Studio 使用 Redux Toolkit 进行全局状态管理，结合 React Hooks 和本地存储，提供高效、可预测的状态管理方案。"
+    },
+    "architecture": {
+      "title": "架构设计",
+      "description": "状态管理采用分层架构，包括全局状态（Redux）、本地状态（React Hooks）和持久化存储（LocalStorage）。",
+      "layers": [
+        {
+          "name": "Redux Store",
+          "description": "使用 Redux Toolkit 管理全局应用状态，包括编辑器状态、翻译状态、UI 状态等。",
+          "features": [
+            "使用 @reduxjs/toolkit 的 configureStore 创建 store",
+            "通过 createSlice 创建状态切片（Slice）",
+            "支持 TypeScript 类型推断",
+            "提供时间旅行调试能力"
+          ]
+        },
+        {
+          "name": "React Hooks",
+          "description": "使用自定义 Hooks 封装状态逻辑，提供简洁的组件接口。",
+          "features": [
+            "useTranslationState - 翻译状态管理",
+            "useSidebar - 侧边栏状态",
+            "useRightPanel - 右侧面板状态",
+            "useBottomPanel - 底部面板状态",
+            "useUserSettings - 用户设置（持久化到 LocalStorage）"
+          ]
+        },
+        {
+          "name": "本地存储",
+          "description": "使用 LocalStorage 持久化用户设置和偏好。",
+          "features": [
+            "用户设置（翻译引擎、词典选择、记忆库选择）",
+            "布局配置（面板大小、侧边栏状态）",
+            "主题偏好"
+          ]
+        }
+      ]
+    },
+    "storeStructure": {
+      "title": "Store 结构",
+      "description": "Redux Store 包含以下主要状态切片：",
+      "slices": [
+        {
+          "name": "editor",
+          "description": "编辑器状态，管理富文本编辑器的内容和格式"
+        },
+        {
+          "name": "translation",
+          "description": "翻译状态，包括当前翻译阶段、源文、译文、语言设置"
+        },
+        {
+          "name": "workFlowStep",
+          "description": "工作流步骤状态，管理预翻译、质量保证、后编辑等流程的状态和数据"
+        },
+        {
+          "name": "activeDocumentItem",
+          "description": "当前活动的文档项，跟踪用户正在编辑的段落"
+        },
+        {
+          "name": "activeDocument",
+          "description": "当前活动的文档，管理文档级别的状态"
+        },
+        {
+          "name": "explorerTabs",
+          "description": "资源管理器标签页，管理文档树结构"
+        },
+        {
+          "name": "sidebar",
+          "description": "侧边栏状态，控制左侧资源管理器的显示和折叠"
+        },
+        {
+          "name": "rightPane",
+          "description": "右侧面板状态，管理 AI 聊天、预览等面板的显示"
+        },
+        {
+          "name": "panel",
+          "description": "底部面板状态，控制翻译流程面板的显示"
+        },
+        {
+          "name": "running",
+          "description": "运行状态，跟踪各种任务的执行状态（翻译、质量保证、后编辑等）"
+        },
+        {
+          "name": "projectInit",
+          "description": "项目初始化状态，管理项目初始化流程的步骤和数据"
+        },
+        {
+          "name": "dialog",
+          "description": "对话框状态，管理各种模态对话框的显示"
+        },
+        {
+          "name": "log",
+          "description": "日志状态，存储操作日志和调试信息"
+        },
+        {
+          "name": "chatbar",
+          "description": "聊天栏状态，管理 AI 聊天助手的状态"
+        },
+        {
+          "name": "tabBar",
+          "description": "标签栏状态，管理文档标签页"
+        }
+      ]
+    },
+    "usage": {
+      "title": "使用方式",
+      "description": "在组件中使用状态管理的方式：",
+      "examples": [
+        {
+          "title": "使用 Redux Hooks",
+          "code": "import { useAppSelector, useAppDispatch } from '@/store/hooks';\nimport { setTranslationStage } from '@/store/features/translationSlice';\n\nconst stage = useAppSelector(state => state.translation.currentStage);\nconst dispatch = useAppDispatch();\ndispatch(setTranslationStage('MT'));"
+        },
+        {
+          "title": "使用自定义 Hooks",
+          "code": "import { useTranslationState } from '@/hooks/useTranslation';\n\nconst { currentStage, sourceText, targetText } = useTranslationState();"
+        },
+        {
+          "title": "使用用户设置 Hook",
+          "code": "import { useUserSettings } from '@/hooks/useUserSettings';\n\nconst { settings, updateProvider } = useUserSettings();\nupdateProvider('openai');"
+        }
+      ]
+    },
+    "bestPractices": {
+      "title": "最佳实践",
+      "items": [
+        "将全局共享状态放在 Redux Store 中，组件内部状态使用 useState",
+        "使用 createSlice 创建状态切片，利用 Redux Toolkit 的简化 API",
+        "通过自定义 Hooks 封装复杂的状态逻辑，提高代码复用性",
+        "用户偏好设置使用 LocalStorage 持久化，避免每次刷新丢失",
+        "避免在 Redux 中存储非序列化的数据（如函数、类实例）",
+        "使用 TypeScript 类型定义确保状态类型安全"
+      ]
+    }
+  }
+}

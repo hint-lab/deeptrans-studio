@@ -1,0 +1,80 @@
+{
+  "gettingStarted": {
+    "title": "快速开始",
+    "subtitle": "通过这个5分钟的入门指南，您将学会如何创建第一个翻译项目，上传文档，并完成一个完整的翻译工作流程。",
+    "alert": "开始之前，请确保您已经有了 DeepTrans Studio 的访问权限。如果还没有，请联系管理员开通账户。",
+    "stepsTitle": "分步指南",
+    "tipsLabel": "💡 提示：",
+    "steps": {
+      "step1": {
+        "number": "1",
+        "title": "创建项目",
+        "description": "登录后，点击\"新建项目\"按钮开始。填写项目名称、选择源语言和目标语言。",
+        "tips": [
+          "项目名称建议使用有意义的标识",
+          "可以同时创建多个语言对"
+        ],
+        "image": "/docs/zh/gettingstarted/pic1.png"
+      },
+      "step2": {
+        "number": "2",
+        "title": "上传文档",
+        "description": "支持多种格式：DOCX、PDF、TXT、Markdown等。拖拽文件或点击上传按钮。",
+        "tips": [
+          "支持批量上传",
+          "大文件会自动分段处理"
+        ],
+        "image": "/docs/zh/gettingstarted/pic2.png"
+      },
+      "step3": {
+        "number": "3",
+        "title": "文档解析",
+        "description": "系统会自动解析文档结构，提取可翻译内容，并进行智能分段。",
+        "tips": [
+          "可以查看解析进度",
+          "支持手动调整分段"
+        ],
+        "image": "/docs/zh/gettingstarted/pic3.png"
+      },
+      "step4": {
+        "number": "4",
+        "title": "开始翻译",
+        "description": "进入翻译编辑器，可以使用AI辅助翻译、术语库、翻译记忆等功能。",
+        "tips": [
+          "快捷键提高效率",
+          "实时保存不丢失"
+        ],
+        "image": "/docs/zh/gettingstarted/pic4.png"
+      },
+      "step5": {
+        "number": "5",
+        "title": "质量检查",
+        "description": "使用内置的质量评估工具检查译文质量，包括术语一致性、语法检查等。",
+        "tips": [
+          "自动标记问题",
+          "支持批量修复"
+        ],
+        "image": "/docs/zh/gettingstarted/pic5.png"
+      },
+      "step6": {
+        "number": "6",
+        "title": "导出交付",
+        "description": "完成翻译后，可以导出为原始格式或其他格式，保持文档样式。",
+        "tips": [
+          "支持多种导出格式",
+          "可以生成翻译报告"
+        ],
+        "image": "/docs/zh/gettingstarted/pic6.png"
+      }
+    },
+    "nextSteps": {
+      "title": "下一步",
+      "description": "现在您已经了解了基本流程，可以探索更多高级功能：",
+      "links": {
+        "workflows": "深入了解翻译工作流",
+        "ai": "探索AI智能助手",
+        "ui": "熟悉界面操作"
+      }
+    }
+  }
+}

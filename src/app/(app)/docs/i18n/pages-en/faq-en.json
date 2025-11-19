@@ -1,0 +1,209 @@
+{
+  "faq": {
+    "title": "Frequently Asked Questions",
+    "subtitle": "The following are the most common questions and answers during the use of DeepTrans Studio. If your question is not in this list, please check the troubleshooting documentation or submit an Issue",
+    "labels": {
+      "error": "Error:",
+      "solution": "Solution:",
+      "config": "Configuration:"
+    },
+    "categories": [
+      {
+        "name": "Installation & Configuration",
+        "description": "Questions about system requirements, environment configuration, and initial setup",
+        "questions": [
+          {
+            "question": "What operating systems does DeepTrans Studio support?",
+            "solution": "DeepTrans Studio supports macOS, Linux, and Windows (via WSL 2). macOS or Linux is recommended for development, Windows users are advised to use WSL 2."
+          },
+          {
+            "question": "What are the minimum system requirements?",
+            "solution": "Minimum requirements: Node.js ≥ 18.18, Docker and Docker Compose (for dependency services), at least 4GB RAM.\nRecommended configuration: 8GB+ RAM, multi-core CPU for better performance."
+          },
+          {
+            "question": "Is Docker required?",
+            "solution": "Development environment recommends using Docker Compose to run dependency services (PostgreSQL, Redis, Milvus, etc.), but Next.js application and Worker can run locally. Production environment recommends using Docker for deployment."
+          },
+          {
+            "question": "How to configure OpenAI API?",
+            "solution": "Set OPENAI_API_KEY, OPENAI_BASE_URL, and OPENAI_API_MODEL in .env.local. If using other OpenAI API-compatible services (such as DeepSeek), just modify the BASE_URL."
+          },
+          {
+            "question": "Where should environment variables be placed?",
+            "solution": "Development environment uses .env.local file, production environment uses .env or .env.production. Ensure these files are added to .gitignore and do not commit sensitive information to version control."
+          }
+        ]
+      },
+      {
+        "name": "Database & Storage",
+        "description": "Questions about database backup, storage configuration, and data management",
+        "questions": [
+          {
+            "question": "How to backup database?",
+            "commands": [
+              {
+                "code": "pg_dump $DATABASE_URL > backup.sql",
+                "language": "bash",
+                "description": "Use PostgreSQL's pg_dump command. Regular backups are important, especially in production environments."
+              }
+            ]
+          },
+          {
+            "question": "How to reset database?",
+            "commands": [
+              {
+                "code": "yarn prisma migrate reset",
+                "language": "bash",
+                "description": "Development environment can use this command, which will delete all data and re-run migrations. Production environment please operate with caution, recommend backing up first."
+              }
+            ]
+          },
+          {
+            "question": "Where is MinIO stored data?",
+            "solution": "MinIO data is stored in Docker volumes by default. Can be viewed via `docker volume ls`, or configure custom storage path."
+          },
+          {
+            "question": "How to clean Milvus vector data?",
+            "solution": "Can delete collections through Attu UI (http://localhost:8001), or use Milvus SDK to delete collections. Collections will be automatically rebuilt when re-importing translation memories."
+          }
+        ]
+      },
+      {
+        "name": "Usage & Features",
+        "description": "Questions about feature usage, document processing, and translation workflows",
+        "questions": [
+          {
+            "question": "What document formats are supported?",
+            "solution": "Supports DOCX, PDF, TXT, Markdown, and other formats. PDF parsing is handled through PDFMath service, supporting mathematical formulas and complex layouts."
+          },
+          {
+            "question": "How to batch translate multiple documents?",
+            "solution": "Select multiple document items in the translation IDE and use batch pre-translation feature. Tasks are processed asynchronously through BullMQ queue, progress can be viewed in the interface."
+          },
+          {
+            "question": "How does translation memory work?",
+            "solution": "Translation memory uses Milvus vector database to store source-target text pairs. During translation, the system searches for similar translation references through hybrid search (vector retrieval + keyword matching)."
+          },
+          {
+            "question": "How to import terminology dictionary?",
+            "solution": "Supports batch import in CSV, Excel, and other formats. In dictionary management page, select import function, upload file and map fields."
+          },
+          {
+            "question": "What types of workflows are there?",
+            "solution": "Mainly includes three types of workflows: pre-translation workflow (batch translation), quality assurance workflow (quality assessment), post-editing workflow (human review and optimization)."
+          },
+          {
+            "question": "How to view translation history?",
+            "solution": "Can view processing history of each stage in the translation workflow panel, including execution records and results of pre-translation, quality assurance, post-editing, and other steps."
+          }
+        ]
+      },
+      {
+        "name": "Performance & Optimization",
+        "description": "Questions about system performance tuning and efficiency improvement",
+        "questions": [
+          {
+            "question": "What to do if translation is slow?",
+            "solution": "Can check: 1) API response time, 2) Worker processing capacity, 3) Queue task backlog, 4) Database query performance. Consider increasing Worker instances or optimizing queries."
+          },
+          {
+            "question": "How to improve batch translation efficiency?",
+            "solution": "1) Increase number of Worker instances, 2) Optimize queue configuration, 3) Use faster LLM API, 4) Reasonably set concurrency, 5) Ensure Redis and database performance is sufficient."
+          },
+          {
+            "question": "What to do if memory usage is too high?",
+            "solution": "Check: 1) Database connection pool size, 2) Redis cache data volume, 3) Milvus vector data, 4) Worker concurrency. Appropriately adjust configuration or increase server resources."
+          },
+          {
+            "question": "How to optimize database performance?",
+            "solution": "1) Add indexes for commonly queried fields, 2) Use Prisma's select and include to optimize queries, 3) Enable database connection pool, 4) Regularly clean historical data."
+          }
+        ]
+      },
+      {
+        "name": "Deployment & Production",
+        "description": "Questions about production deployment, configuration, and monitoring",
+        "questions": [
+          {
+            "question": "How to deploy to production environment?",
+            "solution": "1) Prepare production environment variables, 2) Use Docker Compose to build and start services, 3) Configure Traefik reverse proxy and HTTPS, 4) Set up database backups, 5) Configure monitoring and logs."
+          },
+          {
+            "question": "What configurations are needed for production environment?",
+            "solution": "Key configurations: 1) Use dedicated database and Redis instances, 2) Set strong passwords and AUTH_SECRET, 3) Configure HTTPS, 4) Set environment variable NODE_ENV=production, 5) Configure logs and monitoring."
+          },
+          {
+            "question": "How to set up HTTPS?",
+            "solution": "Use Traefik to configure HTTPS, can automatically apply for Let's Encrypt certificates, or use custom certificates. Ensure STUDIO_HOST points to the correct domain."
+          },
+          {
+            "question": "How to monitor system status?",
+            "solution": "Can: 1) Use docker compose ps to view service status, 2) View logs of each service, 3) Use Prisma Studio to monitor database, 4) Use Attu UI to monitor Milvus, 5) Configure monitoring tools like Prometheus."
+          }
+        ]
+      },
+      {
+        "name": "Development & Extension",
+        "description": "Questions about secondary development, custom features, and code contribution",
+        "questions": [
+          {
+            "question": "How to add custom AI agents?",
+            "solution": "Inherit BaseAgent base class, implement execute method, create new agent class in src/agents directory, then use in workflows."
+          },
+          {
+            "question": "How to extend API endpoints?",
+            "solution": "Create new Route Handler in src/app/api directory, or use Server Actions to create in src/actions directory."
+          },
+          {
+            "question": "How to customize translation workflows?",
+            "solution": "Workflows are completed through collaboration of multiple AI agents. Can modify agent configuration, add new agent steps, or adjust workflow execution logic."
+          },
+          {
+            "question": "How to contribute code?",
+            "solution": "1) Fork repository, 2) Create feature branch (feat/*, fix/*, etc.), 3) Follow code standards, 4) Submit PR and describe changes. See contribution guidelines in README."
+          }
+        ]
+      },
+      {
+        "name": "Other Questions",
+        "description": "Questions about licensing, support, and updates",
+        "questions": [
+          {
+            "question": "Is the project open source?",
+            "solution": "Yes, the project is open source under MIT license. You can freely use, modify, and distribute."
+          },
+          {
+            "question": "How to get technical support?",
+            "solution": "Can submit questions through GitHub Issues, or seek help in the project community. For serious issues, please provide detailed error information and reproduction steps."
+          },
+          {
+            "question": "Does it support multi-language interface?",
+            "solution": "Yes, uses next-intl to manage multiple languages. Currently supports Chinese and English, can switch through language switcher."
+          },
+          {
+            "question": "How to update to the latest version?",
+            "solution": "1) Pull latest code, 2) Run yarn install to update dependencies, 3) Run database migrations (if any), 4) Restart services. Production environment recommends testing in test environment first."
+          }
+        ]
+      }
+    ],
+    "stillHaveQuestions": {
+      "title": "Still Have Questions?",
+      "description": "If you haven't found the answer you need here, you can:",
+      "options": [
+        {
+          "name": "View Complete Documentation",
+          "description": "Browse all documentation pages to learn more detailed information"
+        },
+        {
+          "name": "Submit Issue",
+          "description": "Submit a question in the GitHub repository, we will reply as soon as possible"
+        },
+        {
+          "name": "View Troubleshooting",
+          "description": "Refer to troubleshooting documentation for detailed diagnosis and solutions"
+        }
+      ]
+    }
+  }
+}

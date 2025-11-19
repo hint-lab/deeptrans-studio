@@ -1,0 +1,10 @@
+volumes/
+node_modules/
+dist/
+.next/
+.git/
+.gitignore
+Dockerfile*
+Dockerfile.*
+**/*.log
+**/.DS_Store

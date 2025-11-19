@@ -1,0 +1,73 @@
+{
+  "concepts": {
+    "title": "核心概念",
+    "subtitle": "理解 DeepTrans Studio 的核心概念有助于您更高效地使用系统。这里介绍了系统中的关键术语、数据结构和工作原理。",
+    "hierarchyTitle": "数据层次结构",
+    "concepts": {
+      "project": {
+        "title": "项目 (Project)",
+        "description": "顶级组织单位，包含完整的翻译工作",
+        "details": [
+          "一个项目对应一个翻译任务",
+          "包含源语言、目标语言、领域等配置",
+          "可以包含多个文档",
+          "支持团队协作和权限管理"
+        ]
+      },
+      "document": {
+        "title": "文档 (Document)",
+        "description": "项目中的单个文件",
+        "details": [
+          "支持多种格式：DOCX、PDF、TXT等",
+          "自动解析文档结构",
+          "保留原始格式信息",
+          "可以预览和下载"
+        ]
+      },
+      "segment": {
+        "title": "分段 (Segment)",
+        "description": "文档中的最小翻译单元",
+        "details": [
+          "通常是一个句子或段落",
+          "包含源文本和目标文本",
+          "有独立的状态和版本",
+          "支持批注和评论"
+        ],
+        "image": "/docs/zh/concepts/pic3.png"
+      },
+      "terminology": {
+        "title": "术语 (Term)",
+        "description": "专业领域的词汇和翻译对照",
+        "details": [
+          "可以是项目级或全局级",
+          "支持多语言对照",
+          "自动高亮和提示",
+          "支持批量导入导出"
+        ],
+        "image": "/docs/zh/concepts/pic4.png"
+      },
+      "memory": {
+        "title": "翻译记忆 (Translation Memory)",
+        "description": "历史翻译的数据库",
+        "details": [
+          "自动匹配相似句子",
+          "提高翻译一致性",
+          "减少重复工作",
+          "支持模糊匹配"
+        ],
+        "image": "/docs/zh/concepts/pic5.png"
+      },
+      "workflow": {
+        "title": "工作流 (Workflow)",
+        "description": "翻译过程的流程定义",
+        "details": [
+          "包含多个阶段：翻译、审校、定稿",
+          "每个阶段有不同的权限",
+          "支持自动化任务",
+          "可以自定义流程"
+        ],
+        "image": "/docs/zh/concepts/pic6.png"
+      }
+    }
+  }
+}
