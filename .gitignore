@@ -124,3 +124,5 @@ volumes/
 milvus_script/
 
 .DS_Store
+tmp/
+test/

@@ -33,7 +33,6 @@ export async function createDictionaryAction(data: {
     visibility?: 'PUBLIC' | 'PROJECT' | 'PRIVATE'
     userId?: string
     tenantId?: string
-    projectId?: string
 }) {
     try {
         const dictionary = await createDictionaryDB({
@@ -42,8 +41,7 @@ export async function createDictionaryAction(data: {
             domain: data.domain,
             visibility: data.visibility,
             userId: data.userId,
-            tenantId: data.tenantId,
-            projectId: data.projectId
+            tenantId: data.tenantId
         })
         
         revalidatePath("/dashboard/dictionaries")
