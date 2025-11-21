@@ -18,7 +18,7 @@ RUN yarn prisma generate \
 # runtime
 FROM node:20-bookworm-slim
 WORKDIR /app
-RUN apt-get update && apt-get install -y --no-install-recommends dumb-init && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends openssl dumb-init && rm -rf /var/lib/apt/lists/*
 ENV NODE_ENV=production NODE_OPTIONS=--max-old-space-size=512 BULLMQ_CONCURRENCY=8
 COPY package.json yarn.lock ./
 RUN corepack enable && corepack prepare yarn@1.22.22 --activate && yarn config set registry https://registry.npmmirror.com \
