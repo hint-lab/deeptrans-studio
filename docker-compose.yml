@@ -1,7 +1,7 @@
 services:
   db:
     image: postgres:13
-    container_name: ${DB_CONTAINER_NAME:-postgres_db}
+    container_name: deeptrans-db
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres} # 使用 .env 中的 POSTGRES_USER 或默认值 postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-123456} # 使用 .env 中的 POSTGRES_PASSWORD 或默认值 123456
@@ -12,11 +12,11 @@ services:
       - postgres_data:/var/lib/postgresql/data
     restart: unless-stopped
     networks:
-      - web
+      - app_local
 
   traefik:             
     image: traefik:v3.5
-    container_name: traefik
+    container_name: deeptrans-traefik
     ports:
       - "80:80"
       - "443:443"
@@ -47,7 +47,6 @@ services:
       MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
       MINIO_BUCKET_NAME: ${MINIO_BUCKET:-deeptrans}
-      MINIO_BROWSER_REDIRECT_URL: ${MINIO_BROWSER_REDIRECT_URL:-}
     volumes:
       - minio-data:/data
     ports:
@@ -60,8 +59,7 @@ services:
       timeout: 10s
       retries: 3
     networks:
-      - web
-      - default
+      - app_local
     
 
   redis:
@@ -74,13 +72,13 @@ services:
       - redis-data:/data
     restart: unless-stopped
     networks:
-      - web
+      - app_local
 
-  website:
+  app:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: deeptrans-studio
+    container_name: deeptrans-app
     env_file:
       - .env  # 导入文件中的所有环境变量
     ports:
@@ -90,7 +88,7 @@ services:
       - redis
     networks:
       - web
-      - default
+      - app_local
     labels:
       - "traefik.enable=true"
       - "traefik.http.services.studio.loadbalancer.server.port=3000"
@@ -102,11 +100,11 @@ services:
       - "traefik.http.routers.studio-secure.tls.certresolver=le"
     restart: unless-stopped
 
-  worker:
+  app_worker:
     build:
       context: .
       dockerfile: Dockerfile.worker
-    container_name: deeptrans-worker
+    container_name: deeptrans-app_worker
     env_file:
       - .env  # 导入文件中的所有环境变量
     depends_on:
@@ -114,12 +112,12 @@ services:
       - redis
     networks:
       - web
-      - default
+      - app_local
     restart: unless-stopped
 
 
   etcd:
-    container_name: deeptrans-milvus-etcd
+    container_name: deeptrans-etcd
     image: quay.io/coreos/etcd:v3.5.18
     restart: unless-stopped
     environment:
@@ -136,13 +134,12 @@ services:
       timeout: 20s
       retries: 3
     networks:
-      - web
-      - default
+      - app_local
 
   
 
   milvus:
-    container_name: milvus-standalone
+    container_name: deeptrans-milvus
     image: milvusdb/milvus:v2.6.1
     command: ["milvus", "run", "standalone"]
     restart: unless-stopped
@@ -168,13 +165,12 @@ services:
       - "etcd"
       - "minio"
     networks:
-      - web
-      - default
+      - app_local
  
 
   attu:
     image: zilliz/attu:latest
-    container_name: attu
+    container_name: deeptrans-attu
     ports:
       - "8001:3000"
     environment:
@@ -183,8 +179,7 @@ services:
       - milvus
     restart: unless-stopped
     networks:
-      - web
-      - default
+      - app_local
 
   # pdfmath:
   #   build:
@@ -204,7 +199,8 @@ services:
 networks:
   web:
     external: false
-
+  app_local:
+    external: false
 volumes:
   postgres_data:
   minio-data:
