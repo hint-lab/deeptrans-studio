@@ -37,7 +37,7 @@
       ]
     },
     "apiConfig": {
-      "title": "🔑 API Access Configuration",
+      "title": "API Access Configuration",
       "baseUrl": {
         "title": "Server Address (Base URL)",
         "description": "The base URL for Server Actions requests varies depending on your DeepTrans Studio deployment environment:",
@@ -71,7 +71,7 @@
       }
     },
     "aboutDocs": {
-      "title": "📚 About Server Actions and This Documentation",
+      "title": "About Server Actions and This Documentation",
       "composition": {
         "title": "Documentation Composition and Sources",
         "items": [
