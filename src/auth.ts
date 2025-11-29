@@ -111,11 +111,11 @@ export const {
                 token.id = user.id;
                 token.name = user.name;
                 token.email = user.email;
-                token.role = user.role;
-                token.emailVerified = user.emailVerified;
+                //token.role = user.role;
+                //token.emailVerified = user.emailVerified;
                 
                 // 只在首次登录时查询账户信息
-                const existingAccount = await findAccountByUserIdDB(user.id);
+                const existingAccount = user.id ? await findAccountByUserIdDB(user.id as string) : null;
                 token.isOAuth = !!existingAccount;
             }
             

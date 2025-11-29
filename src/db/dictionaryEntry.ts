@@ -165,7 +165,7 @@ export const findCandidateTranslationsForSourcesDB = async (
     ? await prisma.projectDictionary.findMany({
         where: { projectId },
         select: { dictionaryId: true },
-      }).then(rows => rows.map(r => r.dictionaryId))
+      }).then((rows: any[]) => rows.map(r => r.dictionaryId))
     : [];
 
   // 2. 构造字典级过滤条件

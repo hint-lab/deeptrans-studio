@@ -16,7 +16,7 @@
     "db:seed:demo": "tsx scripts/seed-demo-user.ts",
     "dev": "NODE_ENV=development next dev --turbopack",
     "postinstall": "prisma generate",
-    "lint": "next lint",
+    "lint": "concurrently -n eslint,tsc \"next lint --dir src\" \"tsc --noEmit\"",
     "start": "next start",
     "worker": "NODE_ENV=development tsx src/worker/index.ts",
     "start:all": "sh -c 'yarn start & yarn worker'",
@@ -129,6 +129,7 @@
     "@types/react-dom": "^18.3.0",
     "@typescript-eslint/eslint-plugin": "^7.1.1",
     "@typescript-eslint/parser": "^7.1.1",
+    "concurrently": "^9.2.1",
     "esbuild": "^0.23.0",
     "eslint": "^8.57.0",
     "eslint-config-next": "^14.2.4",
@@ -146,4 +147,3 @@
   },
   "packageManager": "yarn@1.22.22"
 }
-
