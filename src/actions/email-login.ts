@@ -15,18 +15,18 @@ export const emailLoginAction = async (
   let existingUser = await findUserByEmailDB(email);
   if (!existingUser) {
     const newUser = await createUserDB({ email });
-    if (!newUser) return { error: "创建用户失败，请稍后重试" };
+    if (!newUser) return { error: "自动创建用户失败，请稍后重试" };
     existingUser = newUser;
   }
-
-  // Demo 环境允许使用固定验证码 123456
-  if (code === '123456' && email === 'test@example.com') {
-    await updateUserByIdDB(existingUser.id, { emailVerified: new Date() });
-  } else if (process.env.NODE_ENV === 'development' && code === '123456') {
-    await updateUserByIdDB(existingUser.id, { emailVerified: new Date() });
-  } else {
+  if (process.env.NEXT_PUBLIC_DEMO){
+    if (code === '123456' && email === 'test@example.com') {
+      await updateUserByIdDB(existingUser.id, { emailVerified: new Date() });
+    } else{
+      return { error: "演示环境仅允许使用固定验证码123456和固定邮箱test@example.com" };
+    }
+  }else{
     const record = await getVerificationCodeByEmail(email);
-    if (!record || record.code !== code) return { error: "验证码错误" };
+    if (!record || record.code !== code) return { error: "邮箱或验证码错误"};
     await updateUserByIdDB(existingUser.id, { emailVerified: new Date() });
   }
 
@@ -40,7 +40,7 @@ export const emailLoginAction = async (
     if (error?.message === "NEXT_REDIRECT" || error?.digest?.includes?.("NEXT_REDIRECT")) {
       throw error;
     }
-    return { error: "登录失败，请重试" };
+    return { error: "登录失败，请重试"+error };
   }
 
   return { success: "登录成功" };

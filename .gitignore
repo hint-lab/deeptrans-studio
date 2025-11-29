@@ -126,3 +126,4 @@ milvus_script/
 .DS_Store
 tmp/
 test/
+docker-compose-local.yml

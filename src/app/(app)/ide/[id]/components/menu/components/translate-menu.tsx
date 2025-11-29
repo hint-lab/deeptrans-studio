@@ -53,7 +53,7 @@ export function TranslateMenu({ isTranslating, onTranslate, onBatchTranslate, pr
                 </MenubarItem> */}
                 <MenubarItem
                     onClick={() => onTranslate('openai')}
-                    disabled={isTranslating}
+                    disabled={!isTranslating}
                 >
                     {isTranslating ? (
                         <div className="flex items-center gap-2">
@@ -66,7 +66,7 @@ export function TranslateMenu({ isTranslating, onTranslate, onBatchTranslate, pr
                 </MenubarItem>
                 <MenubarItem
                     onClick={() => onBatchTranslate?.()}
-                    disabled={isTranslating}
+                    disabled={!isTranslating}
                 >
                     <span>{t('batchTranslation')}</span>
                     <span className="ml-auto bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded text-xs text-gray-500 dark:text-gray-400">⌘B</span>

@@ -34,7 +34,7 @@ export function RunMenu({ isRunning, currentStage, setIsRunning, onTranslationAc
             size="sm"
             onClick={handleClick}
             aria-label={buttonText}
-            disabled={isRunning}
+            disabled={!isRunning}
             className={cn(
                 "w-8 md:w-24 gap-0 md:gap-2 px-2 md:px-3 relative overflow-hidden transition-all duration-300 transform",
                 isRunning ? "bg-indigo-100 dark:bg-indigo-900/30 border-indigo-300 dark:border-indigo-700" : "hover:scale-105 active:scale-95 hover:shadow-md",
