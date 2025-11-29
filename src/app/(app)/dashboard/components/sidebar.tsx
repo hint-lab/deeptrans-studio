@@ -92,7 +92,7 @@ export default function Sidebar() {
             </Button>
           </Link>
 
-          <Link className={`link ${pathname === "/support" ? "active" : ""}`} href="/">
+          <Link className={`link ${pathname === "/support" ? "active" : ""}`} href="https://github.com/hint-lab/deeptrans-studio">
             <Button variant="ghost" className={cn("w-full gap-2", isSidebarOpen ? "justify-start" : "justify-center")}>
               <UsersRoundIcon size="16" />
               <span className={isSidebarOpen ? "inline" : "hidden"}>{t("community")}</span>

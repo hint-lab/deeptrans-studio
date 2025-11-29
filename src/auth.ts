@@ -13,7 +13,6 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import { LoginSchema } from "./schemes";
 import { findUserByIdDB, findUserByEmailDB, updateUserByIdDB } from "./db/user";
 import { getVerificationCodeByPhone, getVerificationCodeByEmail } from "./db/verificationCode";
-////////////////////////////////////////////
 
 // 直接将配置内联在此文件中，不再依赖外部 authConfig
 export const {
@@ -22,7 +21,7 @@ export const {
     signOut,
     auth
 } = NextAuth({
-    providers: [  // 添加 providers 数组
+    providers: [
         Github({
             clientId: process.env.GITHUB_CLIENT_ID,
             clientSecret: process.env.GITHUB_CLIENT_SECRET,
@@ -43,41 +42,32 @@ export const {
             async authorize(credentials) {
                 // 同时支持 phone+code 与 email+code
                 const { phone, email, code } = credentials as any;
-
-                // 优先走 email 登录（若传入了 email）
-                if (email) {
-                    // Demo 账户允许使用固定验证码
-                    if (code === "123456" && email === "test@example.com") {
+                if (process.env.NEXT_PUBLIC_DEMO) {
+                    if(code === '123456' && email === 'test@example.com'){
                         const user = await findUserByEmailDB(email as string);
                         return user || null;
-                    }
-                    if (process.env.NODE_ENV === "development" && code === "123456") {
-                        const user = await findUserByEmailDB(email as string);
-                        return user || null;
-                    }
-                    const record = await getVerificationCodeByEmail(email as string);
-                    if (!record || record.code !== code) {
+                    }else{
                         return null;
                     }
-                    const user = await findUserByEmailDB(email as string);
-                    return user || null;
-                }
-
-                // 否则走 phone 登录
-                if (!phone) return null;
-
-                if (process.env.NODE_ENV === "development" && code === "123456") {
-                    const user = await findUserByEmailDB(phone as string);
-                    return user || null;
-                }
-
-                const verificationCode = await getVerificationCodeByPhone(phone as string);
-                if (!verificationCode || verificationCode.code !== code) {
+                }else{
+                    if (email) {
+                        const record = await getVerificationCodeByEmail(email as string);
+                        if (!record || record.code !== code) {
+                            return null;
+                        }
+                        const user = await findUserByEmailDB(email as string);
+                        return user || null;
+                    }
+                    if (phone) {
+                        const record = await getVerificationCodeByPhone(phone as string);
+                        if (!record || record.code !== code) {
+                            return null;
+                        }
+                        const user = await findUserByIdDB(record.phone);
+                        return user || null;
+                    }
                     return null;
                 }
-
-                const user = await findUserByEmailDB(phone as string);
-                return user || null;
             },
         }),
     ],
@@ -85,7 +75,6 @@ export const {
     session: {
         strategy: "jwt",
     },
-    // 自定义页面配置
     pages: {
         signIn: "/auth/login",
         error: "/auth/error",
@@ -110,48 +99,66 @@ export const {
 
     callbacks: {
         async signIn({ user, account }) {
-            // OAuth 直接通过
             if (account?.provider !== "credentials") {
                 return true;
             }
-            // credentials 登录已在 authorize 校验通过，这里直接允许
             return true;
         },
 
-        async jwt({ token }) {
-            // JWT 处理逻辑不变
-            if (!token.sub) {
-                return token;
+        async jwt({ token, user, trigger, session }) {
+            // 用户首次登录时，将用户信息存入 token
+            if (user) {
+                token.id = user.id;
+                token.name = user.name;
+                token.email = user.email;
+                token.role = user.role;
+                token.emailVerified = user.emailVerified;
+                
+                // 只在首次登录时查询账户信息
+                const existingAccount = await findAccountByUserIdDB(user.id);
+                token.isOAuth = !!existingAccount;
             }
-
-            const existingUser = await findUserByIdDB(token.sub);
-            if (!existingUser) {
-                return token;
+            
+            // 当用户更新个人信息时，刷新 token
+            if (trigger === "update" && session) {
+                token.name = session.user?.name;
+                token.email = session.user?.email;
+                // 可以在这里添加其他需要更新的字段
             }
-
-            const existingAccount = await findAccountByUserIdDB(existingUser.id);
-
-            token.isOAuth = !!existingAccount;
-            token.name = existingUser.name;
-            token.email = existingUser.email;
-            token.role = existingUser.role;
-            token.emailVerified = existingUser.emailVerified;
+            
+            // 只有在 token 中没有用户信息时才查询数据库
+            if (!token.id && token.sub) {
+                const existingUser = await findUserByIdDB(token.sub);
+                if (existingUser) {
+                    token.id = existingUser.id;
+                    token.name = existingUser.name;
+                    token.email = existingUser.email;
+                    token.role = existingUser.role;
+                    token.emailVerified = existingUser.emailVerified;
+                    
+                    const existingAccount = await findAccountByUserIdDB(existingUser.id);
+                    token.isOAuth = !!existingAccount;
+                }
+            }
+            
             return token;
         },
 
         async session({ session, token }) {
-            // Session 处理逻辑不变
-            if (session.user && token.sub) {
+            if (token.sub) {
                 session.user.id = token.sub;
             }
-            if (session.user && token.role) {
+            if (token.role) {
                 session.user.role = token.role as UserRole;
             }
-            if (session.user) {
+            if (token.name) {
                 session.user.name = token.name;
-                session.user.email = token.email as string;
-                session.user.isOAuth = token.isOAuth as boolean;
             }
+            if (token.email) {
+                session.user.email = token.email as string;
+            }
+            session.user.isOAuth = token.isOAuth as boolean;
+            
             return session;
         },
     },

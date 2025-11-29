@@ -149,23 +149,48 @@ export const deleteDictionaryEntryByIdDB = async(id: string): Promise<Dictionary
 /**
  * 在公开/项目/私有词典范围内，查询给定源文本列表的候选译文
  */
-export const findCandidateTranslationsForSourcesDB = async(sourceList: string[], projectId?: string, userId?: string): Promise<Array<{ sourceText: string; targetText: string; notes: string | null }>| null> => {
-  if (!Array.isArray(sourceList) || sourceList.length === 0) return [] as Array<{ sourceText: string; targetText: string; notes: string | null }>
-  return dbTry(() => prisma.dictionaryEntry.findMany({
-    where: {
-      sourceText: { in: sourceList },
-      dictionary: {
-        OR: [
-          { visibility: 'PUBLIC' as any },
-          { visibility: 'PROJECT' as any, ...(projectId ? { projectId: { not: projectId } } : {}) },
-          ...(userId ? [{ visibility: 'PRIVATE' as any, userId }] : [] as any[]),
-        ]
+/**
+ * 在公开 / 项目 / 私有词典范围内，查询给定源文本列表的候选译文
+ * 修复要点：通过 ProjectDictionary 间接拿到项目级字典 id
+ */
+export const findCandidateTranslationsForSourcesDB = async (
+  sourceList: string[],
+  projectId?: string,
+  userId?: string
+): Promise<Array<{ sourceText: string; targetText: string; notes: string | null }> | null> => {
+  if (!Array.isArray(sourceList) || sourceList.length === 0) return [];
+
+  // 1. 如果传了 projectId，先查出本项目绑定的所有字典 id
+  const projectDictIds = projectId
+    ? await prisma.projectDictionary.findMany({
+        where: { projectId },
+        select: { dictionaryId: true },
+      }).then(rows => rows.map(r => r.dictionaryId))
+    : [];
+
+  // 2. 构造字典级过滤条件
+  const dictWhere: any = {
+    OR: [
+      { visibility: 'PUBLIC' },
+      // 项目级：只保留“本项目”绑定的字典
+      ...(projectDictIds.length ? [{ visibility: 'PROJECT', id: { in: projectDictIds } }] : []),
+      // 私有：当前用户拥有
+      ...(userId ? [{ visibility: 'PRIVATE', userId }] : []),
+    ],
+  };
+
+  // 3. 查条目
+  return dbTry(() =>
+    prisma.dictionaryEntry.findMany({
+      where: {
+        sourceText: { in: sourceList },
+        dictionary: dictWhere,
       },
-    },
-    select: { sourceText: true, targetText: true, notes: true },
-    take: 10000,
-  })) 
-}
+      select: { sourceText: true, targetText: true, notes: true },
+      take: 10000,
+    })
+  );
+};
 
 /** 模糊检索：在给定词典可见性范围内，按文本 contains 查询 */
 export const findByScopeDB = async(term: string, orScopes: any[], limit: number): Promise<Array<{ sourceText: string; targetText: string; notes: string | null; dictionary: { name: string; visibility: string } }>| null> => {

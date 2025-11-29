@@ -16,8 +16,10 @@ export function ExportMenu() {
     const aid = (activeDocumentItem as any)?.id;
     const currentTab = tabs.find((t: any) => (t.items ?? []).some((it: any) => it.id === aid));
     const items: any[] = (currentTab?.items ?? []) as any[];
-    const canExport = items.length > 0 && items.every((it: any) => it.status === 'SIGN_OFF');
+    const canExport = items.length > 0 && items.every((it: any) => it.status === 'COMPLETED');
+    console.log("canExport:"+canExport+","+items.length)
     const docId = (currentTab as any)?.id || '';
+    console.log("docId:"+docId)
     return (
         <MenubarMenu>
             <MenubarTrigger><span className="flex items-center whitespace-nowrap gap-2">{t('label')}</span>

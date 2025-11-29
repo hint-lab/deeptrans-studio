@@ -24,8 +24,8 @@ export function QualityMenu({ isTranslating, onEvaluate, progressPercent }: { is
                 )}
             </MenubarTrigger>
             <MenubarContent>
-                <MenubarItem onClick={() => onEvaluate("single")}>{t('singleEvaluation')}</MenubarItem>
-                <MenubarItem onClick={() => onEvaluate("batch")}>
+                <MenubarItem disabled={!isTranslating} onClick={() => onEvaluate("single")}>{t('singleEvaluation')}</MenubarItem>
+                <MenubarItem disabled={!isTranslating} onClick={() => onEvaluate("batch")}>
                     <span>{t('batchEvaluation')}</span>
                     <span className="ml-auto bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded text-xs text-gray-500 dark:text-gray-400">⌘E</span>
                 </MenubarItem>
