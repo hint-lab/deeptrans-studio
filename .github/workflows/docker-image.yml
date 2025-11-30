@@ -1,18 +1,31 @@
-name: Docker Image CI
+name: Push to Aliyun ACR
 
 on:
   push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+    branches: [ main ]
 
 jobs:
-
   build:
-
     runs-on: ubuntu-latest
-
+    
     steps:
-    - uses: actions/checkout@v4
-    - name: Build the Docker image
-      run: docker build . --file Dockerfile --tag app:$(date +%s)
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Login to Aliyun ACR
+      run: |
+        docker login --username=${{ secrets.ALIYUN_ACCESS_KEY_ID }} --password=${{ secrets.ALIYUN_ACCESS_KEY_SECRET }} ${{ secrets.ALIYUN_REGISTRY_URL }}
+
+    - name: Build Docker image
+      run: |
+        docker build -t ${{ secrets.ALIYUN_REGISTRY_URL }}/${{ secrets.ALIYUN_NAMESPACE }}/${{ github.event.repository.name }}:${{ github.sha }} .
+
+    - name: Push Docker image
+      run: |
+        docker push ${{ secrets.ALIYUN_REGISTRY_URL }}/${{ secrets.ALIYUN_NAMESPACE }}/${{ github.event.repository.name }}:${{ github.sha }}
+        
+        # 如果是 main 分支，同时推送 latest 标签
+        if [ "${{ github.ref }}" == "refs/heads/main" ]; then
+          docker tag ${{ secrets.ALIYUN_REGISTRY_URL }}/${{ secrets.ALIYUN_NAMESPACE }}/${{ github.event.repository.name }}:${{ github.sha }} ${{ secrets.ALIYUN_REGISTRY_URL }}/${{ secrets.ALIYUN_NAMESPACE }}/${{ github.event.repository.name }}:latest
+          docker push ${{ secrets.ALIYUN_REGISTRY_URL }}/${{ secrets.ALIYUN_NAMESPACE }}/${{ github.event.repository.name }}:latest
+        fi
