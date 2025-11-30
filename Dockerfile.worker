@@ -1,5 +1,5 @@
 # deps
-FROM node:20-bookworm AS deps
+FROM node:20-slim AS deps
 WORKDIR /app
 RUN corepack enable && \
     corepack prepare yarn@1.22.22 \
@@ -16,7 +16,7 @@ RUN yarn prisma generate \
 # 产出 dist/worker.js
 
 # runtime
-FROM node:20-bookworm-slim
+FROM node:20-slim
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends openssl dumb-init && rm -rf /var/lib/apt/lists/*
 ENV NODE_ENV=production NODE_OPTIONS=--max-old-space-size=512 BULLMQ_CONCURRENCY=8
