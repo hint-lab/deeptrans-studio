@@ -18,14 +18,14 @@ jobs:
 
     - name: Build Docker image
       run: |
-        docker build -t ${{ secrets.ALIYUN_REGISTRY_URL }}/${{ secrets.ALIYUN_NAMESPACE }}/${{ github.event.repository.name }}:${{ github.sha }} -f Dockerfile.worker .
+        docker build -t ${{ secrets.ALIYUN_REGISTRY_URL }}/${{ secrets.ALIYUN_NAMESPACE }}/${{ github.event.repository.name }}-worker:${{ github.sha }} -f Dockerfile.worker .
 
     - name: Push Docker image
       run: |
-        docker push ${{ secrets.ALIYUN_REGISTRY_URL }}/${{ secrets.ALIYUN_NAMESPACE }}/${{ github.event.repository.name }}:${{ github.sha }}
+        docker push ${{ secrets.ALIYUN_REGISTRY_URL }}/${{ secrets.ALIYUN_NAMESPACE }}/${{ github.event.repository.name }}-worker:${{ github.sha }}
         
         # 如果是 main 分支，同时推送 latest 标签
         if [ "${{ github.ref }}" == "refs/heads/main" ]; then
-          docker tag ${{ secrets.ALIYUN_REGISTRY_URL }}/${{ secrets.ALIYUN_NAMESPACE }}/${{ github.event.repository.name }}:${{ github.sha }} ${{ secrets.ALIYUN_REGISTRY_URL }}/${{ secrets.ALIYUN_NAMESPACE }}/${{ github.event.repository.name }}:latest
-          docker push ${{ secrets.ALIYUN_REGISTRY_URL }}/${{ secrets.ALIYUN_NAMESPACE }}/${{ github.event.repository.name }}:latest
+          docker tag ${{ secrets.ALIYUN_REGISTRY_URL }}/${{ secrets.ALIYUN_NAMESPACE }}/${{ github.event.repository.name }}-worker:${{ github.sha }} ${{ secrets.ALIYUN_REGISTRY_URL }}/${{ secrets.ALIYUN_NAMESPACE }}/${{ github.event.repository.name }}-worker:latest
+          docker push ${{ secrets.ALIYUN_REGISTRY_URL }}/${{ secrets.ALIYUN_NAMESPACE }}/${{ github.event.repository.name }}-worker:latest
         fi
