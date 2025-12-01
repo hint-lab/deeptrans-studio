@@ -42,7 +42,7 @@ export const {
             async authorize(credentials) {
                 // 同时支持 phone+code 与 email+code
                 const { phone, email, code } = credentials as any;
-                if (process.env.NEXT_PUBLIC_DEMO) {
+                if (process.env.IS_DEMO === 'yes'){
                     if(code === '123456' && email === 'test@example.com'){
                         const user = await findUserByEmailDB(email as string);
                         return user || null;

@@ -10,9 +10,11 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { EmailLoginForm } from "./email-login-form"
 import { useTranslations } from "next-intl"
+interface LoginCardProps {
+    isDemo: boolean;
+}
 
-const isDemo = process.env.NEXT_PUBLIC_DEMO === "true";
-export const LoginCard = () => {
+export const LoginCard = ({ isDemo }: LoginCardProps) => {
     const t = useTranslations("Auth");
 
     return (

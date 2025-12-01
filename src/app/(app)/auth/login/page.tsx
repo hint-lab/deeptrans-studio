@@ -10,6 +10,7 @@ export const metadata: Metadata = {
 };
 
 const LoginPage: NextPage = () => {
+  const isDemo = process.env.IS_DEMO === "yes";
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-gradient-to-br from-[#0f1020] via-[#11122a] to-[#0b0c1a]">
       {/* 语言切换器 */}
@@ -35,7 +36,7 @@ const LoginPage: NextPage = () => {
             priority
           />
         </div>
-        <LoginCard />
+        <LoginCard isDemo={isDemo} />
       </div>
     </div>
   );

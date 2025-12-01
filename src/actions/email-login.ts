@@ -18,7 +18,7 @@ export const emailLoginAction = async (
     if (!newUser) return { error: "自动创建用户失败，请稍后重试" };
     existingUser = newUser;
   }
-  if (process.env.NEXT_PUBLIC_DEMO){
+  if (process.env.IS_DEMO === 'yes'){
     if (code === '123456' && email === 'test@example.com') {
       await updateUserByIdDB(existingUser.id, { emailVerified: new Date() });
     } else{
