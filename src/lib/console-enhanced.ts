@@ -11,7 +11,7 @@ class EnhancedConsole {
     const match = callerLine.match(/\((.*):(\d+):(\d+)\)/);
     if (match) {
       const [, filePath, line, column] = match;
-      const fileName = filePath.split('/').pop();
+      const fileName = filePath ? filePath.split('/').pop() : 'unknown';
       return { fileName, line, column };
     }
     
