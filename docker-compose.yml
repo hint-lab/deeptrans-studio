@@ -74,6 +74,47 @@ services:
     networks:
       - app_local
 
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: deeptrans-app
+    env_file:
+      - .env  # 导入文件中的所有环境变量
+    ports:
+      - "3000:3000"
+    depends_on:
+      - db
+      - redis
+    networks:
+      - web
+      - app_local
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.services.studio.loadbalancer.server.port=3000"
+      - "traefik.http.routers.studio.rule=Host(`${STUDIO_HOST:-localhost}`)"
+      - "traefik.http.routers.studio.entrypoints=web"
+      - "traefik.http.routers.studio-secure.rule=Host(`${STUDIO_HOST:-localhost}`)"
+      - "traefik.http.routers.studio-secure.entrypoints=websecure"
+      - "traefik.http.routers.studio-secure.tls=true"
+      - "traefik.http.routers.studio-secure.tls.certresolver=le"
+    restart: unless-stopped
+
+  app_worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: deeptrans-app_worker
+    env_file:
+      - .env  # 导入文件中的所有环境变量
+    depends_on:
+      - db
+      - redis
+    networks:
+      - web
+      - app_local
+    restart: unless-stopped
+
 
   etcd:
     container_name: deeptrans-etcd
