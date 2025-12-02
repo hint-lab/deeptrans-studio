@@ -27,7 +27,7 @@ import { useSidebar } from "@/hooks/useSidebar";
 import { LANGUAGES, getTranslatedLanguages } from "@/constants/languages";
 import { DOMAINS, getDomainOptions } from "@/constants/domains";
 import { useTranslations } from "next-intl";
-
+import { logger } from '@/lib/console-enhanced';
 export function CreateProjectDialog({ onCreated, triggerVariant = 'default' }: { onCreated?: (project: CreatedProject) => void, triggerVariant?: 'default' | 'icon' | 'auto' }) {
   const t = useTranslations('Dashboard.CreateProject');
   const tDomains = useTranslations('Common.domains');
@@ -84,7 +84,8 @@ export function CreateProjectDialog({ onCreated, triggerVariant = 'default' }: {
 
   async function startInitPipelines(projectId: string) {
     try {
-      const batchId = `${projectId}:${Date.now()}`;
+      const batchId = `${projectId}.${Date.now()}`;
+      logger.info('Starting project initialization',  `projectId:${projectId}, batchId:${batchId}`);
       setInitBatchId(batchId);
       setSegPct(0);
       setTermPct(0);

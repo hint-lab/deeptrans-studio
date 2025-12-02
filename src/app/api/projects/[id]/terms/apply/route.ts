@@ -26,7 +26,7 @@ export async function POST(req: NextRequest, ctx: any) {
     let unique: string[] = []
     {
       const redis = await getRedis()
-      const raw = await redis.get(`docTerms:${batchId}:item:terms:all`)
+      const raw = await redis.get(`docTerms.${batchId}.item.terms.all`)
       if (raw) {
         try {
           const obj = JSON.parse(String(raw))

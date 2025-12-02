@@ -333,7 +333,7 @@ export function ActionSection() {
     const handleBatchTranslate = async () => {
         try {
             setCurrentOperation('translate_batch');
-            const jid = `${(explorerTabs as any)?.projectId || 'proj'}:${Date.now()}`;
+            const jid = `${(explorerTabs as any)?.projectId || 'proj'}.${Date.now()}`;
             setBatchJobId(jid);
             setProgressTitle('批量翻译中');
             setBatchOpen(true);

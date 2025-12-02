@@ -39,7 +39,7 @@ export async function POST(req: NextRequest, ctx: any) {
         previewHtml = html
       }
       if (structured) {
-        await setTextWithTTL(redis, `init:${batchId}:docx:structured`, JSON.stringify(structured), TTL_BATCH)
+        await setTextWithTTL(redis, `init.${batchId}.docx.structured`, JSON.stringify(structured), TTL_BATCH)
       }
     } catch {}
     if (!content) {
@@ -49,8 +49,8 @@ export async function POST(req: NextRequest, ctx: any) {
     if (!content) return NextResponse.json({ error: 'empty content' }, { status: 400 })
     if (!previewHtml) previewHtml = makePreviewHtmlFromText(content)
     const preview = content.slice(0, 1200)
-    await setTextWithTTL(redis, `init:${batchId}:preview`, preview, TTL_PREVIEW)
-    if (previewHtml && previewHtml.trim()) await setTextWithTTL(redis, `init:${batchId}:previewHtml`, previewHtml.slice(0, 200_000), TTL_PREVIEW)
+    await setTextWithTTL(redis, `init.${batchId}.preview`, preview, TTL_PREVIEW)
+    if (previewHtml && previewHtml.trim()) await setTextWithTTL(redis, `init.${batchId}.previewHtml`, previewHtml.slice(0, 200_000), TTL_PREVIEW)
     try { await updateDocumentStatusDB(only.id, DocumentStatus.PREPROCESSED as any) } catch {}
     return NextResponse.json({ ok: true, step: 'parse' })
   } catch (e: any) {

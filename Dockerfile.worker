@@ -29,5 +29,3 @@ COPY --from=builder /app/node_modules/.prisma /app/node_modules/.prisma
 USER node
 ENTRYPOINT ["dumb-init","--"]
 CMD ["node","dist/worker.cjs"]
-
-

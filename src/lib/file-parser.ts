@@ -5,7 +5,7 @@ import { Buffer } from 'buffer'; // 如需显式导入
 import { extractDocxFromUrl } from './parsers/docx-parser'
 import path from 'path'
 import fs from 'fs/promises'
-
+import { logger } from '@/lib/console-enhanced';
 export async function extractTextFromUrl(url: string): Promise<{ text: string; contentType?: string }> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 45000); // 45s 超时
@@ -21,7 +21,8 @@ export async function extractTextFromUrl(url: string): Promise<{ text: string; c
         localCandidate = abs;
       }
     } catch {}
-
+    logger.info('[extract] localCandidate:', localCandidate);
+    logger.info('[extract] url:', url);
     let contentType = '';
     let contentLength = 0;
     let buffer: Buffer | null = null;
@@ -49,6 +50,7 @@ export async function extractTextFromUrl(url: string): Promise<{ text: string; c
     }
 
     const res = buffer ? null : await fetch(url, { signal: controller.signal });
+    logger.info('[extract] res:', res);
     if (!buffer) {
       if (!res || !res.ok) {
         console.error(`[extract] Fetch failed: ${res?.status} ${res?.statusText}`);

@@ -28,7 +28,7 @@ const projectInitSlice = createSlice({
       if (!state.byProjectId[projectId]) {
         state.byProjectId[projectId] = {
           projectId,
-          batchId: seedBatchId || `${projectId}:${Date.now()}`,
+          batchId: seedBatchId || `${projectId}.${Date.now()}`,
           currentStep: 'parse',
           segPct: 0,
           termPct: 0,
@@ -40,7 +40,7 @@ const projectInitSlice = createSlice({
       const { projectId, batchId } = action.payload
       state.byProjectId[projectId] = {
         projectId,
-        batchId: batchId || `${projectId}:${Date.now()}`,
+        batchId: batchId || `${projectId}.${Date.now()}`,
         currentStep: 'parse',
         segPct: 0,
         termPct: 0,

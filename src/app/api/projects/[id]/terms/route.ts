@@ -7,7 +7,7 @@ import { findDocumentsByProjectIdDB, updateDocumentStatusDB } from '@/db/documen
 import { extractTextFromUrl } from '@/lib/file-parser'
 import { findProjectDictionaryAction } from '@/actions/dictionary'
 import { DocumentStatus } from '@/types/enums'
-
+import { logger } from '@/lib/console-enhanced';
 export async function POST(req: NextRequest, ctx: any) {
   try {
     const redis = await getRedis()
@@ -16,6 +16,7 @@ export async function POST(req: NextRequest, ctx: any) {
     let body: any = {}
     try { body = await req.json() } catch {}
     const batchId = String(q.get('batchId') || body?.batchId || '')
+    logger.error('batchId', batchId)
     const terms = body?.terms || undefined
     if (!projectId) return NextResponse.json({ error: 'missing project id' }, { status: 400 })
     if (!batchId) return NextResponse.json({ error: 'missing batchId' }, { status: 400 })
@@ -38,17 +39,26 @@ export async function POST(req: NextRequest, ctx: any) {
     } catch {}
     if (!bodyText) return NextResponse.json({ error: 'empty content' }, { status: 400 })
 
-    await setTextWithTTL(redis, `docTerms:${batchId}:total`, '1', TTL_PROGRESS)
-    await setTextWithTTL(redis, `docTerms:${batchId}:done`, '0', TTL_PROGRESS)
-    await getQueue('doc-terms').add('doc-terms', { id: 'terms:all', text: bodyText, batchId, userId, projectId, ...terms }, { jobId: `docTerms:${batchId}:all` })
+    await setTextWithTTL(redis, `docTerms.${batchId}.total`, '1', TTL_PROGRESS)
+    await setTextWithTTL(redis, `docTerms.${batchId}.done`, '0', TTL_PROGRESS)
+    await getQueue('doc-terms').add('doc-terms', { id: 'terms.all', text: bodyText, batchId, userId, projectId, ...terms }, { jobId: `docTerms.${batchId}.all` })
     return NextResponse.json({ ok: true, step: 'terms' })
   } catch (e: any) {
+  // 构建详细的错误对象
+  const detailedError = {
+    name: e.name,
+    message: e.message,
+    stack: e.stack,
+    code: e.code, // Redis 或其他库的错误代码
+    cause: e.cause, // 如果有的话
+  };
     try {
       const { id: projectId } = await ctx.params
       const docs = await findDocumentsByProjectIdDB(projectId)
       const only = docs?.[0]
       if (only?.id) { try { await updateDocumentStatusDB(only.id, DocumentStatus.ERROR as any) } catch {} }
     } catch {}
+    logger.error('[terms start error]', JSON.stringify(detailedError, null, 2))
     return NextResponse.json({ error: e?.message || 'terms start failed' }, { status: 500 })
   }
 }

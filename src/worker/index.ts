@@ -17,16 +17,16 @@ import { Client as MinioClient } from 'minio';
 // Pre-translate worker
 const preWorker = createWorker('pretranslate', async (job) => {
   const { id, text, sourceLanguage, targetLanguage, userId, batchId } = job.data as any;
-  const cancel = await connection.get(`batch:${batchId}:cancel`);
+  const cancel = await connection.get(`batch.${batchId}.cancel`);
   if (cancel === '1') throw new Error('JOB_CANCELED');
   const res = await runPreTranslateAction(text, sourceLanguage, targetLanguage, { userId });
   const translation = res?.translation || '';
   const terms = res?.terms || [];
   const dict = res?.dict || [];
-  await setJSONWithTTL(connection, `batch:${batchId}:item:${id}`, { id, translation, terms, dict }, TTL_BATCH);
-  await connection.incr(`batch:${batchId}:done`);
-  const total = Number(await connection.get(`batch:${batchId}:total`)) || 0;
-  const done = Number(await connection.get(`batch:${batchId}:done`)) || 0;
+  await setJSONWithTTL(connection, `batch.${batchId}.item.${id}`, { id, translation, terms, dict }, TTL_BATCH);
+  await connection.incr(`batch.${batchId}.done`);
+  const total = Number(await connection.get(`batch.${batchId}.total`)) || 0;
+  const done = Number(await connection.get(`batch.${batchId}.done`)) || 0;
   const percent = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
   await job.updateProgress(percent);
   console.log(`[pre] job=${job.id} finished pre-translate pipeline`);
@@ -71,18 +71,18 @@ preWorker.on('error', (err) => {
 // QA worker
 const qaWorker = createWorker('qa', async (job) => {
   const { id, sourceText, targetText, targetLanguage, domain, tenantId, batchId } = job.data as any;
-  const cancel = await connection.get(`qa:${batchId}:cancel`);
+  const cancel = await connection.get(`qa.${batchId}.cancel`);
   if (cancel === '1') throw new Error('JOB_CANCELED');
   const res = await runQualityAssureAction(sourceText, targetText, { targetLanguage, domain });
-  await connection.set(`qa:${batchId}:item:${id}`, JSON.stringify({
+  await connection.set(`qa.${batchId}.item.${id}`, JSON.stringify({
     id,
     qualityAssureBiTerm: res?.biTerm ?? undefined,
     qualityAssureSyntax: res?.syntax ?? undefined,
     qualityAssureSyntaxEmbedded: res?.syntaxEmbedded ?? undefined,
   }));
-  await connection.incr(`qa:${batchId}:done`);
-  const total = Number(await connection.get(`qa:${batchId}:total`)) || 0;
-  const done = Number(await connection.get(`qa:${batchId}:done`)) || 0;
+  await connection.incr(`qa.${batchId}.done`);
+  const total = Number(await connection.get(`qa.${batchId}.total`)) || 0;
+  const done = Number(await connection.get(`qa.${batchId}.done`)) || 0;
   const percent = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
   await job.updateProgress(percent);
   console.log(`[qa] job=${job.id} QA pipeline complete`);
@@ -102,8 +102,8 @@ qaWorker.on('failed', async (job, err) => {
   try {
     const batchId = (job?.data as any)?.batchId;
     if (batchId) {
-      await connection.incr(`qa:${batchId}:failed`).catch(() => { });
-      await connection.set(`qa:${batchId}:fail:${job?.id}`, String((err as Error)?.message || err)).catch(() => { });
+      await connection.incr(`qa.${batchId}.failed`).catch(() => { });
+      await connection.set(`qa.${batchId}.fail.${job?.id}`, String((err as Error)?.message || err)).catch(() => { });
     }
   } catch { }
 });
@@ -115,15 +115,15 @@ qaWorker.on('error', (err) => {
 // Document terms worker
 const docTermsWorker = createWorker('doc-terms', async (job) => {
   const { id, text, prompt, batchId, maxTerms, chunkSize, overlap, userId, tenantId } = job.data as any;
-  const cancel = batchId ? await connection.get(`docTerms:${batchId}:cancel`) : null;
+  const cancel = batchId ? await connection.get(`docTerms.${batchId}.cancel`) : null;
   if (cancel === '1') throw new Error('JOB_CANCELED');
   const terms = await extractDocumentTermsAction(text, { prompt, maxTerms, chunkSize, overlap });
   // 术语结果仅返回给上层，由服务层决定是否/如何持久化与应用范围
   if (batchId) {
-    await setJSONWithTTL(connection, `docTerms:${batchId}:item:${id}`, { id, terms }, TTL_BATCH);
-    await connection.incr(`docTerms:${batchId}:done`);
-    const total = Number(await connection.get(`docTerms:${batchId}:total`)) || 0;
-    const done = Number(await connection.get(`docTerms:${batchId}:done`)) || 0;
+    await setJSONWithTTL(connection, `docTerms.${batchId}.item.${id}`, { id, terms }, TTL_BATCH);
+    await connection.incr(`docTerms.${batchId}.done`);
+    const total = Number(await connection.get(`docTerms.${batchId}.total`)) || 0;
+    const done = Number(await connection.get(`docTerms.${batchId}.done`)) || 0;
     const percent = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 100;
     await job.updateProgress(percent);
   } else {
@@ -290,7 +290,7 @@ const memoryImportWorker = createWorker('memory-import', async (job) => {
   }
 
   const collection = 'TranslationMemory';
-  const points = pairs.map((p, i) => ({ id: `${memoryId}:${i}:${Date.now()}`, text: `${p.source}\n${p.target}`, vector: vectors[i] || [], meta: { memoryId, sourceLang, targetLang } }));
+  const points = pairs.map((p, i) => ({ id: `${memoryId}.${i}.${Date.now()}`, text: `${p.source}\n${p.target}`, vector: vectors[i] || [], meta: { memoryId, sourceLang, targetLang } }));
   const valid = points.filter(p => Array.isArray(p.vector) && p.vector.length);
 
   console.log(`[WORKER_IMPORT] 准备写入 Milvus: ${valid.length}/${points.length} 条记录有有效向量`);

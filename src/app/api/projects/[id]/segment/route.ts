@@ -84,7 +84,7 @@ export async function POST(req: NextRequest, ctx: any) {
       // 直接按 structured JSON 的 paragraphs 输出分段（透传 level/styleName/runs/placeholderSpans）
       let paragraphs: Array<{ text?: string; level?: number|null; styleName?: string; runs?: any[]; placeholderSpans?: any[] }> = []
       try {
-        const raw = await redis.get(`init:${batchId}:docx:structured`)
+        const raw = await redis.get(`init.${batchId}.docx.structured`)
         if (raw) {
           const obj = JSON.parse(String(raw))
           if (Array.isArray(obj?.paragraphs)) paragraphs = obj.paragraphs as any[]
@@ -121,16 +121,16 @@ export async function POST(req: NextRequest, ctx: any) {
           : (styleName ? String(styleName).toUpperCase() : 'PARAGRAPH')
         out.push({ type, sourceText: t, metadata: { level, styleName, runs, placeholderSpans } })
       }
-      await setTextWithTTL(redis, `seg:${segBatch}:total`, '1', TTL_PROGRESS)
-      await setTextWithTTL(redis, `seg:${segBatch}:done`, '1', TTL_PROGRESS)
-      await setJSONWithTTL(redis, `seg:${segBatch}:item:seg:all`, { segments: out }, TTL_BATCH)
+      await setTextWithTTL(redis, `seg.${segBatch}.total`, '1', TTL_PROGRESS)
+      await setTextWithTTL(redis, `seg.${segBatch}.done`, '1', TTL_PROGRESS)
+      await setJSONWithTTL(redis, `seg.${segBatch}.item.seg.all`, { segments: out }, TTL_BATCH)
       return NextResponse.json({ ok: true, step: 'segment-preview' })
     }
 
     // 非预览：直接按 structured JSON 的 paragraphs 输出全量分段（不入队）
     let paragraphsAll: Array<{ text?: string; level?: number|null; styleName?: string; runs?: any[]; placeholderSpans?: any[] }> = []
     try {
-      const raw = await redis.get(`init:${batchId}:docx:structured`)
+      const raw = await redis.get(`init.${batchId}.docx.structured`)
       if (raw) {
         const obj = JSON.parse(String(raw))
         if (Array.isArray(obj?.paragraphs)) paragraphsAll = obj.paragraphs as any[]
@@ -167,9 +167,9 @@ export async function POST(req: NextRequest, ctx: any) {
         : (styleName ? String(styleName).toUpperCase() : 'PARAGRAPH')
       outAll.push({ type, sourceText: t, metadata: { level, styleName, runs, placeholderSpans } })
     }
-    await setTextWithTTL(redis, `seg:${segBatch}:total`, '1', TTL_PROGRESS)
-    await setTextWithTTL(redis, `seg:${segBatch}:done`, '1', TTL_PROGRESS)
-    await setJSONWithTTL(redis, `seg:${segBatch}:item:seg:all`, { segments: outAll }, TTL_BATCH)
+    await setTextWithTTL(redis, `seg.${segBatch}.total`, '1', TTL_PROGRESS)
+    await setTextWithTTL(redis, `seg.${segBatch}.done`, '1', TTL_PROGRESS)
+    await setJSONWithTTL(redis, `seg.${segBatch}.item.seg.all`, { segments: outAll }, TTL_BATCH)
     // 持久化为 DocumentItem，供 IDE 使用
     try {
       const docId = (only as any)?.id
@@ -213,9 +213,9 @@ export async function GET(req: NextRequest, ctx: any) {
     const toPct = (t: any, d: any) => Number(t) > 0 ? Math.min(100, Math.round((Number(d) / Number(t)) * 100)) : 0
     async function readStatus() {
       const [segT, segD, segItemJson] = await Promise.all([
-        redis.get(`seg:${segBatch}:total`),
-        redis.get(`seg:${segBatch}:done`),
-        redis.get(`seg:${segBatch}:item:seg:all`),
+        redis.get(`seg.${segBatch}.total`),
+        redis.get(`seg.${segBatch}.done`),
+        redis.get(`seg.${segBatch}.item.seg.all`),
       ])
       const segProgress = toPct(segT, segD)
       let segments: Array<{ type: string; sourceText: string; metadata?: any }> | undefined
@@ -229,7 +229,7 @@ export async function GET(req: NextRequest, ctx: any) {
           if (total > 0) {
             const parts: Array<{ type: string; sourceText: string; metadata?: any }> = []
             for (let i = 0; i < total; i++) {
-              const raw = await redis.get(`seg:${segBatch}:item:seg:part:${i}`)
+              const raw = await redis.get(`seg.${segBatch}.item.seg.part.${i}`)
               if (!raw) continue
               const pj = JSON.parse(String(raw))
               const parr = pj && Array.isArray(pj.segments) ? pj.segments : []
@@ -247,8 +247,8 @@ export async function GET(req: NextRequest, ctx: any) {
       const start = Date.now()
       while (Date.now() - start < waitMs) {
         const [segT, segD] = await Promise.all([
-          redis.get(`seg:${segBatch}:total`),
-          redis.get(`seg:${segBatch}:done`),
+          redis.get(`seg.${segBatch}.total`),
+          redis.get(`seg.${segBatch}.done`),
         ])
         const curSeg = toPct(segT, segD)
         if (previewMode && curSeg > 0) return NextResponse.json(await readStatus())

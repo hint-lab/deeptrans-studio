@@ -21,11 +21,11 @@ export async function startBatchPreTranslateAction(itemIds: string[], opts: { so
   if (!total) return { success: 0, failed: itemIds.length } as any;
 
   // 初始化进度缓存（常驻 Worker 在独立进程中启动）
-  const batchId = `bt:${Date.now()}`;
-  await connection.set(`batch:${batchId}:total`, String(total));
-  await connection.set(`batch:${batchId}:done`, '0');
-  await connection.set(`batch:${batchId}:failed`, '0');
-  await connection.set(`batch:${batchId}:cancel`, '0');
+  const batchId = `bt.${Date.now()}`;
+  await connection.set(`batch.${batchId}.total`, String(total));
+  await connection.set(`batch.${batchId}.done`, '0');
+  await connection.set(`batch.${batchId}.failed`, '0');
+  await connection.set(`batch.${batchId}.cancel`, '0');
 
   // 使用 BullMQ 入队
   const queue = getQueue('pretranslate');
@@ -36,9 +36,9 @@ export async function startBatchPreTranslateAction(itemIds: string[], opts: { so
 export async function getBatchPreTranslateProgressAction(batchId: string) {
   const { getRedis } = await import('@/lib/redis');
   const connection = await getRedis();
-  const total = Number(await connection.get(`batch:${batchId}:total`)) || 0;
-  const done = Number(await connection.get(`batch:${batchId}:done`)) || 0;
-  const failed = Number(await connection.get(`batch:${batchId}:failed`)) || 0;
+  const total = Number(await connection.get(`batch.${batchId}.total`)) || 0;
+  const done = Number(await connection.get(`batch.${batchId}.done`)) || 0;
+  const failed = Number(await connection.get(`batch.${batchId}.failed`)) || 0;
   const percent = total > 0 ? Math.min(100, Math.round(((done + failed) / total) * 100)) : 0;
   return { total, done, failed, percent };
 }
@@ -46,7 +46,7 @@ export async function getBatchPreTranslateProgressAction(batchId: string) {
 export async function cancelBatchPreTranslateAction(batchId: string) {
   const { getRedis } = await import('@/lib/redis');
   const connection = await getRedis();
-  await connection.set(`batch:${batchId}:cancel`, '1');
+  await connection.set(`batch.${batchId}.cancel`, '1');
   return { ok: true };
 }
 
@@ -56,10 +56,10 @@ export async function persistBatchPreTranslateResultsAction(batchId: string) {
   if (!session?.user?.id) throw new Error('未授权');
   const { getRedis } = await import('@/lib/redis');
   const connection = await getRedis();
-  const total = Number(await connection.get(`batch:${batchId}:total`)) || 0;
+  const total = Number(await connection.get(`batch.${batchId}.total`)) || 0;
   if (!total) return { updated: 0 };
 
-  const keys = await connection.keys(`batch:${batchId}:item:*`);
+  const keys = await connection.keys(`batch.${batchId}.item.*`);
   let updated = 0;
   for (const key of keys) {
     try {
@@ -79,7 +79,7 @@ export async function persistBatchPreTranslateResultsAction(batchId: string) {
     } catch {}
   }
   // 清理缓存键
-  await connection.del(`batch:${batchId}:total`, `batch:${batchId}:done`, `batch:${batchId}:failed`, `batch:${batchId}:cancel`);
+  await connection.del(`batch.${batchId}.total`, `batch.${batchId}.done`, `batch.${batchId}.failed`, `batch.${batchId}.cancel`);
   if (keys.length) await connection.del(...keys);
   return { updated };
 }
