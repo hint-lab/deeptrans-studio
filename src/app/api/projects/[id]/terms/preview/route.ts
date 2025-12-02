@@ -10,7 +10,7 @@ export async function POST(req: NextRequest, context: any) {
     const redis = await getRedis()
     let text = ''
     if (batchId) {
-      const preview = await redis.get(`init:${batchId}:preview`)
+      const preview = await redis.get(`init.${batchId}.preview`)
       if (typeof preview === 'string' && preview.trim()) text = preview
     }
     if (!text) {

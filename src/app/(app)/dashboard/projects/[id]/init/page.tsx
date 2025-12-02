@@ -13,7 +13,7 @@ import TermsPanel from './components/TermsPanel'
 import Stepper from './components/Stepper'
 import { useProjectInit } from '@/hooks/useProjectInit'
 import { updateDocumentStatusByIdAction } from '@/actions/document'
-
+import { logger } from '@/lib/console-enhanced';
 export default function ProjectInitPage() {
   const t = useTranslations('Dashboard.Init')
   const { id } = useParams<{ id: string }>()
@@ -21,6 +21,7 @@ export default function ProjectInitPage() {
   const router = useRouter()
   const { entry, restart, updateBatchId, updateStep, updateProgress } = useProjectInit(projectId)
   const batchId = entry?.batchId || ""
+  logger.info('ProjectInitPage render projectId, batchId', `${projectId}, ${batchId}`)
   const segPct = entry?.segPct || 0
   const termPct = entry?.termPct || 0
   const segPctRef = useRef(0)
@@ -78,6 +79,7 @@ export default function ProjectInitPage() {
     try {
       const u = new URL(`/api/projects/${projectId}/segment`, window.location.origin)
       u.searchParams.set('batchId', batchId)
+      logger.info('startSegment: ', u.toString())
       const r = await fetch(u.toString(), { method: 'POST' })
       if (!r.ok) throw new Error('segment failed')
       // 状态由全局轮询同步
@@ -248,6 +250,7 @@ export default function ProjectInitPage() {
       statusAbortRef.current = controller
       try {
         const url = `/api/projects/${projectId}/init?batchId=${encodeURIComponent(batchId)}&wait=30000&lastSeg=${prevSeg}&lastTerms=${prevTerms}`
+        logger.info('/api/projects/projectId/init url: ', url)
         const s = await fetch(url, { signal: controller.signal })
         if (!s.ok) throw new Error('status failed')
         const j = await s.json()
@@ -375,7 +378,7 @@ export default function ProjectInitPage() {
               </div>
               {currentStep === 'done' && (
                 <Button size="sm" variant="ghost" onClick={() => {
-                  const newId = `${projectId}:${Date.now()}`
+                  const newId = `${projectId}.${Date.now()}`
                   updateProgress(0, 0)
                   segPctRef.current = 0
                   termPctRef.current = 0

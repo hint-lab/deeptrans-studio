@@ -10,8 +10,8 @@ import { queryDictionaryEntriesExactByScope } from '@/actions/dictionary'
 async function handlePersist(only: any, batchId: string, projectIdFromParams: string) {
   const redis = await getRedis()
   const [previewHtmlStored, docxStructStored] = await Promise.all([
-    redis.get(`init:${batchId}:previewHtml`),
-    redis.get(`init:${batchId}:docx:structured`),
+    redis.get(`init.${batchId}.previewHtml`),
+    redis.get(`init.${batchId}.docx.structured`),
   ])
   let structuredObj: any = undefined
   try { structuredObj = docxStructStored ? JSON.parse(String(docxStructStored)) : undefined } catch {}
@@ -128,15 +128,15 @@ export async function GET(req: NextRequest, ctx: any) {
 
     async function readStatus() {
       const [segT, segD, tT, tD, preview, termsJson, previewHtmlStored, segItemJson, docxStruct] = await Promise.all([
-        redis.get(`seg:${segBatch}:total`),
-        redis.get(`seg:${segBatch}:done`),
-        redis.get(`docTerms:${batchId}:total`),
-        redis.get(`docTerms:${batchId}:done`),
-        redis.get(`init:${batchId}:preview`),
-        redis.get(`docTerms:${batchId}:item:terms:all`),
-        redis.get(`init:${batchId}:previewHtml`),
-        redis.get(`seg:${segBatch}:item:seg:all`),
-        redis.get(`init:${batchId}:docx:structured`),
+        redis.get(`seg.${segBatch}.total`),
+        redis.get(`seg.${segBatch}.done`),
+        redis.get(`docTerms.${batchId}.total`),
+        redis.get(`docTerms.${batchId}.done`),
+        redis.get(`init.${batchId}.preview`),
+        redis.get(`docTerms.${batchId}.item.terms.all`),
+        redis.get(`init.${batchId}.previewHtml`),
+        redis.get(`seg.${segBatch}.item.seg.all`),
+        redis.get(`init.${batchId}.docx.structured`),
       ])
       const segProgress = toPct(segT, segD)
       const termsProgress = toPct(tT, tD)
@@ -158,7 +158,7 @@ export async function GET(req: NextRequest, ctx: any) {
           if (total > 0) {
             const parts: Array<{ type: string; sourceText: string }> = []
             for (let i = 0; i < total; i++) {
-              const raw = await redis.get(`seg:${segBatch}:item:seg:part:${i}`)
+              const raw = await redis.get(`seg.${segBatch}.item.seg.part.${i}`)
               if (!raw) continue
               const pj = JSON.parse(String(raw))
               const parr = pj && Array.isArray(pj.segments) ? pj.segments : []
@@ -171,7 +171,7 @@ export async function GET(req: NextRequest, ctx: any) {
       if (previewMode && Array.isArray(segments) && !showAll) {
         segments = segments.slice(0, 20)
       }
-      const fullHtml = (await redis.get(`init:${batchId}:previewHtml`)) || ''
+      const fullHtml = (await redis.get(`init.${batchId}.previewHtml`)) || ''
       const limitHtml = (() => {
         try {
           const str = String(fullHtml)
@@ -205,10 +205,10 @@ export async function GET(req: NextRequest, ctx: any) {
       const start = Date.now()
       while (Date.now() - start < waitMs) {
         const [segT, segD, tT, tD] = await Promise.all([
-          redis.get(`seg:${segBatch}:total`),
-          redis.get(`seg:${segBatch}:done`),
-          redis.get(`docTerms:${batchId}:total`),
-          redis.get(`docTerms:${batchId}:done`),
+          redis.get(`seg.${segBatch}.total`),
+          redis.get(`seg.${segBatch}.done`),
+          redis.get(`docTerms.${batchId}.total`),
+          redis.get(`docTerms.${batchId}.done`),
         ])
         const curSeg = toPct(segT, segD)
         const curTerms = toPct(tT, tD)

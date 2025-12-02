@@ -17,12 +17,11 @@ export async function startBatchQAAction(itemIds: string[], opts: { targetLangua
   if (!total) return { batchId: undefined, total: 0 };
 
   // 常驻 Worker 在独立进程中启动
-  const batchId = `qa:${Date.now()}`;
-  await connection.set(`qa:${batchId}:total`, String(total));
-  await connection.set(`qa:${batchId}:done`, '0');
-  await connection.set(`qa:${batchId}:failed`, '0');
-  await connection.set(`qa:${batchId}:cancel`, '0');
-
+  const batchId = `qa.${Date.now()}`;
+  await connection.set(`qa.${batchId}.total`, String(total));
+  await connection.set(`qa.${batchId}.done`, '0');
+  await connection.set(`qa.${batchId}.failed`, '0');
+  await connection.set(`qa.${batchId}.cancel`, '0');
   const queue = getQueue('qa');
   await queue.addBulk(items.map((it) => ({ name: it.id, data: { batchId, id: it.id, sourceText: it.sourceText || '', targetText: it.targetText || '', targetLanguage: opts.targetLanguage, domain: opts.domain, tenantId: opts.tenantId }, opts: defaultJobOpts })));
   return { batchId, total };
@@ -31,9 +30,9 @@ export async function startBatchQAAction(itemIds: string[], opts: { targetLangua
 export async function getBatchQAProgressAction(batchId: string) {
   const { getRedis } = await import('@/lib/redis');
   const connection = await getRedis();
-  const total = Number(await connection.get(`qa:${batchId}:total`)) || 0;
-  const done = Number(await connection.get(`qa:${batchId}:done`)) || 0;
-  const failed = Number(await connection.get(`qa:${batchId}:failed`)) || 0;
+  const total = Number(await connection.get(`qa.${batchId}.total`)) || 0;
+  const done = Number(await connection.get(`qa.${batchId}.done`)) || 0;
+  const failed = Number(await connection.get(`qa.${batchId}.failed`)) || 0;
   const percent = total > 0 ? Math.min(100, Math.round(((done + failed) / total) * 100)) : 0;
   return { total, done, failed, percent };
 }
@@ -41,7 +40,7 @@ export async function getBatchQAProgressAction(batchId: string) {
 export async function cancelBatchQAAction(batchId: string) {
   const { getRedis } = await import('@/lib/redis');
   const connection = await getRedis();
-  await connection.set(`qa:${batchId}:cancel`, '1');
+  await connection.set(`qa.${batchId}.cancel`, '1');
   return { ok: true };
 }
 
@@ -51,10 +50,10 @@ export async function persistBatchQAResultsAction(batchId: string) {
   if (!session?.user?.id) throw new Error('未授权');
   const { getRedis } = await import('@/lib/redis');
   const connection = await getRedis();
-  const total = Number(await connection.get(`qa:${batchId}:total`)) || 0;
+  const total = Number(await connection.get(`qa.${batchId}.total`)) || 0;
   if (!total) return { updated: 0 };
 
-  const keys = await connection.keys(`qa:${batchId}:item:*`);
+  const keys = await connection.keys(`qa.${batchId}.item.*`);
   let updated = 0;
   for (const key of keys) {
     try {
@@ -76,7 +75,7 @@ export async function persistBatchQAResultsAction(batchId: string) {
       updated += 1;
     } catch {}
   }
-  await connection.del(`qa:${batchId}:total`, `qa:${batchId}:done`, `qa:${batchId}:failed`, `qa:${batchId}:cancel`);
+  await connection.del(`qa.${batchId}.total`, `qa.${batchId}.done`, `qa.${batchId}.failed`, `qa.${batchId}.cancel`);
   if (keys.length) await connection.del(...keys);
   return { updated };
 }
