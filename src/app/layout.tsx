@@ -34,7 +34,7 @@ export default async function RootLayout({
   const messages = await getMessages();
 
   return (
-    <SessionProvider session={session}>
+    <SessionProvider session={session} refetchInterval={30}>
       <html lang={locale} suppressHydrationWarning className={`${GeistSans.variable}`}>
 
         <body>

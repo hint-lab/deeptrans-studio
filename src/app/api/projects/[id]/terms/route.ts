@@ -7,7 +7,7 @@ import { findDocumentsByProjectIdDB, updateDocumentStatusDB } from '@/db/documen
 import { extractTextFromUrl } from '@/lib/file-parser'
 import { findProjectDictionaryAction } from '@/actions/dictionary'
 import { DocumentStatus } from '@/types/enums'
-import { logger } from '@/lib/console-enhanced';
+import { logger } from '@/lib/logger';
 export async function POST(req: NextRequest, ctx: any) {
   try {
     const redis = await getRedis()
@@ -16,7 +16,7 @@ export async function POST(req: NextRequest, ctx: any) {
     let body: any = {}
     try { body = await req.json() } catch {}
     const batchId = String(q.get('batchId') || body?.batchId || '')
-    logger.error('batchId', batchId)
+    logger.error(`batchId: ${batchId}`);
     const terms = body?.terms || undefined
     if (!projectId) return NextResponse.json({ error: 'missing project id' }, { status: 400 })
     if (!batchId) return NextResponse.json({ error: 'missing batchId' }, { status: 400 })
@@ -58,7 +58,7 @@ export async function POST(req: NextRequest, ctx: any) {
       const only = docs?.[0]
       if (only?.id) { try { await updateDocumentStatusDB(only.id, DocumentStatus.ERROR as any) } catch {} }
     } catch {}
-    logger.error('[terms start error]', JSON.stringify(detailedError, null, 2))
+    logger.error(`[terms start error] ${JSON.stringify(detailedError, null, 2)}`);
     return NextResponse.json({ error: e?.message || 'terms start failed' }, { status: 500 })
   }
 }

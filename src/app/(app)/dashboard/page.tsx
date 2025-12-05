@@ -4,6 +4,7 @@ import ProjectListPage from "./projects/page";
 import { useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
+import { useSession } from 'next-auth/react'
 
 const DashboardPage: NextPage = () => {
     const params = useSearchParams();
