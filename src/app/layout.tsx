@@ -32,23 +32,23 @@ export default async function RootLayout({
   const session = await auth();
   const locale = await getLocale();
   const messages = await getMessages();
-
+  console.log("服务端Session数据:", session);
+  console.log("服务端过期时间:", new Date(session?.expires!).toLocaleString());
   return (
-    <SessionProvider session={session} refetchInterval={30}>
       <html lang={locale} suppressHydrationWarning className={`${GeistSans.variable}`}>
-
         <body>
-          <NextIntlClientProvider messages={messages} locale={locale}>
-            <NextThemeProvider attribute="class" defaultTheme="system" enableSystem>
-              {/* 使用时需要包裹在TooltipProvider中 */}
-              <TooltipProvider>
-                {children}
-              </TooltipProvider>
-            </NextThemeProvider>
-            <Toaster />
-          </NextIntlClientProvider>
+          <SessionProvider session={session}>
+            <NextIntlClientProvider messages={messages} locale={locale}>
+              <NextThemeProvider attribute="class" defaultTheme="system" enableSystem>
+                {/* 使用时需要包裹在TooltipProvider中 */}
+                <TooltipProvider>
+                  {children}
+                </TooltipProvider>
+              </NextThemeProvider>
+              <Toaster />
+            </NextIntlClientProvider>
+          </SessionProvider>
         </body>
       </html>
-    </SessionProvider>
   );
 }

@@ -24,7 +24,7 @@ import { useTranslations } from "next-intl"
 
 
 export default function DictionariesPage() {
-    const { data: session } = useSession()
+    const { data: session, status, update } = useSession();
     const router = useRouter()
     const t = useTranslations("Dashboard.Dictionaries")
     const [publicDictionaries, setPublicDictionaries] = useState<UIDictionary[]>([])
@@ -35,7 +35,11 @@ export default function DictionariesPage() {
     const searchParams = useSearchParams()
     const [loading, setLoading] = useState(true)
     const [reloadToken, setReloadToken] = useState(0)
-
+    useEffect(() => {
+        console.log("客户端Session状态:", status);
+        console.log("客户端Session数据:", session);
+        console.log("客户端过期时间:", new Date(session?.expires!).toLocaleString());
+    }, [session, status]);
     // 汇总可供导入的词库（全部）
     const allDictionariesLite = useMemo(() => {
         const all = [...publicDictionaries, ...projectDictionaries, ...privateDictionaries]

@@ -4,9 +4,16 @@ import { type PropsWithChildren } from "react";
 import Header from "./components/header";
 import Sidebar from "./components/sidebar";
 import { useSidebar } from "@/hooks/useSidebar";
-
+import { useSession } from "next-auth/react"
+import { useState, useEffect, useMemo } from "react"
 export default function DashboardLayout({ children }: PropsWithChildren) {
+  const { data: session, status, update } = useSession();
   const { isSidebarOpen } = useSidebar();
+  useEffect(() => {
+      console.log("客户端Layout Session状态:", status);
+      console.log("客户端Layout Session数据:", session);
+      console.log("客户端Layout 过期时间:", new Date(session?.expires!).toLocaleString());
+  }, [session, status]);
   return (
     <div className="relative fixed inset-0 overflow-hidden bg-gradient-to-br from-[#0f1020] via-[#11122a] to-[#0b0c1a]">
       {/* 背景装饰 - 渐变光晕 */}

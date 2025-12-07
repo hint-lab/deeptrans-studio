@@ -14,13 +14,14 @@ import { useTranslations } from "next-intl";
 
 export default function Header() {
     const t = useTranslations('Dashboard.Header');
-    const { theme, setTheme } = useTheme();
+    const { theme, setTheme, resolvedTheme } = useTheme(); // 使用 resolvedTheme
     const [mounted, setMounted] = useState(false);
     const { isSidebarOpen, toggleSidebar } = useSidebar();
     useEffect(() => {
         setMounted(true);
     }, []);
-
+    // 等待主题完全解析
+    const logoTheme = resolvedTheme || theme;
     if (!mounted) {
         return (
             <div className="flex z-50 size-full justify-between items-center bg-background/95 backdrop-blur px-4">
@@ -39,7 +40,7 @@ export default function Header() {
             <Link href="/dashboard">
                 <Image
                     alt="Logo"
-                    src={theme === "dark" ? "/logo3_dark.svg" : "/logo3.svg"}
+                    src={logoTheme === "dark" ? "/logo3_dark.svg" : "/logo3.svg"}
                     width={50}
                     height={20}
                     priority
