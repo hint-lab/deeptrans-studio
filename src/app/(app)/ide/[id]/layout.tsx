@@ -21,14 +21,22 @@ import { useParams } from "next/navigation";
 import { useTranslationState } from '@/hooks/useTranslation';
 import { useTranslations } from 'next-intl';
 import { ImperativePanelHandle } from "react-resizable-panels";
-
+import { useSession } from "next-auth/react"
 function IDELayout({ children }: { children: React.ReactNode }) {
   const t = useTranslations('IDE');
+  const { data: session, status, update } = useSession();
   const params = useParams();
   const { isSidebarOpen, toggleSidebar } = useSidebar();
   const { mode } = useRightPanel();
   const sidebarPanelRef = useRef<ImperativePanelHandle>(null);
+  const interval = 15;
+  useEffect(() => {
+    const timer = setInterval(() => {
+      update() // 手动更新 session
+    }, interval * 1000)
 
+    return () => clearInterval(timer)
+  }, [interval, update])
   // 动态计算布局
   const getLayoutSizes = () => {
     if (mode === 'none') {

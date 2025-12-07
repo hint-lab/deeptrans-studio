@@ -33,7 +33,9 @@ export default async function RootLayout({
   const locale = await getLocale();
   const messages = await getMessages();
   console.log("服务端Session数据:", session);
-  console.log("服务端过期时间:", new Date(session?.expires!).toLocaleString());
+  console.log("服务端过期时间:",  session?.expires 
+  ? new Date(session.expires).toLocaleString() 
+  : "未设置");
   return (
       <html lang={locale} suppressHydrationWarning className={`${GeistSans.variable}`}>
         <body>
