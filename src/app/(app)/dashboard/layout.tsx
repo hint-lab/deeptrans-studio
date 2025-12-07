@@ -12,7 +12,9 @@ export default function DashboardLayout({ children }: PropsWithChildren) {
   useEffect(() => {
       console.log("客户端Layout Session状态:", status);
       console.log("客户端Layout Session数据:", session);
-      console.log("客户端Layout 过期时间:", new Date(session?.expires!).toLocaleString());
+      console.log("客户端Layout 过期时间:",  session?.expires 
+  ? new Date(session.expires).toLocaleString() 
+  : "未设置");
   }, [session, status]);
   return (
     <div className="relative fixed inset-0 overflow-hidden bg-gradient-to-br from-[#0f1020] via-[#11122a] to-[#0b0c1a]">
