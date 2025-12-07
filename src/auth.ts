@@ -1,3 +1,4 @@
+//auth.ts
 import NextAuth from "next-auth";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { type PrismaClient } from "@prisma/client";
@@ -13,8 +14,8 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import { LoginSchema } from "./schemes";
 import { findUserByIdDB, findUserByEmailDB, updateUserByIdDB } from "./db/user";
 import { getVerificationCodeByPhone, getVerificationCodeByEmail } from "./db/verificationCode";
-
 // 直接将配置内联在此文件中，不再依赖外部 authConfig
+const MAX_AGE = Number(process.env.AUTH_SESSION_MAX_AGE ?? 60); 
 export const {
     handlers,
     signIn,
@@ -74,6 +75,7 @@ export const {
     adapter: PrismaAdapter(prisma as PrismaClient),
     session: {
         strategy: "jwt",
+        maxAge: MAX_AGE,
     },
     pages: {
         signIn: "/auth/login",
@@ -106,59 +108,39 @@ export const {
         },
 
         async jwt({ token, user, trigger, session }) {
+            console.log(token.sub);
             // 用户首次登录时，将用户信息存入 token
             if (user) {
-                token.id = user.id;
-                token.name = user.name;
-                token.email = user.email;
-                //token.role = user.role;
-                //token.emailVerified = user.emailVerified;
-                
-                // 只在首次登录时查询账户信息
-                const existingAccount = user.id ? await findAccountByUserIdDB(user.id as string) : null;
-                token.isOAuth = !!existingAccount;
+                token.id     = user.id;
+                token.name   = user.name;
+                token.email  = user.email;
+                token.isOAuth = !!(await findAccountByUserIdDB(token.id as string));
             }
-            
+            token.expires = Math.floor(Date.now() / 1000) + MAX_AGE; // ← 统一变量
             // 当用户更新个人信息时，刷新 token
             if (trigger === "update" && session) {
-                token.name = session.user?.name;
-                token.email = session.user?.email;
+                token = { ...token, ...session }
                 // 可以在这里添加其他需要更新的字段
             }
-            
-            // 只有在 token 中没有用户信息时才查询数据库
-            if (!token.id && token.sub) {
-                const existingUser = await findUserByIdDB(token.sub);
-                if (existingUser) {
-                    token.id = existingUser.id;
-                    token.name = existingUser.name;
-                    token.email = existingUser.email;
-                    token.role = existingUser.role;
-                    token.emailVerified = existingUser.emailVerified;
-                    
-                    const existingAccount = await findAccountByUserIdDB(existingUser.id);
-                    token.isOAuth = !!existingAccount;
-                }
+            // 检查 JWT 是否过期
+            if (token.expires && Date.now() / 1000 > (token.expires as number)) {
+              return { ...token, expired: true }
             }
-            
             return token;
         },
 
         async session({ session, token }) {
-            if (token.sub) {
-                session.user.id = token.sub;
-            }
-            if (token.role) {
-                session.user.role = token.role as UserRole;
-            }
-            if (token.name) {
-                session.user.name = token.name;
-            }
-            if (token.email) {
-                session.user.email = token.email as string;
-            }
-            session.user.isOAuth = token.isOAuth as boolean;
-            
+            if (token.sub)  session.user.id    = token.sub;
+            if (token.role) session.user.role  = token.role as UserRole;
+            if (token.name) session.user.name  = token.name;
+            if (token.email)session.user.email = token.email as string;
+
+            /* 统一过期字段 */
+            (session as any).expires = token.expires
+              ? new Date((token.expires as number) * 1000).toISOString()
+              : new Date(Date.now() + MAX_AGE * 1000).toISOString();
+
+            if (token.expired) (session as any).expires = new Date().toISOString();
             return session;
         },
     },
