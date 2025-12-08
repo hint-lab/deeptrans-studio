@@ -16,7 +16,7 @@ export function ViewMenu() {
     return (
         <>
             <MenubarMenu>
-                <MenubarTrigger><span className="flex items-center whitespace-nowrap gap-2">{t('view')}</span></MenubarTrigger>
+                <MenubarTrigger><span className="flex items-center whitespace-nowrap gap-2 cursor-pointer hover:opacity-90">{t('view')}</span></MenubarTrigger>
                 <MenubarContent>
                     <MenubarCheckboxItem
                         checked={isSidebarOpen}

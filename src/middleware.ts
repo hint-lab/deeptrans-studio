@@ -43,6 +43,11 @@ export async function middleware(request: NextRequest) {
     const publicPaths = [
         "/",
         "/docs",
+        "/api/auth/oauth/github",
+        "/api/auth/oauth/google",
+        "/api/auth/callback/github",
+        "/api/auth/callback/google",
+        "/api/auth/verify-email",
     ];
     // 认证相关路径（NextAuth 内部处理，但需要逻辑来处理重定向）
     const authPaths = [

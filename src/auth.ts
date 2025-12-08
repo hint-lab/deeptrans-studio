@@ -107,8 +107,13 @@ export const {
             return true;
         },
 
-        async jwt({ token, user, trigger, session }) {
+        async jwt({ token, account,user, profile, trigger, session }) {
             console.log(token.sub);
+            if (account) {
+              token.accessToken = account.access_token
+              token.id = profile?.id
+              console.log("JWT token:", token);
+            }
             // 用户首次登录时，将用户信息存入 token
             if (user) {
                 token.id     = user.id;
@@ -134,7 +139,7 @@ export const {
             if (token.role) session.user.role  = token.role as UserRole;
             if (token.name) session.user.name  = token.name;
             if (token.email)session.user.email = token.email as string;
-
+            //session.accessToken = token.accessToken as string;
             /* 统一过期字段 */
             (session as any).expires = token.expires
               ? new Date((token.expires as number) * 1000).toISOString()

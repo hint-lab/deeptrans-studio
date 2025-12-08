@@ -26,7 +26,8 @@ const ItemStatusDot = ({ status }: { status: string }) => {
   if (isCompleted) {
     dotClass = 'w-2 h-2 rounded-full bg-green-600';
   } else if (isHuman) {
-    dotClass = 'w-2 h-2 rounded-full bg-amber-500';
+    //dotClass = 'w-2 h-2 rounded-full bg-amber-500';
+    dotClass = 'w-2 h-2 rounded-full bg-indigo-500';
   } else if (status !== 'NOT_STARTED') {
     dotClass = 'w-2 h-2 rounded-full bg-indigo-500';
   }
@@ -43,7 +44,8 @@ const ItemStatusBadge = ({ status }: { status: string }) => {
   if (isCompleted) {
     cls = `${base} bg-green-600 border-green-700 text-white shadow`;
   } else if (isHuman) {
-    cls = `${base} bg-amber-500 border-amber-600 text-white shadow`;
+    //cls = `${base} bg-amber-500 border-amber-600 text-white shadow`;
+    cls = `${base} bg-amber-500 border-indigo-600 text-white shadow`;
   } else if (status !== 'NOT_STARTED') {
     cls = `${base} bg-indigo-500 border-indigo-600 text-white shadow`;
   }
