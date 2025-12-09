@@ -22,6 +22,7 @@ export class AgentI18n {
      */
     private getValue(path: string): string {
         const keys = path.split('.');
+        console.log('获取翻译路径:', path);
         let value = this.messages;
         for (const key of keys) {
             value = value?.[key];

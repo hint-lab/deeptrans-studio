@@ -2,11 +2,14 @@
 FROM node:20-slim AS builder
 WORKDIR /app 
 
-# 设置国内镜像源
-RUN npm config set registry https://registry.npmmirror.com
+# 安装yarn（如果镜像中没有）
+RUN corepack enable && \
+    corepack prepare yarn@1.22.22 \
+    --activate && \
+    yarn config set registry https://registry.npmmirror.com
 
-# 复制 package.json 和 package-lock.json
-COPY package*.json ./
+# 复制 package.json 和 yarn.lock
+COPY package.json yarn.lock* ./
 
 # 创建 prisma 目录
 RUN mkdir -p prisma
@@ -14,10 +17,8 @@ RUN mkdir -p prisma
 # 复制 prisma 目录
 COPY prisma ./prisma/
 RUN apt-get update -y && apt-get install -y openssl libssl-dev
-
-# 修改这一行: 使用 npm install 替代 npm ci
-RUN npm install --legacy-peer-deps --ignore-scripts --no-audit --no-fund
-
+# 使用yarn安装（与本地一致）
+RUN yarn install --frozen-lockfile --production=false
 # 手动运行 prisma generate（如果 schema.prisma 存在）
 RUN if [ -f ./prisma/schema.prisma ]; then npx prisma generate; fi
 
@@ -25,7 +26,7 @@ RUN if [ -f ./prisma/schema.prisma ]; then npx prisma generate; fi
 COPY . .
 
 # 使用更高效的构建选项
-RUN npm run build
+RUN yarn build
 
 # 生产阶段
 FROM node:20-slim AS runner

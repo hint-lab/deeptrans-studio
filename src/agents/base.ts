@@ -77,6 +77,8 @@ export abstract class BaseAgent<TInput, TOutput> {
     // 获取翻译后的角色、领域等信息
     const roleText = i18n.getRole(this.role);
     const domainText = i18n.getDomain(this.domain);
+    console.log('sourceLanguage:', this.sourceLanguage);
+    console.log('targetLanguage:', this.targetLanguage);
     const sourceLanguageText = i18n.getLanguage(this.sourceLanguage);
     const targetLanguageText = i18n.getLanguage(this.targetLanguage);
     const qualityText = i18n.getQuality(this.quality);

@@ -19,6 +19,8 @@ export async function chatText(
   options?: { model?: string; temperature?: number; maxTokens?: number }
 ): Promise<string> {
   const openai = getOpenAI();
+  console.log('使用的模型:', options?.model || getModelName());
+  console.log('发送的消息:', JSON.stringify(messages, null, 2));
   const result = await generateText({
     model: openai.chat(options?.model || getModelName()),
     messages,
