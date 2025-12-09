@@ -22,7 +22,7 @@ export function ExportMenu() {
     console.log("docId:"+docId)
     return (
         <MenubarMenu>
-            <MenubarTrigger><span className="flex items-center whitespace-nowrap gap-2">{t('label')}</span>
+            <MenubarTrigger><span className="flex items-center whitespace-nowrap gap-2 cursor-pointer hover:opacity-90">{t('label')}</span>
             </MenubarTrigger>
             <MenubarContent>
                 <MenubarItem asChild disabled={!canExport}>

@@ -18,7 +18,7 @@ model User {
   role          UserRole      @default(USER)
   tenantId      String?
   tenant        Tenant?       @relation(fields: [tenantId], references: [id], onDelete: SetNull)
-
+  image String? @db.VarChar(500) 
   accounts      Account[]
 
   // Projects & Documents

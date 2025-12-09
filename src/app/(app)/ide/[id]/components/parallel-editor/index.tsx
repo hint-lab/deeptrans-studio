@@ -387,10 +387,11 @@ export default function ParallelEditor({
         if (!documentItem.targetText?.trim() && currentStage === 'NOT_STARTED' && documentItem.sourceText?.trim()) {
           try {
             logInfo('自动生成基线翻译...');
+            console.log('自动基线翻译参数:', { sourceLanguage, targetLanguage } );
             const baselineText = await baselineTranslateAction(
               documentItem.sourceText,
-              getLanguageLabelByCode(sourceLanguage) || 'auto',
-              getLanguageLabelByCode(targetLanguage) || 'auto',
+              sourceLanguage || 'auto',
+              targetLanguage || 'auto',
               { prompt: undefined }
             );
             if (baselineText) {

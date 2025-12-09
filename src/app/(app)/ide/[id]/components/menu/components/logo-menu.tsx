@@ -15,7 +15,7 @@ export function LogoMenu({ logoSrc }: LogoMenuProps) {
     const [prefOpen, setPrefOpen] = useState(false);
     return (
         <MenubarMenu>
-            <MenubarTrigger className="font-bold w-40">
+            <MenubarTrigger className="font-bold w-40 cursor-pointer hover:opacity-90">
                 <Image
                     src={logoSrc}
                     alt="DeepTrans Studio"

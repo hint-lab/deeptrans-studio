@@ -71,6 +71,7 @@ export async function baselineTranslateAction(
   options?: { prompt?: string }
 ): Promise<string> {
   try {
+    console.log('基线翻译参数:', { sourceLanguage, targetLanguage } );
     const agent = new TermEmbedTranslateAgent(sourceLanguage, targetLanguage);
     const result = await agent.execute({
       text,

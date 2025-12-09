@@ -62,9 +62,11 @@ export abstract class BaseAgent<TInput, TOutput> {
 
   // Core LLM wrappers (for subclasses)
   protected async json<T = any>(messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>, opts?: { maxTokens?: number }): Promise<T> {
+    console.log('发送的json消息:', JSON.stringify(messages, null, 2));
     return chatJSON<T>(messages as any, opts);
   }
   protected async text(messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>, opts?: { maxTokens?: number }): Promise<string> {
+    console.log('发送的text消息:', JSON.stringify(messages, null, 2));
     return chatText(messages as any, opts);
   }
 
@@ -75,13 +77,15 @@ export abstract class BaseAgent<TInput, TOutput> {
     // 获取翻译后的角色、领域等信息
     const roleText = i18n.getRole(this.role);
     const domainText = i18n.getDomain(this.domain);
+    console.log('sourceLanguage:', this.sourceLanguage);
+    console.log('targetLanguage:', this.targetLanguage);
     const sourceLanguageText = i18n.getLanguage(this.sourceLanguage);
     const targetLanguageText = i18n.getLanguage(this.targetLanguage);
     const qualityText = i18n.getQuality(this.quality);
     const formalityText = i18n.getFormality(this.formality);
 
     let prompt = i18n.getSystemPrompt('base', { role: roleText });
-
+    console.log('初始发送的消息:', JSON.stringify(prompt, null, 2));
     // 添加领域信息
     if (this.domain !== 'general') {
       prompt += i18n.getSystemPrompt('domain', { domain: domainText });
@@ -110,7 +114,7 @@ export abstract class BaseAgent<TInput, TOutput> {
     if (constraints?.length) {
       prompt += `\n${i18n.getSystemPrompt('requirements')}\n${constraints.map((c, i) => `${i + 1}) ${c}`).join('\n')}`;
     }
-
+    console.log('返回的发送的消息:', JSON.stringify(prompt, null, 2));
     return prompt;
   }
 

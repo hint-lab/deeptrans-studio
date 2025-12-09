@@ -68,8 +68,8 @@ export default function PreTranslatePanel() {
       setLoadingBaseline(true);
       const baselineResult = await baselineTranslateAction(
         sourceText,
-        getLanguageLabelByCode(sourceLanguage) || 'auto',
-        getLanguageLabelByCode(targetLanguage) || 'auto',
+        sourceLanguage || 'auto',
+        targetLanguage || 'auto',
         { prompt: undefined }
       );
       const baselineText = baselineResult || '';

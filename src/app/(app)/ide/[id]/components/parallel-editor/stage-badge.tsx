@@ -198,7 +198,9 @@ const StageBadgeBar: React.FC<StageBadgeBarProps> = ({ className, runTranslate, 
                 {steps.map((step, i) => {
                   const isCur = i === idx;
                   const isDone = i < idx;
-                  const isHuman = step === 'MT_REVIEW' || step === 'QA_REVIEW' || step === 'POST_EDIT_REVIEW' || step === 'SIGN_OFF';
+                  //const isHuman = step === 'MT_REVIEW' || step === 'QA_REVIEW' || step === 'POST_EDIT_REVIEW' || step === 'SIGN_OFF';
+                  //禁用人工作业阶段黄色高亮，全部使用机器翻译风格，避免不必要的视觉冲突与歧义
+                  const isHuman = false;
                   const isCompleted = step === 'COMPLETED';
                   let cls = `${base} bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-foreground/70`;
                   if (isDone) cls = `${base} ${isHuman ? 'bg-amber-500 border-amber-600' : 'bg-indigo-500 border-indigo-600'} text-white shadow`;

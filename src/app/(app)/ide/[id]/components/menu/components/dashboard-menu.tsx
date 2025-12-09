@@ -9,7 +9,7 @@ export function DashboardMenu() {
         <MenubarMenu>
             <MenubarTrigger onClick={() => {
                 router.push(`/dashboard`);
-            }}><span className="flex items-center whitespace-nowrap gap-2">{t('dashboard')}</span></MenubarTrigger>
+            }}><span className="flex items-center whitespace-nowrap gap-2 cursor-pointer hover:opacity-90">{t('dashboard')}</span></MenubarTrigger>
         </MenubarMenu>
     );
 }

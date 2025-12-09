@@ -52,7 +52,7 @@ export function EditMenu() {
 
     return (
         <MenubarMenu>
-            <MenubarTrigger><span className="flex items-center whitespace-nowrap gap-2">{t('edit')}</span></MenubarTrigger>
+            <MenubarTrigger><span className="flex items-center whitespace-nowrap gap-2 cursor-pointer hover:opacity-90">{t('edit')}</span></MenubarTrigger>
             <MenubarContent>
                 <MenubarItem onClick={undo}>{tEditor('undo')}</MenubarItem>
                 <MenubarItem onClick={redo}>{tEditor('redo')}</MenubarItem>
