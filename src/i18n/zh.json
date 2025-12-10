@@ -648,7 +648,9 @@
         "roles": {
             "professional_assistant": "专业助手",
             "syntax_evaluator": "句法连接词和情态词的用法评估助手",
+            "syntax_analyzer":"句法对比分析助手",
             "term_extractor": "术语提取助手",
+            "terminology_extractor":"文档级术语提取助手",
             "professional_translator": "专业翻译员",
             "post_editor": "译后编辑助手",
             "discourse_query_assistant": "语篇查询助手",
@@ -673,7 +675,8 @@
             "education": "教育",
             "custom": "自定义",
             "linguistics": "语言学",
-            "discourse": "语篇学"
+            "discourse": "语篇学",
+            "terminology":"术语学"
         },
         "languages": {
             "auto": "自动检测",

@@ -135,7 +135,7 @@ export function ActionSection() {
                 setIsRunning(true);
                 const startRes = await fetch('/api/batch-pre-translate/start', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ itemIds: needPre, sourceLanguage: getLanguageLabelByCode(sourceLanguage) || 'auto', targetLanguage: getLanguageLabelByCode(targetLanguage) || 'auto' })
+                    body: JSON.stringify({ itemIds: needPre, sourceLanguage: sourceLanguage || 'auto', targetLanguage: targetLanguage || 'auto' })
                 }).then(r => r.json());
                 const { batchId } = startRes || {};
                 if (batchId) {
@@ -163,7 +163,7 @@ export function ActionSection() {
                 setBatchProgress(0);
                 setBatchOpen(true);
                 setIsRunning(true);
-                const startQARes = await fetch('/api/batch-quality-assure/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ itemIds: needQA, targetLanguage: getLanguageLabelByCode(targetLanguage) || 'auto' }) }).then(r => r.json());
+                const startQARes = await fetch('/api/batch-quality-assure/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ itemIds: needQA, targetLanguage: targetLanguage || 'auto' }) }).then(r => r.json());
                 const { batchId: qaId } = startQARes || {};
                 if (qaId) {
                     let tries = 0;
@@ -275,8 +275,8 @@ export function ActionSection() {
                 logAgent('预翻译 · 术语嵌入');
                 const embedded = await embedAndTranslateAction(
                     currentText,
-                    getLanguageLabelByCode(sourceLanguage) || 'auto',
-                    getLanguageLabelByCode(targetLanguage) || 'auto',
+                    sourceLanguage || 'auto',
+                    targetLanguage || 'auto',
                     dict,
                     { locale: locale }
                 );
@@ -290,8 +290,8 @@ export function ActionSection() {
             logAgent(`开始翻译，源文本长度: ${currentText.length}字符`);
             const preResult = await runPreTranslateAction(
                 currentText,
-                getLanguageLabelByCode(sourceLanguage) || 'auto',
-                getLanguageLabelByCode(targetLanguage) || 'auto',
+                sourceLanguage || 'auto',
+                targetLanguage || 'auto',
                 { prompt: undefined }
             );
             const translatedText = preResult?.translation || '';
@@ -355,7 +355,7 @@ export function ActionSection() {
             const itemIds = allItems.map(i => i.id);
             const startRes = await fetch('/api/batch-pre-translate/start', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ itemIds, sourceLanguage: getLanguageLabelByCode(sourceLanguage) || 'auto', targetLanguage: getLanguageLabelByCode(targetLanguage) || 'auto' })
+                body: JSON.stringify({ itemIds, sourceLanguage: sourceLanguage || 'auto', targetLanguage: targetLanguage || 'auto' })
             }).then(r => r.json());
             const { batchId, total: srvTotal } = startRes || {};
             if (!batchId) {
@@ -512,7 +512,7 @@ export function ActionSection() {
             setBatchOpen(true);
 
             const itemIds = allItems.map(i => i.id);
-            const startQARes = await fetch('/api/batch-quality-assure/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ itemIds, targetLanguage: getLanguageLabelByCode(targetLanguage) || 'auto' }) }).then(r => r.json());
+            const startQARes = await fetch('/api/batch-quality-assure/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ itemIds, targetLanguage: targetLanguage || 'auto' }) }).then(r => r.json());
             const { batchId, total: srvTotal } = startQARes || {};
             if (!batchId) {
                 setIsRunning(false);
@@ -783,7 +783,7 @@ export function ActionSection() {
             try {
                 const startRes = await fetch('/api/batch-pre-translate/start', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ itemIds, sourceLanguage: getLanguageLabelByCode(sourceLanguage) || 'auto', targetLanguage: getLanguageLabelByCode(targetLanguage) || 'auto' })
+                    body: JSON.stringify({ itemIds, sourceLanguage:sourceLanguage|| 'auto', targetLanguage: targetLanguage || 'auto' })
                 }).then(r => r.json());
                 const { batchId } = startRes || {};
                 if (batchId) {
@@ -806,7 +806,7 @@ export function ActionSection() {
             setProgressTitle('批量评估中');
             setBatchProgress(0);
             try {
-                const startQARes = await fetch('/api/batch-quality-assure/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ itemIds, targetLanguage: getLanguageLabelByCode(targetLanguage) || 'auto' }) }).then(r => r.json());
+                const startQARes = await fetch('/api/batch-quality-assure/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ itemIds, targetLanguage: targetLanguage || 'auto' }) }).then(r => r.json());
                 const { batchId } = startQARes || {};
                 if (batchId) {
                     let tries = 0;

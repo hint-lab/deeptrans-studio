@@ -2,12 +2,12 @@ import { BaseAgent, type AgentRunContext } from '../base'
 import { dictionaryTool } from '../tools/dictionary'
 import { DictEntry, TermCandidate } from '@/types/terms'
 
-export class DictLookupAgent extends BaseAgent<{ terms: TermCandidate[]; tenantId?: string; userId?: string; locale?: string }, DictEntry[]> {
-  constructor(locale?: string) {
+export class DictLookupAgent extends BaseAgent<{ terms: TermCandidate[]; tenantId?: string; userId?: string; locale?: string ; domain?: string }, DictEntry[]> {
+  constructor(locale?: string, domain?: string) {
     super({
       name: 'dict-lookup',
       role: 'terminology_assistant',
-      domain: 'general',
+      domain: domain || 'general',
       specialty: '术语库查询', // This will be replaced by i18n
       locale: locale || 'zh'
     });

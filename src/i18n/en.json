@@ -648,7 +648,9 @@
         "roles": {
             "professional_assistant": "Professional Assistant",
             "syntax_evaluator": "Syntax and Modal/Conjunction Usage Evaluation Assistant",
+            "syntax_analyzer":"Syntax Comparison and Analysis Assistant",
             "term_extractor": "Term Extraction Assistant",
+            "terminology_extractor":"Document-level Term Extraction Assistant",
             "professional_translator": "Professional Translator",
             "post_editor": "Post-editing Assistant",
             "discourse_query_assistant": "Discourse Query Assistant",
@@ -671,6 +673,7 @@
             "marketing": "Marketing",
             "engineering": "Engineering",
             "education": "Education",
+            "terminology":"Terminology",
             "custom": "Custom"
         },
         "languages": {
