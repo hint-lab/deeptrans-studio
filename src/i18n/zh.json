@@ -651,6 +651,7 @@
             "syntax_analyzer":"句法对比分析助手",
             "term_extractor": "术语提取助手",
             "terminology_extractor":"文档级术语提取助手",
+            "terminology_translator":"术语翻译助手",
             "professional_translator": "专业翻译员",
             "post_editor": "译后编辑助手",
             "discourse_query_assistant": "语篇查询助手",
