@@ -21,7 +21,7 @@ export function EmailLoginForm({ buttonText }: { buttonText?: string }) {
       const form = new FormData();
       form.set('mode', 'email');
       form.set('email', email);
-      const res = await fetch("/api/auth/send-code", { method: "POST", body: form });
+      const res = await fetch("/api/auth/send-email", { method: "POST", body: form });
       if (res.ok) {
         toast.info(process.env.NODE_ENV === "development" ? t("codeSentDev") : t("codeSent"));
         setCooldown(60);
