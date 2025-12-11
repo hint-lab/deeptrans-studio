@@ -1286,7 +1286,7 @@
             "qaWorkflow": "QA Workflow",
             "qaReview": "QA Review",
             "postEditWorkflow": "PE Workflow",
-            "postEditReview": "PE Review",
+            "postEditReview": "PE Review Workflow",
             "signoff": "Sign-off",
             "outputLog": "Output Log"
         },

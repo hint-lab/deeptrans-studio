@@ -1283,21 +1283,21 @@
             "showSettings": "展示设置"
         },
         "translationPanel": {
-            "preWorkflow": "预翻工作流",
-            "mtReview": "MT复核",
+            "preWorkflow": "预翻译工作流",
+            "mtReview": "预翻译复核工作流",
             "qaWorkflow": "质检工作流",
-            "qaReview": "QA复核",
-            "postEditWorkflow": "译后工作流",
-            "postEditReview": "PE复核",
+            "qaReview": "质检复核工作流",
+            "postEditWorkflow": "译后编辑工作流",
+            "postEditReview": "译后复核工作流",
             "signoff": "签发",
             "outputLog": "输出日志"
         },
         "translationStages": {
             "NOT_STARTED": "未开始",
             "MT": "预翻译",
-            "MT_REVIEW": "MT复核",
+            "MT_REVIEW": "预翻译复核",
             "QA": "质检",
-            "QA_REVIEW": "QA复核",
+            "QA_REVIEW": "质检复核",
             "POST_EDIT": "译后编辑",
             "POST_EDIT_REVIEW": "译后复核",
             "SIGN_OFF": "签发",
