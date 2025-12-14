@@ -46,6 +46,11 @@ const StageBadgeBar: React.FC<StageBadgeBarProps> = ({ className, runTranslate, 
   const redoText = t('redo');
   const signOffText = t('signOff');
 
+  // 在组件中添加一个辅助函数来判断是否应该禁用按钮
+  const shouldDisableButtons = (): boolean => {
+    return isRunning || !activeDocumentItem.id;
+  };
+
   // 辅助函数：同步状态更新
   const syncStatusUpdate = async (itemId: string, status: string) => {
     try {
@@ -73,31 +78,42 @@ const StageBadgeBar: React.FC<StageBadgeBarProps> = ({ className, runTranslate, 
   async function onReject(stage: TranslationStage) {
     setIsRunning(true);
     const backMap: Record<string, TranslationStage> = {
-      'MT_REVIEW': 'NOT_STARTED',
-      'QA_REVIEW': 'MT_REVIEW',
-      'POST_EDIT_REVIEW': 'QA_REVIEW',
+      'MT':'NOT_STARTED',
+      'MT_REVIEW': 'MT',
+      'QA': 'MT_REVIEW',
+      'QA_REVIEW': 'QA',
+      'POST_EDIT': 'QA_REVIEW',
+      'POST_EDIT_REVIEW': 'POST_EDIT',
       'SIGN_OFF': 'POST_EDIT_REVIEW',
       'COMPLETED': 'SIGN_OFF',
     };
     const prevStage = backMap[stage];
 
     try {
-      if (stage === 'MT_REVIEW') {
+    switch (stage) {
+      case 'MT_REVIEW':
         void undoTranslate();
-        await syncStatusUpdate(activeDocumentItem.id, 'NOT_STARTED');
-      }
-      else if (stage === 'QA_REVIEW') {
+        await syncStatusUpdate(activeDocumentItem.id, 'MT');
+        break;
+      case 'QA_REVIEW':
         void undoQA();
-        await syncStatusUpdate(activeDocumentItem.id, 'MT_REVIEW');
-      }
-      else if (stage === 'POST_EDIT_REVIEW') {
+        await syncStatusUpdate(activeDocumentItem.id, 'QA');
+        break;
+      case 'POST_EDIT_REVIEW':
         void undoPostEdit();
-        await syncStatusUpdate(activeDocumentItem.id, 'QA_REVIEW');
-      }
-      else {
+        await syncStatusUpdate(activeDocumentItem.id, 'POST_EDIT');
+        break;
+      case 'SIGN_OFF':
+        await syncStatusUpdate(activeDocumentItem.id, 'POST_EDIT_REVIEW');
+        break;
+      case 'COMPLETED':
         await syncStatusUpdate(activeDocumentItem.id, 'SIGN_OFF');
-      }
-
+        break;
+      default:
+        // 对于其他阶段（MT, QA, POST_EDIT），使用backMap
+        await syncStatusUpdate(activeDocumentItem.id, prevStage || 'NOT_STARTED');
+        break;
+    }
       setTimeout(() => {
         if (prevStage) setCurrentStage(prevStage);
         setIsRunning(false);
@@ -109,63 +125,83 @@ const StageBadgeBar: React.FC<StageBadgeBarProps> = ({ className, runTranslate, 
   };
 
   const onAccept = async (stage: TranslationStage) => {
-
-    setIsRunning(true);
-    if (stage === 'NOT_STARTED') {
-      setCurrentStage('MT');
-      await runTranslate();
-      // MT 步骤的记录已在 runTranslate 内部处理
-      await syncStatusUpdate(activeDocumentItem.id, 'MT_REVIEW');
-      setCurrentStage('MT_REVIEW');
-      await saveRecord('MT_REVIEW', 'HUMAN', 'SUCCESS');
-      setIsRunning(false);
-      return;
+  setIsRunning(true);
+  
+  try {
+    switch (stage) {
+      case 'NOT_STARTED':
+        setCurrentStage('MT');
+        await syncStatusUpdate(activeDocumentItem.id, 'MT');
+        await runTranslate();
+        // MT 步骤的记录已在 runTranslate 内部处理
+        break;
+        
+      case 'MT':
+        // 根据 backMap，MT 应该前进到 MT_REVIEW
+        setCurrentStage('MT_REVIEW');
+        await syncStatusUpdate(activeDocumentItem.id, 'MT_REVIEW');
+        await saveRecord('MT_REVIEW', 'HUMAN', 'SUCCESS');
+        break;
+        
+      case 'MT_REVIEW':
+        setCurrentStage('QA');
+        await syncStatusUpdate(activeDocumentItem.id, 'QA');
+        await runQA(); // 触发QA处理流程
+        // QA 步骤的记录已在 runQA 内部处理
+        break;
+        
+      case 'QA':
+        // 根据 backMap，QA 应该前进到 QA_REVIEW
+        setCurrentStage('QA_REVIEW');
+        await syncStatusUpdate(activeDocumentItem.id, 'QA_REVIEW');
+        await saveRecord('QA_REVIEW', 'HUMAN', 'SUCCESS');
+        break;
+        
+      case 'QA_REVIEW':
+        setCurrentStage('POST_EDIT');
+        await syncStatusUpdate(activeDocumentItem.id, 'POST_EDIT');
+        await runPostEdit(); // 自动运行译后编辑
+        // POST_EDIT 步骤的记录已在 runPostEdit 内部处理
+        break;
+        
+      case 'POST_EDIT':
+        // 根据 backMap，POST_EDIT 应该前进到 POST_EDIT_REVIEW
+        setCurrentStage('POST_EDIT_REVIEW');
+        await syncStatusUpdate(activeDocumentItem.id, 'POST_EDIT_REVIEW');
+        await saveRecord('POST_EDIT_REVIEW', 'HUMAN', 'SUCCESS');
+        break;
+        
+      case 'POST_EDIT_REVIEW':
+        // 推进到SIGN_OFF
+        setCurrentStage('SIGN_OFF');
+        await saveRecord('SIGN_OFF', 'HUMAN', 'SUCCESS');
+        await syncStatusUpdate(activeDocumentItem.id, 'SIGN_OFF');
+        
+        // 最后推进到COMPLETED
+        setCurrentStage('COMPLETED');
+        await saveRecord('COMPLETED', 'HUMAN', 'SUCCESS');
+        await syncStatusUpdate(activeDocumentItem.id, 'COMPLETED');
+        break;
+        
+      case 'SIGN_OFF':
+        setCurrentStage('COMPLETED');
+        await saveRecord('COMPLETED', 'HUMAN', 'SUCCESS');
+        await syncStatusUpdate(activeDocumentItem.id, 'COMPLETED');
+        break;
+        
+      default:
+        // 其他情况默认处理
+        const nextIdx = Math.min(steps.length - 1, steps.indexOf(stage) + 1);
+        setCurrentStage(steps[nextIdx] as TranslationStage);
+        await saveRecord(steps[nextIdx] as TranslationStage, 'HUMAN', 'SUCCESS');
+        break;
     }
-    else if (stage === 'MT_REVIEW') {
-      setCurrentStage('QA');
-      await runQA(); // 触发QA处理流程
-      // QA 步骤的记录已在 runQA 内部处理
-      await syncStatusUpdate(activeDocumentItem.id, 'QA_REVIEW');
-      setCurrentStage('QA_REVIEW');
-      await saveRecord('QA_REVIEW', 'HUMAN', 'SUCCESS');
-      setIsRunning(false);
-      return;
-    }
-    else if (stage === 'QA_REVIEW') {
-      setCurrentStage('POST_EDIT');
-      await runPostEdit(); // 自动运行译后编辑
-      // POST_EDIT 步骤的记录已在 runPostEdit 内部处理
-      await syncStatusUpdate(activeDocumentItem.id, 'POST_EDIT_REVIEW');
-      setCurrentStage('POST_EDIT_REVIEW');
-      await saveRecord('POST_EDIT_REVIEW', 'HUMAN', 'SUCCESS');
-      setIsRunning(false);
-      return;
-    }
-    else if (stage === 'POST_EDIT_REVIEW') {
-      // 推进到SIGN_OFF
-      setCurrentStage('SIGN_OFF');
-      await saveRecord('SIGN_OFF', 'HUMAN', 'SUCCESS');
-      await syncStatusUpdate(activeDocumentItem.id, 'SIGN_OFF');
-
-      // 最后推进到COMPLETED
-      setCurrentStage('COMPLETED');
-      await saveRecord('COMPLETED', 'HUMAN', 'SUCCESS');
-      await syncStatusUpdate(activeDocumentItem.id, 'COMPLETED');
-      setIsRunning(false);
-      return;
-    }
-    else if (stage === 'SIGN_OFF') {
-      setCurrentStage('COMPLETED');
-      await saveRecord('COMPLETED', 'HUMAN', 'SUCCESS');
-      await syncStatusUpdate(activeDocumentItem.id, 'COMPLETED');
-      setIsRunning(false);
-      return;
-    }
-    // 其他情况默认处理
-    const nextIdx = Math.min(steps.length - 1, steps.indexOf(stage) + 1);
-    setCurrentStage(steps[nextIdx] as TranslationStage);
-    await saveRecord(steps[nextIdx] as TranslationStage, 'HUMAN', 'SUCCESS');
+    
     setIsRunning(false);
+  } catch (error) {
+    console.error('阶段接受失败:', error);
+    setIsRunning(false);
+  }
   };
 
   const onDone = async (stage: TranslationStage) => {
@@ -232,25 +268,25 @@ const StageBadgeBar: React.FC<StageBadgeBarProps> = ({ className, runTranslate, 
         </div>
         <div className="ml-auto flex items-center gap-2">
           {(currentStage === 'MT_REVIEW' || currentStage === 'QA_REVIEW' || currentStage === 'POST_EDIT') && (
-            <Button variant="outline" size="sm" className="h-6 gap-1 rounded-none" onClick={() => onRedo(currentStage)}>
+            <Button variant="outline" size="sm" className="h-6 gap-1 rounded-none" onClick={() => onRedo(currentStage)} disabled={shouldDisableButtons()}>
               <RotateCcw className="h-3 w-3" />
               <span className="hidden sm:inline">{redoText}</span>
             </Button>
           )}
           {(currentStage !== 'NOT_STARTED' && currentStage !== 'COMPLETED') && (
-            <Button variant="outline" size="sm" className="h-6 gap-1 rounded-none" onClick={() => onReject(currentStage)}>
+            <Button variant="outline" size="sm" className="h-6 gap-1 rounded-none" onClick={() => onReject(currentStage)} disabled={shouldDisableButtons()}>
               <Undo2 className="h-3 w-3" />
               <span className="hidden sm:inline">{rejectText}</span>
             </Button>
           )}
           {currentStage !== 'COMPLETED' && (
-            <Button variant="default" size="sm" className="h-6 gap-1 rounded-none" onClick={() => onAccept(currentStage)}>
+            <Button variant="default" size="sm" className="h-6 gap-1 rounded-none" onClick={() => onAccept(currentStage)} disabled={shouldDisableButtons()}>
               <Check className="h-3 w-3" />
               <span className="hidden sm:inline">{acceptText}</span>
             </Button>
           )}
           {currentStage !== 'COMPLETED' && currentStage !== 'NOT_STARTED' && (
-            <Button variant="secondary" size="sm" className="h-6 gap-1 rounded-none" onClick={() => onDone(currentStage)}>
+            <Button variant="secondary" size="sm" className="h-6 gap-1 rounded-none" onClick={() => onDone(currentStage)} disabled={shouldDisableButtons()}>
               <SkipForward className="h-3 w-3" />
               <span className="hidden sm:inline">{signOffText}</span>
             </Button>
