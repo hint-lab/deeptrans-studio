@@ -1326,23 +1326,27 @@
                 "batchTranslation": "Batch Translation",
                 "quickTranslation": "Quick Translation",
                 "deepTranslation": "PreTranslation",
-                "importGlossary": "Import Glossary"
+                "importGlossary": "Import Glossary",
+                "toolTip":"Pre-translate source text using AI-powered translation engines"
             },
             "quality": {
                 "label": "Quality",
                 "singleEvaluation": "Single Evaluation",
-                "batchEvaluation": "Batch Evaluation"
+                "batchEvaluation": "Batch Evaluation",
+                "toolTip":"Execute quality check operations, only processing segments in the pre-translation review state."
             },
             "postEdit": {
                 "label": "Post-editing",
                 "enterPostEdit": "Enter Post-editing",
                 "singlePostEdit": "Single Post-edit",
-                "batchPostEdit": "Batch Post-edit"
+                "batchPostEdit": "Batch Post-edit",
+                "toolTip":"Perform post-editing operations, only processing segments in the quality review state."
             },
             "signoff": {
                 "label": "Sign-off",
                 "signoffCurrent": "Sign-off Current",
-                "batchSignoff": "Batch Sign-off"
+                "batchSignoff": "Batch Sign-off",
+                "toolTip":"Execute sign-off operations, only processing segments in the post-editing review state."
             },
             "export": {
                 "label": "Export",

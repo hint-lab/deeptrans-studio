@@ -1328,23 +1328,27 @@
                 "batchTranslation": "批量翻译",
                 "quickTranslation": "快速翻译",
                 "deepTranslation": "预翻译",
-                "importGlossary": "导入术语库"
+                "importGlossary": "导入术语库",
+                "toolTip":"执行预翻译操作，仅处理处于未开始状态的分段。"
             },
             "quality": {
                 "label": "质检",
                 "singleEvaluation": "单例质检",
-                "batchEvaluation": "批量质检"
+                "batchEvaluation": "批量质检",
+                "toolTip":"执行质检操作，仅处理处于预翻译复核状态的分段。"
             },
             "postEdit": {
                 "label": "译后编辑",
                 "enterPostEdit": "进入译后编辑",
                 "singlePostEdit": "单例编辑",
-                "batchPostEdit": "批量编辑"
+                "batchPostEdit": "批量编辑",
+                "toolTip":"执行译后编辑操作，仅处理处于质检复核状态的分段。"
             },
             "signoff": {
                 "label": "签发",
                 "signoffCurrent": "签发当前",
-                "batchSignoff": "批量签发"
+                "batchSignoff": "批量签发",
+                "toolTip":"执行签发操作，仅处理处于译后复核状态的分段。"
             },
             "export": {
                 "label": "导出",

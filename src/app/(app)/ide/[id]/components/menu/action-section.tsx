@@ -37,6 +37,13 @@ import { KeyboardShortcutsDialog, type ShortcutItem } from "../keyboard-shortcut
 import { PreferencesDialog } from "../preferences-dialog";
 
 export function ActionSection() {
+    // 在组件顶层获取所有需要的状态
+    const { 
+        preTranslateEmbedded,
+        qualityAssureBiTerm,
+        qualityAssureSyntax,
+        qualityAssureSyntaxEmbedded 
+    } = useAgentWorkflowSteps();
     const { logSystem, logAgent, logInfo, logWarning, logError } = useLogger();
     const { currentStage, setCurrentStage } = useTranslationState();
     const { isRunning, setIsRunning } = useRunningState();
@@ -67,14 +74,13 @@ export function ActionSection() {
     const [shortcutsOpen, setShortcutsOpen] = useReactState(false);
     const [preferencesOpen, setPreferencesOpen] = useReactState(false);
     const shortcuts: ShortcutItem[] = [
-        { id: 'batchTranslate', combo: '⌘B' },
-        { id: 'batchEvaluate', combo: '⌘E' },
-        { id: 'batchPostEdit', combo: '⌘P' },
-        { id: 'batchSignoff', combo: '⌘⇧S' },
-        { id: 'openShortcuts', combo: '⌘/' },
-        { id: 'rollback', combo: '⌘[' },
-        { id: 'advance', combo: '⌘]' },
-    ];
+    { id: 'batchTranslate', combo: '⌘B', description: '批量翻译未开始分段' },
+    { id: 'batchEvaluate', combo: '⌘E', description: '批量质检预翻译复核分段' },
+    { id: 'batchPostEdit', combo: '⌘P', description: '批量译后编辑' },
+    { id: 'batchSignoff', combo: '⌘⇧S', description: '批量签发' },
+    { id: 'openShortcuts', combo: '⌘/', description: '打开快捷键' },
+    { id: 'rollback', combo: '⌘[', description: '回退阶段' },
+    { id: 'advance', combo: '⌘]', description: '前进阶段' },];
 
     useEffect(() => { setMounted(true); }, []);
 
@@ -358,299 +364,444 @@ export function ActionSection() {
         }
     };
 
-    const handleBatchTranslate = async () => {
-        try {
-            setCurrentOperation('translate_batch');
-            const jid = `${(explorerTabs as any)?.projectId || 'proj'}.${Date.now()}`;
-            setBatchJobId(jid);
-            setProgressTitle('批量翻译中');
-            setBatchOpen(true);
-            batchCancelRef.current = false;
-            const tabs = explorerTabs?.documentTabs ?? [];
-            const allItems: DocumentItemTab[] = tabs.flatMap(t => t.items ?? []);
-            const total = allItems.length;
-            if (!total) {
-                toast.error("没有可翻译的分段：请先在左侧加载文档");
-                return;
-            }
-
-            setIsRunning(true);
-            setCurrentStage('MT' as any);
-            setBatchProgress(0);
-            logInfo(`批量翻译开始（服务端并发）：共 ${total} 个分段`);
-
-            // 交由服务端批处理高并发执行（减少前端瓶颈与限流）
-            const itemIds = allItems.map(i => i.id);
-            const startRes = await fetch('/api/batch-pre-translate/start', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ itemIds, sourceLanguage: sourceLanguage || 'auto', targetLanguage: targetLanguage || 'auto' })
-            }).then(r => r.json());
-            const { batchId, total: srvTotal } = startRes || {};
-            if (!batchId) {
-                setIsRunning(false);
-                setBatchOpen(false);
-                toast.error("批量翻译无法启动：没有有效的分段");
-                return;
-            }
-            setBatchJobId(batchId);
-            let tries = 0;
-            const timer = setInterval(async () => {
-                tries += 1;
-                try {
-                    const p = await fetch(`/api/batch-pre-translate/progress?batchId=${encodeURIComponent(batchId)}`).then(r => r.json());
-                    setBatchProgress(p.percent);
-                    if (p.percent >= 100) {
-                        clearInterval(timer);
-                        try { await fetch('/api/batch-pre-translate/persist', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ batchId }) }); } catch { }
-                        setIsRunning(false);
-                        setCurrentStage('MT' as any);
-                        setBatchOpen(false);
-                        setCurrentOperation('idle');
-                        if ((p.failed || 0) > 0) {
-                            toast.warning(`批量翻译完成，但有失败项：成功 ${p.done}，失败 ${p.failed}`);
-                        } else {
-                            toast.success(`批量翻译完成：全部成功（${p.done}/${p.total}）`);
-                        }
-                        // 刷新左侧 explorerTabs
-                        try {
-                            const tabs = await fetch(`/api/explorer-tabs?projectId=${encodeURIComponent((explorerTabs as any)?.projectId || '')}`).then(r => r.json());
-                            setExplorerTabs(tabs);
-                        } catch { }
-                        setBatchJobId(undefined);
-                    }
-                } catch { }
-                if (tries > 600) {
-                    clearInterval(timer);
-                    setBatchOpen(false);
-                    setIsRunning(false);
-                    setCurrentOperation('idle');
-                    toast.error("批量翻译超时：请稍后在日志中查看进度");
-                    setBatchJobId(undefined);
-                }
-            }, 1000);
-        } catch (e) {
-            console.error('批量翻译启动或轮询失败:', e);
-            setIsRunning(false);
-            setCurrentOperation('idle');
+const handleBatchTranslate = async () => {
+    try {
+        setCurrentOperation('translate_batch');
+        const jid = `${(explorerTabs as any)?.projectId || 'proj'}.${Date.now()}`;
+        setBatchJobId(jid);
+        setProgressTitle('批量翻译中');
+        setBatchOpen(true);
+        batchCancelRef.current = false;
+        const tabs = explorerTabs?.documentTabs ?? [];
+        
+        // 只获取未开始状态的分段
+        const notStartedItems: DocumentItemTab[] = tabs.flatMap(t => 
+            (t.items ?? []).filter((item: any) => 
+                item.status === 'NOT_STARTED' || !item.status
+            )
+        );
+        
+        const total = notStartedItems.length;
+        if (!total) {
+            toast.error("没有需要翻译的分段：所有分段都已开始或完成");
             setBatchOpen(false);
-            toast.error(`批量翻译失败：${String(e)}`);
-        }
-    };
-
-    const evaluateCurrentTranslation = async (provider: string = 'openai') => {
-        try {
-            setIsRunning(true);
-            setCurrentOperation('evaluate_single');
-            setCurrentStage('QA' as any);
-            const currentSourceText = sourceText;
-            // 优先使用预翻译产出的嵌入译文作为候选译文进行术语对齐
-            const preTranslation = useAgentWorkflowSteps()?.preTranslateEmbedded as string | undefined;
-            const currentTargetText = preTranslation || targetText;
-            if (!currentSourceText.trim() && !currentTargetText.trim()) {
-                toast.error("翻译评估的内容不能为空：请先输入要翻译的内容");
-                return;
-            }
-
-            // 记录翻译质检操作
-            logAgent(`开始翻译质检，文本总长度: ${currentSourceText.length + currentTargetText.length} 字符`);
-
-            // // 切换到聊天面板
-            // if (mode !== 'chat') setMode('chat');
-
-
-            // 质检两步：双语术语评估 → 句法特征评估 (移除语篇改写，放到 post-edit)
-            try {
-                setQARunning(true);
-
-                // 使用新的 runQualityAssureAction 统一执行质检流程
-                const result = await runQualityAssureAction(
-                    currentSourceText || "",
-                    currentTargetText || "",
-                    {
-                        targetLanguage,
-                        domain: undefined,
-                        projectId: undefined,
-                        locale: locale
-                    }
-                );
-
-                // 更新 useAgentWorkflowSteps 状态 (只保留 biTerm 和 syntax)
-                setQAOutputs({
-                    biTerm: result?.biTerm,
-                    syntax: result?.syntax,
-                });
-
-            } finally {
-                setQARunning(false);
-                setQAStep('idle');
-            }
-
-            // 保存质检结果到数据库
-            try {
-                const qaState = useAgentWorkflowSteps();
-                await saveQualityAssureResultsAction((activeDocumentItem as any)?.id, {
-                    biTerm: qaState.qualityAssureBiTerm,
-                    syntax: qaState.qualityAssureSyntax,
-                    syntaxEmbedded: qaState.qualityAssureSyntaxEmbedded,
-                });
-                logInfo('质检结果已保存到数据库');
-            } catch (error) {
-                logError(`保存质检结果失败: ${error}`);
-            }
-
-            // 质检结果目前不覆盖译文，仅更新状态与面板数据
-
-            // 无论编辑器是否存在都写入状态并同步本地视图
-            if (activeDocumentItem?.id) {
-                try { await updateDocItemStatusAction(activeDocumentItem.id, 'QA'); } catch { }
-                syncLocalStatusById(activeDocumentItem.id, 'QA');
-            }
-
-            // 更新目标编辑器与提示
-            if (targetEditor?.editor) {
-                toast.success("评估完成：翻译质检已完成");
-                logInfo("翻译质检完成");
-            }
-        } catch (error) {
-            console.error("评估失败:", error);
-            toast.error("评估失败：请检查网络连接或稍后再试");
-            logError(`评估失败: ${error}`);
-            addMessage({ content: `评估失败: ${error}`, role: 'system' });
-        } finally {
-            setIsRunning(false);
             setCurrentOperation('idle');
+            return;
         }
-    };
 
-    const handleBatchEvaluate = async () => {
-        try {
-            setCurrentOperation('evaluate_batch');
-            const tabs = explorerTabs?.documentTabs ?? [];
-            const allItems: DocumentItemTab[] = tabs.flatMap(t => t.items ?? []);
-            const total = allItems.length;
-            if (!total) {
-                toast.error("没有可评估的分段：请先在左侧加载文档");
-                return;
-            }
+        setIsRunning(true);
+        setCurrentStage('MT' as any);
+        setBatchProgress(0);
+        logInfo(`批量翻译开始（服务端并发）：共 ${total} 个未开始分段`);
 
-            setIsRunning(true);
-            setCurrentStage('QA' as any);
-            setBatchProgress(0);
-            setProgressTitle('批量评估中');
-            setBatchOpen(true);
-
-            const itemIds = allItems.map(i => i.id);
-            const startQARes = await fetch('/api/batch-quality-assure/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ itemIds, targetLanguage: targetLanguage || 'auto' }) }).then(r => r.json());
-            const { batchId, total: srvTotal } = startQARes || {};
-            if (!batchId) {
-                setIsRunning(false);
-                setBatchOpen(false);
-                toast.error("批量评估无法启动：没有有效的分段");
-                return;
-            }
-            setBatchJobId(batchId);
-
-            // 轮询进度
-            let tries = 0;
-            const timer = setInterval(async () => {
-                tries += 1;
-                try {
-                    const p = await fetch(`/api/batch-quality-assure/progress?batchId=${encodeURIComponent(batchId)}`).then(r => r.json());
-                    setBatchProgress(p.percent);
-                    if (p.percent >= 100) {
-                        clearInterval(timer);
-                        try { await fetch('/api/batch-quality-assure/persist', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ batchId }) }); } catch { }
-                        setIsRunning(false);
-                        setCurrentStage('QA' as any);
-                        setBatchOpen(false);
-                        setCurrentOperation('idle');
-                        if ((p.failed || 0) > 0) {
-                            toast.warning(`批量评估完成，但有失败项：成功 ${p.done}，失败 ${p.failed}`);
-                        } else {
-                            toast.success(`批量评估完成：全部成功（${p.done}/${p.total}）`);
-                        }
-                        // 刷新左侧 explorerTabs
-                        try {
-                            const tabs = await fetch(`/api/explorer-tabs?projectId=${encodeURIComponent((explorerTabs as any)?.projectId || '')}`).then(r => r.json());
-                            setExplorerTabs(tabs);
-                        } catch { }
-                        setBatchJobId(undefined);
-                    }
-                } catch { }
-                if (tries > 600) { // 最长 10 分钟
-                    clearInterval(timer);
-                    setBatchOpen(false);
-                    setIsRunning(false);
-                    setCurrentOperation('idle');
-                    toast.error("批量评估超时：请稍后在日志中查看进度");
-                    setBatchJobId(undefined);
-                }
-            }, 1000);
-        } catch (e) {
+        // 只处理未开始的分段
+        const itemIds = notStartedItems.map(i => i.id);
+        const startRes = await fetch('/api/batch-pre-translate/start', {
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                itemIds, 
+                sourceLanguage: sourceLanguage || 'auto', 
+                targetLanguage: targetLanguage || 'auto' 
+            })
+        }).then(r => r.json());
+        
+        const { batchId, total: srvTotal } = startRes || {};
+        if (!batchId) {
             setIsRunning(false);
             setBatchOpen(false);
             setCurrentOperation('idle');
-            toast.error(`批量评估启动失败：${String(e)}`);
+            toast.error("批量翻译无法启动：没有有效的未开始分段");
+            return;
         }
-    };
-
-    // 提取批量签发逻辑，便于快捷键和菜单复用
-    const batchSignoff = async () => {
-        try {
-            const tabs = explorerTabs?.documentTabs ?? [];
-            const aid = (activeDocumentItem as any)?.id;
-            const currentTab = tabs.find((t: any) => (t.items ?? []).some((it: any) => it.id === aid));
-            const items: any[] = (currentTab?.items ?? []) as any[];
-            if (!items.length) return;
-            setProgressTitle('批量签发中');
-            setBatchProgress(0);
-            setBatchOpen(true);
-            setIsRunning(true);
-            setCurrentOperation('post_edit');
-            let done = 0;
-            const total = items.length;
-            for (const it of items) {
-                if (it.status !== 'SIGN_OFF') {
-                    try {
-                        await updateDocItemStatusAction(it.id, 'SIGN_OFF');
-                        // 创建 Sign-off 事件记录
-                        await recordGoToNextTranslationProcessEventAction(it.id, 'SIGN_OFF', 'HUMAN', 'SUCCESS');
-                        // 创建 Completed 事件记录
-                        await recordGoToNextTranslationProcessEventAction(it.id, 'COMPLETED', 'HUMAN', 'SUCCESS');
+        
+        setBatchJobId(batchId);
+        let tries = 0;
+        const timer = setInterval(async () => {
+            tries += 1;
+            try {
+                const p = await fetch(`/api/batch-pre-translate/progress?batchId=${encodeURIComponent(batchId)}`).then(r => r.json());
+                setBatchProgress(p.percent);
+                if (p.percent >= 100) {
+                    clearInterval(timer);
+                    try { 
+                        await fetch('/api/batch-pre-translate/persist', { 
+                            method: 'POST', 
+                            headers: { 'Content-Type': 'application/json' }, 
+                            body: JSON.stringify({ batchId }) 
+                        }); 
                     } catch { }
-                }
-                done += 1;
-                setBatchProgress(Math.round((done / total) * 100));
-            }
-            try {
-                if ((activeDocumentItem as any)?.id) {
-                    await updateDocItemStatusAction((activeDocumentItem as any)?.id, 'SIGN_OFF');
-                    // 为当前激活项也创建事件记录（如果还没有的话）
-                    await recordGoToNextTranslationProcessEventAction((activeDocumentItem as any)?.id, 'SIGN_OFF', 'HUMAN', 'SUCCESS');
-                    await recordGoToNextTranslationProcessEventAction((activeDocumentItem as any)?.id, 'COMPLETED', 'HUMAN', 'SUCCESS');
+                    
+                    setIsRunning(false);
+                    setCurrentStage('MT' as any);
+                    setBatchOpen(false);
+                    setCurrentOperation('idle');
+                    
+                    if ((p.failed || 0) > 0) {
+                        toast.warning(`批量翻译完成，但有失败项：成功 ${p.done}，失败 ${p.failed}`);
+                    } else {
+                        toast.success(`批量翻译完成：成功处理 ${p.done} 个未开始分段`);
+                    }
+                    
+                    // 刷新左侧 explorerTabs
+                    try {
+                        const tabs = await fetch(`/api/explorer-tabs?projectId=${encodeURIComponent((explorerTabs as any)?.projectId || '')}`).then(r => r.json());
+                        setExplorerTabs(tabs);
+                    } catch { }
+                    setBatchJobId(undefined);
                 }
             } catch { }
-            setExplorerTabs((prev: any) => {
-                if (!prev?.documentTabs) return prev;
-                return {
-                    ...prev,
-                    documentTabs: prev.documentTabs.map((tab: any) => ({
-                        ...tab,
-                        items: (tab.items ?? []).map((it: any) => {
-                            const inCurrent = (currentTab?.items ?? []).some((x: any) => x.id === it.id);
-                            return inCurrent ? { ...it, status: 'SIGN_OFF' } : it;
-                        }),
-                    })),
-                };
-            });
-            setCurrentStage('SIGN_OFF' as any);
-            setBatchProgress(100);
-            setBatchOpen(false);
-        } finally {
-            setIsRunning(false);
-            setCurrentOperation('idle');
+            if (tries > 600) {
+                clearInterval(timer);
+                setBatchOpen(false);
+                setIsRunning(false);
+                setCurrentOperation('idle');
+                toast.error("批量翻译超时：请稍后在日志中查看进度");
+                setBatchJobId(undefined);
+            }
+        }, 1000);
+    } catch (e) {
+        console.error('批量翻译启动或轮询失败:', e);
+        setIsRunning(false);
+        setCurrentOperation('idle');
+        setBatchOpen(false);
+        toast.error(`批量翻译失败：${String(e)}`);
+    }
+};
+
+const evaluateCurrentTranslation = async (provider: string = 'openai') => {
+    try {
+        // 检查前置条件
+        const id = (activeDocumentItem as any)?.id;
+        if (!id) {
+            toast.error("没有激活的文档项，无法进行质检");
+            return;
         }
-    };
+
+        // 检查当前状态是否允许质检（应该在 MT_REVIEW 状态）
+        if (activeDocumentItem?.status !== 'MT_REVIEW') {
+            toast.error(`当前分段状态为 ${activeDocumentItem?.status || '未知'}，无法进行质检。仅在预翻译复核阶段允许质检`);
+            return;
+        }
+
+        // 检查文本内容
+        const currentSourceText = sourceText;
+        const preTranslation = preTranslateEmbedded as string | undefined;
+        const currentTargetText = preTranslation || targetText;
+        
+        if (!currentSourceText.trim()) {
+            toast.error("原文内容为空，无法进行质检");
+            return;
+        }
+        
+        if (!currentTargetText.trim()) {
+            toast.error("译文内容为空，无法进行质检。请先完成预翻译");
+            return;
+        }
+
+        setIsRunning(true);
+        setCurrentOperation('evaluate_single');
+        // 记录开始质检
+        logAgent(`开始翻译质检，原文长度: ${currentSourceText.length}字符，译文长度: ${currentTargetText.length}字符`);
+
+        // 质检两步：双语术语评估 → 句法特征评估
+        try {
+            setQARunning(true);
+            setCurrentStage('QA' as any);
+            setQAStep('bi-term-evaluate');
+
+            // 使用新的 runQualityAssureAction 统一执行质检流程
+            const result = await runQualityAssureAction(
+                currentSourceText || "",
+                currentTargetText || "",
+                {
+                    targetLanguage,
+                    domain: undefined,
+                    projectId: undefined,
+                    locale: locale
+                }
+            );
+
+            // 更新 useAgentWorkflowSteps 状态
+            setQAOutputs({
+                biTerm: result?.biTerm,
+                syntax: result?.syntax,
+            });
+
+            setQAStep('syntax-evaluate');
+            
+        } finally {
+            setQARunning(false);
+            setQAStep('idle');
+        }
+
+        // 保存质检结果到数据库
+        try {
+            const qaState = useAgentWorkflowSteps();
+            await saveQualityAssureResultsAction(id, {
+                biTerm: qaState.qualityAssureBiTerm,
+                syntax: qaState.qualityAssureSyntax,
+                syntaxEmbedded: qaState.qualityAssureSyntaxEmbedded,
+            });
+            logInfo('质检结果已保存到数据库');
+        } catch (error) {
+            logError(`保存质检结果失败: ${error}`);
+            // 继续执行，不中断流程
+        }
+
+        // 更新状态：从 MT_REVIEW 到 QA_REVIEW
+        try {
+            // 1. 更新数据库状态
+            await updateDocItemStatusAction(id, 'QA_REVIEW');
+            
+            // 2. 同步本地状态
+            syncLocalStatusById(id, 'QA_REVIEW');
+            
+            // 3. 更新当前组件状态
+            setCurrentStage('QA_REVIEW' as any);
+            
+            // 4. 记录质检完成事件
+            await recordGoToNextTranslationProcessEventAction(id, 'QA', 'AGENT', 'SUCCESS');
+            await recordGoToNextTranslationProcessEventAction(id, 'QA_REVIEW', 'HUMAN', 'SUCCESS');
+            
+            logInfo(`分段 ${id} 质检完成，状态更新为 QA_REVIEW`);
+        } catch (error) {
+            logError(`状态更新失败: ${error}`);
+            // 继续执行，不中断流程
+        }
+
+        // 更新目标编辑器与提示
+        if (targetEditor?.editor) {
+            toast.success("质检完成：翻译质检已完成，请复核质检结果");
+            logInfo("翻译质检完成，等待复核");
+        } else {
+            toast.success("质检完成：翻译质检已完成");
+        }
+        
+    } catch (error: any) {
+        console.error("质检失败:", error);
+        
+        // 提供更详细的错误信息
+        let errorMessage = "质检失败：请检查网络连接或稍后再试";
+        if (error.message?.includes('timeout')) {
+            errorMessage = "质检超时：请检查网络连接或稍后重试";
+        } else if (error.message?.includes('API')) {
+            errorMessage = "质检API调用失败：请检查API配置";
+        } else if (error.message?.includes('validation')) {
+            errorMessage = "质检参数验证失败：请检查输入内容";
+        }
+        
+        toast.error(errorMessage);
+        logError(`质检失败: ${error.message || error}`);
+        
+        // 记录失败事件
+        try {
+            const id = (activeDocumentItem as any)?.id;
+            if (id) {
+                await recordGoToNextTranslationProcessEventAction(id, 'QA', 'AGENT', 'FAILED');
+            }
+        } catch (e) {
+            // 忽略事件记录失败
+        }
+        
+        // 添加到聊天面板
+        addMessage({ 
+            content: `质检失败: ${error.message || '未知错误'}`, 
+            role: 'system'
+        });
+    } finally {
+        setIsRunning(false);
+        setCurrentOperation('idle');
+    }
+};
+
+const handleBatchEvaluate = async () => {
+    try {
+        setCurrentOperation('evaluate_batch');
+        const tabs = explorerTabs?.documentTabs ?? [];
+        
+        // 只获取需要质检的分段：MT_REVIEW 状态（预翻译复核阶段）
+        const needEvaluateItems: DocumentItemTab[] = tabs.flatMap(t => 
+            (t.items ?? []).filter((item: any) => 
+                item.status === 'MT_REVIEW'
+            )
+        );
+        
+        const total = needEvaluateItems.length;
+        if (!total) {
+            toast.error("没有需要质检的分段：所有分段都已质检或未处于预翻译复核阶段");
+            setCurrentOperation('idle');
+            return;
+        }
+
+        setIsRunning(true);
+        setCurrentStage('QA' as any);
+        setBatchProgress(0);
+        setProgressTitle('批量质检中');
+        setBatchOpen(true);
+
+        const itemIds = needEvaluateItems.map(i => i.id);
+        const startQARes = await fetch('/api/batch-quality-assure/start', { 
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' }, 
+            body: JSON.stringify({ 
+                itemIds, 
+                targetLanguage: targetLanguage || 'auto' 
+            }) 
+        }).then(r => r.json());
+        
+        const { batchId, total: srvTotal } = startQARes || {};
+        if (!batchId) {
+            setIsRunning(false);
+            setBatchOpen(false);
+            setCurrentOperation('idle');
+            toast.error("批量质检无法启动：没有需要质检的分段");
+            return;
+        }
+        
+        setBatchJobId(batchId);
+
+        // 轮询进度
+        let tries = 0;
+        const timer = setInterval(async () => {
+            tries += 1;
+            try {
+                const p = await fetch(`/api/batch-quality-assure/progress?batchId=${encodeURIComponent(batchId)}`).then(r => r.json());
+                setBatchProgress(p.percent);
+                if (p.percent >= 100) {
+                    clearInterval(timer);
+                    try { 
+                        await fetch('/api/batch-quality-assure/persist', { 
+                            method: 'POST', 
+                            headers: { 'Content-Type': 'application/json' }, 
+                            body: JSON.stringify({ batchId }) 
+                        }); 
+                        // 批量更新状态到 QA_REVIEW
+                        for (const item of needEvaluateItems) {
+                            try {
+                                await updateDocItemStatusAction(item.id, 'QA_REVIEW');
+                                await recordGoToNextTranslationProcessEventAction(item.id, 'QA', 'AGENT', 'SUCCESS');
+                                await recordGoToNextTranslationProcessEventAction(item.id,'QA_REVIEW', 'HUMAN', 'SUCCESS');
+                            } catch (e) {
+                                console.error(`更新分段 ${item.id} 状态失败:`, e);
+                            }
+                        }
+                    } catch { }
+                    
+                    setIsRunning(false);
+                    setCurrentStage('QA_REVIEW' as any);
+                    setBatchOpen(false);
+                    setCurrentOperation('idle');
+                    
+                    if ((p.failed || 0) > 0) {
+                        toast.warning(`批量质检完成，但有失败项：成功 ${p.done}，失败 ${p.failed}`);
+                    } else {
+                        toast.success(`批量质检完成：成功处理 ${p.done} 个预翻译复核分段`);
+                    }
+                    
+                    // 刷新左侧 explorerTabs
+                    try {
+                        const tabs = await fetch(`/api/explorer-tabs?projectId=${encodeURIComponent((explorerTabs as any)?.projectId || '')}`).then(r => r.json());
+                        setExplorerTabs(tabs);
+                    } catch { }
+                    setBatchJobId(undefined);
+                }
+            } catch { }
+            if (tries > 600) { // 最长 10 分钟
+                clearInterval(timer);
+                setBatchOpen(false);
+                setIsRunning(false);
+                setCurrentOperation('idle');
+                toast.error("批量质检超时：请稍后在日志中查看进度");
+                setBatchJobId(undefined);
+            }
+        }, 1000);
+
+    } catch (e) {
+        setIsRunning(false);
+        setBatchOpen(false);
+        setCurrentOperation('idle');
+        toast.error(`批量质检启动失败：${String(e)}`);
+    }
+};
+
+// 提取批量签发逻辑，便于快捷键和菜单复用
+const batchSignoff = async () => {
+    try {
+        const tabs = explorerTabs?.documentTabs ?? [];
+        const aid = (activeDocumentItem as any)?.id;
+        const currentTab = tabs.find((t: any) => (t.items ?? []).some((it: any) => it.id === aid));
+        const items: any[] = (currentTab?.items ?? []) as any[];
+        if (!items.length) return;
+        
+        // 只处理 POST_EDIT_REVIEW 状态的分段
+        const itemsToSignoff = items.filter((it: any) => it.status === 'POST_EDIT_REVIEW');
+        const totalToSignoff = itemsToSignoff.length;
+        
+        if (totalToSignoff === 0) {
+            toast.info('当前页签中没有需要签发的分段');
+            return;
+        }
+        
+        setProgressTitle('批量签发中');
+        setBatchProgress(0);
+        setBatchOpen(true);
+        setIsRunning(true);
+        setCurrentOperation('post_edit');
+        
+        let done = 0;
+        for (const it of itemsToSignoff) {
+            try {
+                await updateDocItemStatusAction(it.id, 'SIGN_OFF');
+                // 只记录 SIGN_OFF 事件
+                await recordGoToNextTranslationProcessEventAction(it.id, 'SIGN_OFF', 'HUMAN', 'SUCCESS');
+            } catch (e) {
+                console.error(`签发分段 ${it.id} 失败:`, e);
+            }
+            done += 1;
+            setBatchProgress(Math.round((done / totalToSignoff) * 100));
+        }
+        
+        // 更新当前激活项（如果也在处理列表中）
+        try {
+            if ((activeDocumentItem as any)?.id) {
+                const currentItem = itemsToSignoff.find((it: any) => it.id === (activeDocumentItem as any)?.id);
+                if (currentItem) {
+                    setCurrentStage('SIGN_OFF' as any);
+                }
+            }
+        } catch { }
+        
+        // 本地同步（只更新处理过的分段）
+        setExplorerTabs((prev: any) => {
+            if (!prev?.documentTabs) return prev;
+            return {
+                ...prev,
+                documentTabs: prev.documentTabs.map((tab: any) => {
+                    if (tab.id === currentTab?.id) {
+                        return {
+                            ...tab,
+                            items: (tab.items ?? []).map((it: any) => {
+                                const shouldUpdate = itemsToSignoff.some((x: any) => x.id === it.id);
+                                return shouldUpdate ? { ...it, status: 'SIGN_OFF' } : it;
+                            }),
+                        };
+                    }
+                    return tab;
+                }),
+            };
+        });
+        
+        setBatchOpen(false);
+        toast.success(`批量签发完成：共处理 ${totalToSignoff} 个分段`);
+        
+    } catch (e) {
+        toast.error(`批量签发失败：${String(e)}`);
+    } finally {
+        setIsRunning(false);
+        setCurrentOperation('idle');
+    }
+};
 
 // 一步到完成：从当前分段所在页签，依次预译→评估→译后→完成
 const runToCompletionFromCurrent = async () => {
@@ -1130,141 +1281,252 @@ const runToCompletionFromCurrent = async () => {
                 />
                 <TranslateMenu
                     isTranslating={isRunning && (currentOperation === 'translate_single' || currentOperation === 'translate_batch')}
+                    canTranslate={(explorerTabs?.documentTabs ?? []).flatMap(t => t.items ?? []).some((it: any) => it.status === 'NOT_STARTED')}
                     onTranslate={handlePreTranslationAction}
                     onBatchTranslate={handleBatchTranslate}
                     progressPercent={batchProgress}
                 />
                 <QualityMenu
                     isTranslating={isRunning && (currentOperation === 'evaluate_single' || currentOperation === 'evaluate_batch')}
+                    canQuality={(explorerTabs?.documentTabs ?? []).flatMap(t => t.items ?? []).some((it: any) => it.status === 'MT_REVIEW')}
                     onEvaluate={handleEvaluateMode}
                     progressPercent={batchProgress}
                 />
                 <PostEditMenu
-                    isTranslating={isRunning && currentOperation === 'post_edit'}
-                    canEnter={(explorerTabs?.documentTabs ?? []).flatMap(t => t.items ?? []).every((it: any) => it.status === 'QA')}
-                    onMarkReviewed={async () => {
-                        try {
-                            if (!sourceText.trim() && !targetText.trim()) {
-                                toast.error('没有可审批的内容：请先进行翻译或评估');
-                                return;
-                            }
-                            setCurrentOperation('post_edit');
-                            setIsRunning(true);
-                            // 全部 DocItem 状态切为 POST_EDIT
-                            const allItems: any[] = (explorerTabs?.documentTabs ?? []).flatMap(t => t.items ?? []);
-                            for (const it of allItems) {
-                                try { await updateDocItemStatusAction(it.id, 'POST_EDIT'); } catch { }
-                            }
-                            try {
-                                // 根据当前激活项，更新所属文档与全局阶段
-                                if ((activeDocumentItem as any)?.id) {
-                                    await updateDocItemStatusAction((activeDocumentItem as any)?.id, 'POST_EDIT');
-                                }
-                            } catch { }
-                            // 本地同步标签
-                            setExplorerTabs((prev: any) => {
-                                if (!prev?.documentTabs) return prev;
-                                return {
-                                    ...prev,
-                                    documentTabs: prev.documentTabs.map((tab: any) => ({
-                                        ...tab,
-                                        items: (tab.items ?? []).map((it: any) => ({ ...it, status: 'POST_EDIT' })),
-                                    })),
-                                };
-                            });
-                            logInfo('已进入译后编辑（全部分段状态已更新）');
-                        } catch (e) {
-                            logError(`标记审批失败: ${e}`);
-                        } finally {
-                            setIsRunning(false);
-                            setCurrentOperation('idle');
+    isTranslating={isRunning && currentOperation === 'post_edit'}
+    // 修复：只允许 QA_REVIEW 状态的分段进入译后编辑
+    canEnter={(explorerTabs?.documentTabs ?? []).flatMap(t => t.items ?? []).some((it: any) => 
+        it.status === 'QA_REVIEW'
+    )}
+    onMarkReviewed={async () => {
+        try {
+            if (!sourceText.trim() && !targetText.trim()) {
+                toast.error('没有可审批的内容：请先进行翻译或评估');
+                return;
+            }
+            
+            const id = (activeDocumentItem as any)?.id;
+            if (!id) {
+                toast.error('没有激活的文档项');
+                return;
+            }
+            
+            // 检查当前分段状态是否为 QA_REVIEW
+            const currentItemStatus = activeDocumentItem?.status;
+            if (currentItemStatus !== 'QA_REVIEW') {
+                toast.error(`当前分段状态为 ${currentItemStatus || '未知'}，无法进入译后编辑。需要质检复核通过状态`);
+                return;
+            }
+            
+            setCurrentOperation('post_edit');
+            setIsRunning(true);
+            
+            try { 
+                // 只更新当前选中分段的状态
+                await updateDocItemStatusAction(id, 'POST_EDIT');
+                // 记录译后编辑事件
+                await recordGoToNextTranslationProcessEventAction(id, 'POST_EDIT', 'AGENT', 'SUCCESS');
+                
+                // 同步本地状态
+                syncLocalStatusById(id, 'POST_EDIT');
+                
+                // 更新当前组件状态
+                setCurrentStage('POST_EDIT' as any);
+                
+                logInfo(`分段 ${id} 已进入译后编辑`);
+                toast.success('当前分段已进入译后编辑');
+                
+            } catch (e) {
+                logError(`标记审批失败: ${e}`);
+                toast.error(`标记审批失败: ${String(e)}`);
+            }
+            
+        } catch (e) {
+            logError(`标记审批失败: ${e}`);
+            toast.error(`标记审批失败: ${String(e)}`);
+        } finally {
+            setIsRunning(false);
+            setCurrentOperation('idle');
+        }
+    }}
+    onBatchPostEdit={async () => {
+        try {
+            const tabs = explorerTabs?.documentTabs ?? [];
+            
+            // 只获取需要进入译后编辑的分段：QA_REVIEW 状态
+            const needPostEditItems: DocumentItemTab[] = tabs.flatMap(t => 
+                (t.items ?? []).filter((item: any) => 
+                    item.status === 'QA_REVIEW'
+                )
+            );
+            
+            const total = needPostEditItems.length;
+            if (!total) {
+                toast.error("没有需要进入译后编辑的分段：所有分段都已进入译后编辑或未处于质检复核阶段");
+                return;
+            }
+
+            setIsRunning(true);
+            setCurrentOperation('post_edit');
+            setProgressTitle('批量译后编辑中');
+            setBatchProgress(0);
+            setBatchOpen(true);
+            logInfo(`批量译后编辑开始：共 ${total} 个需要进入译后编辑的分段`);
+
+            let done = 0;
+            for (const it of needPostEditItems) {
+                try { 
+                    await updateDocItemStatusAction(it.id, 'POST_EDIT');
+                    // 记录译后编辑事件
+                    await recordGoToNextTranslationProcessEventAction(it.id, 'POST_EDIT', 'AGENT', 'SUCCESS');
+                } catch (e) {
+                    console.error(`更新分段 ${it.id} 状态失败:`, e);
+                }
+                done += 1;
+                setBatchProgress(Math.round((done / total) * 100));
+            }
+
+            // 如果当前激活项也在处理列表中，更新其状态
+            try {
+                const currentId = (activeDocumentItem as any)?.id;
+                if (currentId) {
+                    const currentItem = needPostEditItems.find((it: any) => it.id === currentId);
+                    if (currentItem) {
+                        setCurrentStage('POST_EDIT' as any);
+                    }
+                }
+            } catch { }
+
+            // 刷新左侧视图
+            try {
+                const tabsRes = await fetch(`/api/explorer-tabs?projectId=${encodeURIComponent((explorerTabs as any)?.projectId || '')}`).then(r => r.json());
+                setExplorerTabs(tabsRes);
+            } catch { }
+
+            setBatchOpen(false);
+            toast.success(`批量译后编辑完成：共处理 ${total} 个分段`);
+        } catch (e) {
+            toast.error(`批量译后编辑失败：${String(e)}`);
+        } finally {
+            setIsRunning(false);
+            setCurrentOperation('idle');
+        }
+    }} 
+/>
+
+{/* 签发菜单（与其他按钮同一行显示） */}
+<SignoffMenu
+    isRunning={isRunning}
+    canSignoff={(explorerTabs?.documentTabs ?? []).flatMap(t => t.items ?? []).some((it: any) => it.status === 'POST_EDIT_REVIEW')}
+    onSignoffCurrent={async () => {
+        try {
+            const id = (activeDocumentItem as any)?.id;
+            if (!id) return;
+            setIsRunning(true);
+            setCurrentOperation('post_edit');
+            try {
+                await updateDocItemStatusAction(id, 'SIGN_OFF');
+                // 只记录 SIGN_OFF 事件，COMPLETED 事件应该在后续流程中记录
+                await recordGoToNextTranslationProcessEventAction(id, 'SIGN_OFF', 'HUMAN', 'SUCCESS');
+            } catch { }
+            setExplorerTabs((prev: any) => {
+                if (!prev?.documentTabs) return prev;
+                return {
+                    ...prev,
+                    documentTabs: prev.documentTabs.map((tab: any) => ({
+                        ...tab,
+                        items: (tab.items ?? []).map((it: any) => (it.id === id ? { ...it, status: 'SIGN_OFF' } : it)),
+                    })),
+                };
+            });
+            setCurrentStage('SIGN_OFF' as any);
+        } finally {
+            setIsRunning(false);
+            setCurrentOperation('idle');
+        }
+    }}
+    onBatchSignoff={async () => {
+        try {
+            const tabs = explorerTabs?.documentTabs ?? [];
+            const aid = (activeDocumentItem as any)?.id;
+            const currentTab = tabs.find((t: any) => (t.items ?? []).some((it: any) => it.id === aid));
+            const items: any[] = (currentTab?.items ?? []) as any[];
+            if (!items.length) return;
+            
+            setProgressTitle('批量签发中');
+            setBatchProgress(0);
+            setBatchOpen(true);
+            setIsRunning(true);
+            setCurrentOperation('post_edit');
+            
+            let done = 0;
+            const total = items.length;
+            
+            // 只处理 POST_EDIT 状态的分段
+            const itemsToSignoff = items.filter((it: any) => it.status === 'POST_EDIT_REVIEW');
+            const totalToSignoff = itemsToSignoff.length;
+            
+            if (totalToSignoff === 0) {
+                toast.info('当前页签中没有需要签发的分段');
+                setBatchOpen(false);
+                setIsRunning(false);
+                setCurrentOperation('idle');
+                return;
+            }
+            
+            for (const it of itemsToSignoff) {
+                try {
+                    await updateDocItemStatusAction(it.id, 'SIGN_OFF');
+                    // 只记录 SIGN_OFF 事件
+                    await recordGoToNextTranslationProcessEventAction(it.id, 'SIGN_OFF', 'HUMAN', 'SUCCESS');
+                } catch (e) {
+                    console.error(`签发分段 ${it.id} 失败:`, e);
+                }
+                done += 1;
+                setBatchProgress(Math.round((done / totalToSignoff) * 100));
+            }
+            
+            // 更新当前激活项（如果也在处理列表中）
+            try {
+                if ((activeDocumentItem as any)?.id) {
+                    const currentItem = itemsToSignoff.find((it: any) => it.id === (activeDocumentItem as any)?.id);
+                    if (currentItem) {
+                        setCurrentStage('SIGN_OFF' as any);
+                    }
+                }
+            } catch { }
+            
+            // 本地同步（只更新处理过的分段）
+            setExplorerTabs((prev: any) => {
+                if (!prev?.documentTabs) return prev;
+                return {
+                    ...prev,
+                    documentTabs: prev.documentTabs.map((tab: any) => {
+                        if (tab.id === currentTab?.id) {
+                            return {
+                                ...tab,
+                                items: (tab.items ?? []).map((it: any) => {
+                                    const shouldUpdate = itemsToSignoff.some((x: any) => x.id === it.id);
+                                    return shouldUpdate ? { ...it, status: 'SIGN_OFF' } : it;
+                                }),
+                            };
                         }
-                    }}
-                    onBatchPostEdit={async () => {
-                        try {
-                            const tabs = explorerTabs?.documentTabs ?? [];
-                            const allItems: DocumentItemTab[] = tabs.flatMap(t => t.items ?? []);
-                            const total = allItems.length;
-                            if (!total) {
-                                toast.error("没有可编辑的分段：请先在左侧加载文档");
-                                return;
-                            }
-
-                            setIsRunning(true);
-                            setCurrentOperation('post_edit');
-                            setProgressTitle('批量译后编辑中');
-                            setBatchProgress(0);
-                            setBatchOpen(true);
-                            logInfo(`批量译后编辑开始：共 ${total} 个分段`);
-
-                            let done = 0;
-                            for (const it of allItems) {
-                                if (it.status !== 'POST_EDIT' && it.status !== 'SIGN_OFF') {
-                                    try { await updateDocItemStatusAction(it.id, 'POST_EDIT'); } catch { }
-                                }
-                                done += 1;
-                                setBatchProgress(Math.round((done / total) * 100));
-                            }
-
-                            // 刷新左侧视图
-                            try {
-                                const tabsRes = await fetch(`/api/explorer-tabs?projectId=${encodeURIComponent((explorerTabs as any)?.projectId || '')}`).then(r => r.json());
-                                setExplorerTabs(tabsRes);
-                            } catch { }
-
-                            setBatchOpen(false);
-                            toast.success(`批量译后编辑完成：共处理 ${total} 个分段`);
-                        } catch (e) {
-                            toast.error(`批量译后编辑失败：${String(e)}`);
-                        } finally {
-                            setIsRunning(false);
-                            setCurrentOperation('idle');
-                        }
-                    }} />
-                {/* 签发菜单（与其他按钮同一行显示） */}
-                <SignoffMenu
-                    isRunning={isRunning}
-                    canSignoffCurrent={(activeDocumentItem as any)?.status === 'POST_EDIT'}
-                    canBatchSignoff={(() => {
-                        const tabs = explorerTabs?.documentTabs ?? [];
-                        const aid = (activeDocumentItem as any)?.id;
-                        const tab = tabs.find((t: any) => (t.items ?? []).some((it: any) => it.id === aid));
-                        const items = (tab?.items ?? []) as any[];
-                        const allEligible = items.every((it: any) => it.status === 'POST_EDIT' || it.status === 'SIGN_OFF');
-                        const hasPending = items.some((it: any) => it.status === 'POST_EDIT');
-                        return items.length > 0 && allEligible && hasPending;
-                    })()}
-                    onSignoffCurrent={async () => {
-                        try {
-                            const id = (activeDocumentItem as any)?.id;
-                            if (!id) return;
-                            setIsRunning(true);
-                            setCurrentOperation('post_edit');
-                            try {
-                                await updateDocItemStatusAction(id, 'SIGN_OFF');
-                                // 创建 Sign-off 事件记录
-                                await recordGoToNextTranslationProcessEventAction(id, 'SIGN_OFF', 'HUMAN', 'SUCCESS');
-                                // 创建 Completed 事件记录
-                                await recordGoToNextTranslationProcessEventAction(id, 'COMPLETED', 'HUMAN', 'SUCCESS');
-                            } catch { }
-                            setExplorerTabs((prev: any) => {
-                                if (!prev?.documentTabs) return prev;
-                                return {
-                                    ...prev,
-                                    documentTabs: prev.documentTabs.map((tab: any) => ({
-                                        ...tab,
-                                        items: (tab.items ?? []).map((it: any) => (it.id === id ? { ...it, status: 'SIGN_OFF' } : it)),
-                                    })),
-                                };
-                            });
-                            setCurrentStage('SIGN_OFF' as any);
-                        } finally {
-                            setIsRunning(false);
-                            setCurrentOperation('idle');
-                        }
-                    }}
-                    onBatchSignoff={batchSignoff}
-                />
+                        return tab;
+                    }),
+                };
+            });
+            
+            setBatchOpen(false);
+            toast.success(`批量签发完成：共处理 ${totalToSignoff} 个分段`);
+            
+        } catch (e) {
+            toast.error(`批量签发失败：${String(e)}`);
+        } finally {
+            setIsRunning(false);
+            setCurrentOperation('idle');
+        }
+    }}
+/>
             </div>
             <BatchProgressDialog
                 open={batchOpen}

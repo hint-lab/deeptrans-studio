@@ -7,6 +7,7 @@ import { useTranslations } from "next-intl";
 export type ShortcutItem = {
     id: string; // i18n key under IDE.shortcuts
     combo: string; // e.g. ⌘B
+    description?: string; // Description of the shortcut
 };
 
 export function KeyboardShortcutsDialog({
