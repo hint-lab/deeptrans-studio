@@ -1302,7 +1302,9 @@
             "COMPLETED": "Completed",
             "ERROR": "Error",
             "RUNNING": "Running",
-            "START": "Start"
+            "START": "Start",
+            "oneClickCompletion":"One-click Completion",
+            "oneClickCompletionDesc":"Start from the current segment and automatically complete all subsequent processes"
         },
         "translationStagesShort": {
             "NOT_STARTED": "NS",
@@ -1318,12 +1320,12 @@
         },
         "menus": {
             "translate": {
-                "label": "Translation",
-                "translating": "Translating",
+                "label": "PreTranslation",
+                "translating": "PreTranslating",
                 "singleTranslation": "Single Translation",
                 "batchTranslation": "Batch Translation",
                 "quickTranslation": "Quick Translation",
-                "deepTranslation": "Deep Translation",
+                "deepTranslation": "PreTranslation",
                 "importGlossary": "Import Glossary"
             },
             "quality": {

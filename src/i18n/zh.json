@@ -1304,7 +1304,9 @@
             "COMPLETED": "完成",
             "ERROR": "错误",
             "RUNNING": "运行中",
-            "START": "开始"
+            "START": "开始",
+            "oneClickCompletion":"一键完成",
+            "oneClickCompletionDesc":"从当前分段开始，自动完成所有后续流程"
         },
         "translationStagesShort": {
             "NOT_STARTED": "未",
@@ -1320,18 +1322,18 @@
         },
         "menus": {
             "translate": {
-                "label": "深度翻译",
-                "translating": "翻译中",
+                "label": "预翻译",
+                "translating": "预译中",
                 "singleTranslation": "单例翻译",
                 "batchTranslation": "批量翻译",
                 "quickTranslation": "快速翻译",
-                "deepTranslation": "深度翻译",
+                "deepTranslation": "预翻译",
                 "importGlossary": "导入术语库"
             },
             "quality": {
-                "label": "质量评估",
-                "singleEvaluation": "单例评估",
-                "batchEvaluation": "批量评估"
+                "label": "质检",
+                "singleEvaluation": "单例质检",
+                "batchEvaluation": "批量质检"
             },
             "postEdit": {
                 "label": "译后编辑",

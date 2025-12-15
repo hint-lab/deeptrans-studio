@@ -29,10 +29,10 @@ export function PostEditMenu({ isTranslating, canEnter, onMarkReviewed, onBatchP
                 )}
             </MenubarTrigger>
             <MenubarContent>
-                <MenubarItem onClick={() => onMarkReviewed?.()} disabled={isTranslating || !canEnter}>
+                <MenubarItem onClick={() => onMarkReviewed?.()} disabled={isTranslating || canEnter}>
                     {t('singlePostEdit')}
                 </MenubarItem>
-                <MenubarItem onClick={() => onBatchPostEdit?.()} disabled={isTranslating || !canEnter}>
+                <MenubarItem onClick={() => onBatchPostEdit?.()} disabled={isTranslating || canEnter}>
                     <span>{t('batchPostEdit')}</span>
                     <span className="ml-auto bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded text-xs text-gray-500 dark:text-gray-400">⌘P</span>
                 </MenubarItem>

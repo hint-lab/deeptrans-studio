@@ -34,8 +34,8 @@ export function SignoffMenu({
         </span>
       </MenubarTrigger>
       <MenubarContent>
-        <MenubarItem onClick={() => onSignoffCurrent?.()} disabled={isRunning || !canSignoffCurrent}>{t('signoffCurrent')}</MenubarItem>
-        <MenubarItem onClick={() => onBatchSignoff?.()} disabled={isRunning || !canBatchSignoff}>
+        <MenubarItem onClick={() => onSignoffCurrent?.()} disabled={isRunning || canSignoffCurrent}>{t('signoffCurrent')}</MenubarItem>
+        <MenubarItem onClick={() => onBatchSignoff?.()} disabled={isRunning || canBatchSignoff}>
           <span>{t('batchSignoff')}</span>
           <span className="ml-auto bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded text-xs text-gray-500 dark:text-gray-400">⌘⇧S</span>
         </MenubarItem>
