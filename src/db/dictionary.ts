@@ -67,6 +67,32 @@ export const findDictionaryByIdDB = async (id: string): Promise<Dictionary | nul
     where: { id },
   }))
 }
+// 根据项目ID查找关联的词典ID
+export const findDictionaryIdByProjectIdDB = async (projectId: string): Promise<string | null> => {
+  return dbTry(async () => {
+    const projectDictionary = await prisma.projectDictionary.findFirst({
+      where: { projectId },
+      select: { dictionaryId: true }
+    });
+    
+    return projectDictionary?.dictionaryId || null;
+  });
+}
+export const findDictionaryByProjectIdDB = async (projectId: string): Promise<Dictionary | null> => {
+  return dbTry(async () => {
+    const dictionaryId = await findDictionaryIdByProjectIdDB(projectId);
+    
+    if (!dictionaryId) {
+      return null;
+    }
+    
+    const dictionary = await prisma.dictionary.findUnique({
+      where: { id: dictionaryId }
+    });
+    
+    return dictionary;
+  });
+}
 export const findDictionaryByIdWithEntriesDB = async (id: string): Promise<Dictionary | null> => {
   return dbTry(() => prisma.dictionary.findUnique({
     where: { id },
@@ -84,42 +110,82 @@ export const deleteDictionaryByIdDB = async (id: string): Promise<Dictionary | n
   return dbTry(() => prisma.dictionary.delete({ where: { id } }))
 }
 
-// 工具：查找或创建
 export const findOrCreateDictionaryDB = async (
   projectId: string,
   opts?: { scope?: 'PROJECT' | 'PRIVATE'; userId?: string }
 ) => {
   const scope = (opts?.scope || 'PROJECT') as 'PROJECT' | 'PRIVATE'
-  // 优先：查找已存在的绑定
+  
+  // 1. 优先：查找已存在的绑定
   try {
-    const bound = await prisma.projectDictionary.findFirst({ where: { projectId }, select: { dictionaryId: true } })
-    if (bound?.dictionaryId) return { id: bound.dictionaryId, created: false } as const
-  } catch { }
-  // 次之：按可见性（以及 PRIVATE 时的 userId）找一个最近的词典并绑定
-  const where: any = { visibility: scope as any }
-  if (scope === 'PRIVATE' && opts?.userId) where.userId = opts.userId
-  const existing = await dbTry(() => prisma.dictionary.findFirst({ where, orderBy: { createdAt: 'desc' }, select: { id: true } }))
-  if (existing && (existing as any).id) {
-    const id = (existing as any).id as string
-    try { await prisma.projectDictionary.create({ data: { projectId, dictionaryId: id } }) } catch { }
-    return { id, created: false } as const
+    const bound = await prisma.projectDictionary.findFirst({ 
+      where: { projectId }, 
+      select: { dictionaryId: true } 
+    })
+    if (bound?.dictionaryId) {
+      console.log(`项目 ${projectId} 已有绑定词典: ${bound.dictionaryId}`)
+      return { id: bound.dictionaryId, created: false } as const
+    }
+  } catch (error) {
+    console.error('查找项目绑定失败:', error)
   }
-
+  
+  // 2. 直接为项目创建专属词典
   let projectName = ''
+  let projectDomain = 'general'
+  
   try {
-    const p = await dbTry(() => prisma.project.findUnique({ where: { id: projectId }, select: { name: true } }))
-    projectName = String((p as any)?.name || '').trim()
-  } catch { }
-  const name = projectName ? `${projectName} · 术语清单` : '项目术语清单'
+    const project = await prisma.project.findUnique({ 
+      where: { id: projectId }, 
+      select: { 
+        name: true, 
+        domain: true
+      } 
+    })
+    
+    if (project) {
+      projectName = project.name?.trim() || ''
+      projectDomain = project.domain || 'general'
+    }
+  } catch (error) {
+    console.error('获取项目信息失败:', error)
+  }
+  
+  // 生成唯一名称
+  const timestamp = Date.now().toString()
+  const name = projectName 
+    ? `${projectName} · 术语清单-${timestamp}` 
+    : `项目术语清单-${timestamp}`
+  
   const data: any = {
     name,
-    description: scope === 'PROJECT' ? '由文档术语提取自动生成，项目内共享使用' : '由文档术语提取自动生成，后续可人工完善',
-    domain: 'general',
+    description: `项目 ${projectName || projectId} 的专属术语词典`,
+    domain: projectDomain,  // 使用项目的领域
     visibility: scope as any,
   }
-  if (scope === 'PRIVATE' && opts?.userId) data.userId = opts.userId
-  const created = await dbTry(() => prisma.dictionary.create({ data, select: { id: true } }))
-  const createdId = (created as any)?.id as string
-  try { await prisma.projectDictionary.create({ data: { projectId, dictionaryId: createdId } }) } catch { }
-  return { id: createdId, created: true } as const
+  
+  if (scope === 'PRIVATE' && opts?.userId) {
+    data.userId = opts.userId
+  }
+  
+  try {
+    const created = await prisma.dictionary.create({ 
+      data,
+      select: { id: true, name: true } 
+    })
+    
+    const createdId = created.id
+    
+    // 创建绑定关系
+    await prisma.projectDictionary.create({ 
+      data: { projectId, dictionaryId: createdId } 
+    })
+    
+    console.log(`为项目 ${projectId} (${projectName}) 创建新词典: ${createdId} - ${created.name}`)
+    return { id: createdId, created: true } as const
+    
+  } catch (error) {
+    console.error('创建词典失败:', error)
+    throw new Error(`无法为项目 ${projectId} 创建词典`)
+  }
 }

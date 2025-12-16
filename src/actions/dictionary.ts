@@ -12,6 +12,7 @@ import {
     deleteDictionaryByIdDB, 
     findOrCreateDictionaryDB,
     findDictionariesGivenVisibilityDB,
+    findDictionaryByProjectIdDB
 } from "@/db/dictionary"
 import {createDictionaryEntryDB, 
     updateDictionaryEntryByIdDB, 
@@ -108,16 +109,25 @@ export async function fetchDictionaryByIdAction(id: string) {
 }
 
 // 仅获取词典元信息（更快，避免一次性返回大量 entries）
-export async function fetchDictionaryMetaByIdAction(id: string) {
+export async function fetchDictionaryMetaByIdAction(dictionaryId: string) {
     try {
-        const dictionary = await findDictionaryByIdDB(id)
+        const dictionary = await findDictionaryByIdDB(dictionaryId)
         return { success: true, data: dictionary };
     } catch (error) {
         console.error("获取词典元信息失败:", error);
         return { success: false, error: "获取词典元信息失败" };
     }
 }
-
+// 仅获取词典元信息（更快，避免一次性返回大量 entries）
+export async function fetchDictionaryMetaByProjectIdAction(projectId: string) {
+    try {
+        const dictionary = await findDictionaryByProjectIdDB(projectId)
+        return { success: true, data: dictionary };
+    } catch (error) {
+        console.error("获取词典元信息失败:", error);
+        return { success: false, error: "获取词典元信息失败" };
+    }
+}
 // 更新词典
 export async function updateDictionaryAction(id: string, data: {
     name?: string

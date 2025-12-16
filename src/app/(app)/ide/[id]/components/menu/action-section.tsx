@@ -1312,7 +1312,16 @@ const runToCompletionFromCurrent = async () => {
             }
             
             // 检查当前分段状态是否为 QA_REVIEW
-            const currentItemStatus = activeDocumentItem?.status;
+            let  currentItemStatus = activeDocumentItem?.status;
+            // 从 explorerTabs 中查找最新的状态
+            const tabs = explorerTabs?.documentTabs ?? [];
+            for (const tab of tabs) {
+                const item = (tab.items ?? []).find((it: any) => it.id === id);
+                if (item) {
+                    currentItemStatus = item.status;
+                    break;
+                }
+            }
             if (currentItemStatus !== 'QA_REVIEW') {
                 toast.error(`当前分段状态为 ${currentItemStatus || '未知'}，无法进入译后编辑。需要质检复核通过状态`);
                 return;

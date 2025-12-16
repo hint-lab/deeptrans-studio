@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation";
 import { ChevronRight, Edit2, Trash2, BookMarked, Library } from "lucide-react";
 import { ProjectDictionariesDialog } from "./project-resource-dialogs";
 import { ProjectMemoriesDialog } from "./project-resource-dialogs";
+import { Checkbox } from "@/components/ui/checkbox";
 // Avoid importing Prisma types in client components
 type Project = {
   id: string;
@@ -21,6 +22,7 @@ import { removeProjectAction, updateProjectInfoAction } from "@/actions/project"
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { useTranslations } from "next-intl";
 
 type ProjectWithDoc = Project & { documents?: { id: string; status?: string }[] };
@@ -29,10 +31,48 @@ export default function ProjectList({ projects, onDeleted }: { projects: Project
   const router = useRouter();
   const [editTarget, setEditTarget] = useState<{ id: string; name: string } | null>(null);
   const [editName, setEditName] = useState<string>("");
-  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const [dictDialog, setDictDialog] = useState<string | null>(null)
   const [memDialog, setMemDialog] = useState<string | null>(null)
 
+  const [deleteTarget, setDeleteTarget] = useState<{
+    id: string; 
+    name: string;
+    dictionaries?: Array<{id: string; name: string; entryCount: number; isShared?: boolean}>;
+  } | null>(null);
+
+const [deleteWithDictionary, setDeleteWithDictionary] = useState(true);
+
+// 点击删除按钮时获取词典信息
+const handleDeleteClick = async (project: ProjectWithDoc) => {
+  try {
+    // 获取项目关联的词典
+    const response = await fetch(`/api/projects/${project.id}/dictionaries`);
+    const dicts = await response.json();
+    console.log('API 响应数据:', dicts); // 添加调试日志
+    console.log('过滤前词典数量:', dicts.length);
+    
+    const filteredDicts = dicts.filter((d: any) => {
+      console.log('检查词典:', d.name, 'visibility:', d.visibility, '包含术语清单:', d.name.includes('术语清单'));
+      return d.visibility === 'PROJECT' && d.name.includes('术语清单');
+    });
+    
+    console.log('过滤后词典数量:', filteredDicts.length);
+     
+    setDeleteTarget({
+      id: project.id,
+      name: project.name ?? "",
+      dictionaries: dicts.filter((d: any) => 
+        d.visibility === 'PROJECT' && 
+        d.name.includes('术语清单')
+      )
+    });
+    setDeleteWithDictionary(true); // 默认选中
+  } catch (error) {
+    console.error('获取词典信息失败:', error);
+    // 回退到简单模式
+    setDeleteTarget({ id: project.id, name: project.name ?? "" });
+  }
+};
   const getProjectIconText = (name?: string | null) => {
     if (!name) return "?";
     const trimmed = name.trim();
@@ -131,9 +171,9 @@ export default function ProjectList({ projects, onDeleted }: { projects: Project
                 <button
                   className="p-2 rounded hover:bg-red-50 text-red-600"
                   title={t('deleteProject')}
-                  onClick={(e) => {
+                  onClick={async (e) => {
                     e.stopPropagation();
-                    setDeleteTarget({ id: project.id, name: project.name ?? "" });
+                    await handleDeleteClick(project);
                   }}
                 >
                   <Trash2 size={16} />
@@ -173,27 +213,145 @@ export default function ProjectList({ projects, onDeleted }: { projects: Project
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <Dialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
-        <DialogContent onClick={(e) => e.stopPropagation()}>
-          <DialogHeader>
-            <DialogTitle>{t('deleteProject')}</DialogTitle>
-            <DialogDescription>
-              {t('deleteConfirm', { name: deleteTarget?.name || '' })}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={(e) => { e.stopPropagation(); setDeleteTarget(null); toast.info(t('deleteCancelled')); }}>{t('cancel')}</Button>
-            <Button className="bg-red-600 text-white hover:bg-red-700" onClick={(e) => {
-              e.stopPropagation();
+
+<Dialog open={!!deleteTarget} onOpenChange={(open) => { 
+  if (!open) {
+    setDeleteTarget(null);
+    setDeleteWithDictionary(true);
+  }
+}}>
+  <DialogContent onClick={(e) => e.stopPropagation()}>
+    <DialogHeader>
+      <DialogTitle>{t('deleteProject')}</DialogTitle>
+      <DialogDescription>
+        {t('deleteConfirm', { name: deleteTarget?.name || '' })}
+      </DialogDescription>
+    </DialogHeader>
+    
+    {/* 新增：删除选项 */}
+    {deleteTarget?.dictionaries && deleteTarget.dictionaries.length > 0 && (
+      <div className="py-4 space-y-3">
+        <div className="text-sm font-medium">{t('deleteOptions')}</div>
+        
+        <div className="space-y-2">
+          {deleteTarget.dictionaries.map((dict, index) => (
+            <div key={index} className="flex items-start space-x-2 p-3 border rounded-lg">
+              <Checkbox
+                id={`dict-${dict.id}`}
+                checked={deleteWithDictionary}
+                onCheckedChange={(checked) => setDeleteWithDictionary(checked as boolean)}
+                disabled={dict.isShared} // 共享词典不可选
+              />
+              <div className="flex-1">
+                <Label htmlFor={`dict-${dict.id}`} className="font-medium">
+                  {dict.name}
+                </Label>
+                <div className="text-xs text-muted-foreground mt-1">
+                  {dict.entryCount > 0 
+                    ? t('dictEntryCount', { count: dict.entryCount })
+                    : t('emptyDictionary')}
+                  {dict.isShared && ` · ${t('sharedDictionary')}`}
+                </div>
+                {dict.isShared && (
+                  <div className="text-xs text-amber-600 mt-1">
+                    {t('sharedWarning')}
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+        
+        <div className="text-xs text-muted-foreground">
+          {deleteWithDictionary 
+            ? t('deleteDictHint') 
+            : t('keepDictHint')}
+        </div>
+      </div>
+    )}
+    
+    <DialogFooter className="flex-col sm:flex-row gap-2">
+      <Button 
+        variant="outline" 
+        onClick={() => {
+          setDeleteTarget(null);
+          setDeleteWithDictionary(true);
+          toast.info(t('deleteCancelled'));
+        }}
+        className="w-full sm:w-auto"
+      >
+        {t('cancel')}
+      </Button>
+      
+      {/* 两个删除按钮 */}
+      <div className="flex gap-2 w-full sm:w-auto">
+        {deleteTarget?.dictionaries && deleteTarget.dictionaries.length > 0 && (
+          <Button 
+            variant="outline"
+            className="flex-1"
+            onClick={async () => {
               if (!deleteTarget) return;
-              toast.loading(t('deleting'), { id: "delete-project" });
-              void removeProjectAction(deleteTarget.id)
-                .then(() => { toast.success(t('projectDeleted'), { id: "delete-project" }); setDeleteTarget(null); onDeleted && onDeleted(deleteTarget.id); })
-                .catch(() => toast.error(t('deleteFailed'), { id: "delete-project" }));
-            }}>{t('confirmDelete')}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+              toast.loading(t('deletingProjectOnly'), { id: "delete-project" });
+              try {
+                // 调用不删除词典的API
+                await fetch(`/api/projects/${deleteTarget.id}/delete`, {
+                  method: 'DELETE',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ deleteDictionaries: false })
+                });
+                
+                toast.success(t('projectDeletedOnly'), { id: "delete-project" });
+                setDeleteTarget(null);
+                onDeleted && onDeleted(deleteTarget.id);
+              } catch {
+                toast.error(t('deleteFailed'), { id: "delete-project" });
+              }
+            }}
+          >
+            {t('deleteProjectOnly')}
+          </Button>
+        )}
+        
+        <Button 
+          className={`flex-1 ${deleteTarget?.dictionaries?.length ? 'bg-red-600 hover:bg-red-700' : ''}`}
+          onClick={async () => {
+            if (!deleteTarget) return;
+            toast.loading(
+              deleteWithDictionary ? t('deletingWithDict') : t('deleting'),
+              { id: "delete-project" }
+            );
+            
+            try {
+              // 调用删除API，传递选项
+              await fetch(`/api/projects/${deleteTarget.id}/delete`, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                  deleteDictionaries: deleteWithDictionary 
+                })
+              });
+              
+              toast.success(
+                deleteWithDictionary ? t('projectAndDictDeleted') : t('projectDeleted'),
+                { id: "delete-project" }
+              );
+              setDeleteTarget(null);
+              setDeleteWithDictionary(true);
+              onDeleted && onDeleted(deleteTarget.id);
+            } catch {
+              toast.error(t('deleteFailed'), { id: "delete-project" });
+            }
+          }}
+        >
+          {deleteTarget?.dictionaries && deleteTarget.dictionaries.length > 0
+            ? (deleteWithDictionary ? t('deleteProjectAndDict') : t('deleteProject'))
+            : t('confirmDelete')
+          }
+        </Button>
+      </div>
+    </DialogFooter>
+  </DialogContent>
+</Dialog>
       {dictDialog && (
         <ProjectDictionariesDialog projectId={dictDialog} open={!!dictDialog} onOpenChange={(v) => !v && setDictDialog(null)} />
       )}
