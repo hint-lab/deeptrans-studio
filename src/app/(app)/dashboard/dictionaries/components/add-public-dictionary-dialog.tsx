@@ -19,7 +19,7 @@ import { createDictionaryAction } from "@/actions/dictionary"
 import { toast } from "sonner"
 import { DOMAINS, getDomainOptions } from "@/constants/domains"
 import { useTranslations } from "next-intl"
-
+import { Textarea } from "src/components/ui/textarea"
 type PublicDictionary = {
     id: string
     name: string
@@ -126,6 +126,34 @@ export function AddPublicDictionaryDialog({ onDictionaryAdded, userId }: AddPubl
                 ) : (
                     <form onSubmit={handleSubmit}>
                         <div className="grid gap-4 py-4">
+                            <div className="grid grid-cols-4 items-center gap-4">
+                                <Label htmlFor="name" className="text-right">
+                                    名称
+                                </Label>
+                                <Input
+                                    id="name"
+                                    value={formData.name}
+                                    onChange={(e) => handleInputChange("name", e.target.value)}
+                                    placeholder="输入词库名称"
+                                    className="col-span-3"
+                                    required
+                                    disabled={loading}
+                                />
+                            </div>
+                            <div className="grid grid-cols-4 items-center gap-4">
+                                <Label htmlFor="description" className="text-right">
+                                    描述
+                                </Label>
+                                <Textarea
+                                    id="description"
+                                    value={formData.description}
+                                    onChange={(e) => handleInputChange("description", e.target.value)}
+                                    placeholder="输入词库描述"
+                                    className="col-span-3"
+                                    rows={3}
+                                    disabled={loading}
+                                />
+                            </div>
                             <div className="grid grid-cols-4 items-center gap-4">
                                 <Label htmlFor="domain" className="text-right">
                                     领域
