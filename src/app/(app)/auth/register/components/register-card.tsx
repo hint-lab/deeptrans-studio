@@ -19,7 +19,7 @@ export const RegisterCard = () => {
       const form = new FormData();
       form.set('mode', 'email');
       form.set('email', email.trim());
-      const r = await fetch('/api/auth/send-code', { method: 'POST', body: form });
+      const r = await fetch('/api/auth/send-email', { method: 'POST', body: form });
       if (!r.ok) throw new Error(t("sendFailed"));
       toast.info(process.env.NODE_ENV === 'development' ? t("codeSentDev") : t("codeSent"));
       setCooldown(60);

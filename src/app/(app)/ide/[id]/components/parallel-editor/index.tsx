@@ -101,8 +101,8 @@ export default function ParallelEditor({
 
       const translation = await embedAndTranslateAction(
         sourceText,
-        getLanguageLabelByCode(sourceLanguage) || 'auto',
-        getLanguageLabelByCode(targetLanguage) || 'auto',
+        sourceLanguage || 'auto',
+        targetLanguage || 'auto',
         dict
       );
       console.log('翻译结果:', translation);

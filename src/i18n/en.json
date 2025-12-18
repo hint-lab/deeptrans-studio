@@ -40,7 +40,10 @@
         "enterEmail": "Enter your email address",
         "enterCode": "Enter verification code",
         "enterNickname": "Your nickname",
+        "sending":"sending",
         "getCode": "Get Code",
+        "requestTimeout":"Request timeout",
+        "loggingIn":"Logging in",
         "retryAfter": "Retry after {seconds}s",
         "registerAndLogin": "Register & Login",
         "codeSentDev": "Dev environment code: 123456",
@@ -466,6 +469,16 @@
             "projectDeleted": "Project deleted",
             "deleteFailed": "Delete failed",
             "confirmDelete": "Confirm Delete",
+            "deletingWithDict":"Delete project and its associated dictionaries",
+            "projectAndDictDeleted":"Project and associated dictionaries deleted",
+            "deleteOptions":"Delete Options",
+            "dictEntryCount": "{{count}} entries",
+            "deleteDictHint": "Delete selected dictionaries",
+            "deleteProjectOnly": "Delete Project Only",
+            "deletingProjectOnly":"Deleteing Project Only...",
+            "projectDeletedOnly":"Project Deleted Only",
+            "deleteProjectAndDict": "Delete Project and Associated Dictionaries",
+            "keepDictHint":"Keep Dictionaries, Delete Project Only",
             "status": {
                 "completed": "Parsing completed",
                 "parsing": "Parsing...",
@@ -648,7 +661,10 @@
         "roles": {
             "professional_assistant": "Professional Assistant",
             "syntax_evaluator": "Syntax and Modal/Conjunction Usage Evaluation Assistant",
+            "syntax_analyzer":"Syntax Comparison and Analysis Assistant",
             "term_extractor": "Term Extraction Assistant",
+            "terminology_extractor":"Document-level Term Extraction Assistant",
+            "terminology_translator":"Terminology Translation Assistant",
             "professional_translator": "Professional Translator",
             "post_editor": "Post-editing Assistant",
             "discourse_query_assistant": "Discourse Query Assistant",
@@ -671,6 +687,7 @@
             "marketing": "Marketing",
             "engineering": "Engineering",
             "education": "Education",
+            "terminology":"Terminology",
             "custom": "Custom"
         },
         "languages": {
@@ -1282,7 +1299,7 @@
             "qaWorkflow": "QA Workflow",
             "qaReview": "QA Review",
             "postEditWorkflow": "PE Workflow",
-            "postEditReview": "PE Review",
+            "postEditReview": "PE Review Workflow",
             "signoff": "Sign-off",
             "outputLog": "Output Log"
         },
@@ -1298,7 +1315,9 @@
             "COMPLETED": "Completed",
             "ERROR": "Error",
             "RUNNING": "Running",
-            "START": "Start"
+            "START": "Start",
+            "oneClickCompletion":"One-click Completion",
+            "oneClickCompletionDesc":"Start from the current segment and automatically complete all subsequent processes"
         },
         "translationStagesShort": {
             "NOT_STARTED": "NS",
@@ -1314,29 +1333,33 @@
         },
         "menus": {
             "translate": {
-                "label": "Translation",
-                "translating": "Translating",
+                "label": "PreTranslation",
+                "translating": "PreTranslating",
                 "singleTranslation": "Single Translation",
                 "batchTranslation": "Batch Translation",
                 "quickTranslation": "Quick Translation",
-                "deepTranslation": "Deep Translation",
-                "importGlossary": "Import Glossary"
+                "deepTranslation": "PreTranslation",
+                "importGlossary": "Import Glossary",
+                "toolTip":"Pre-translate source text using AI-powered translation engines"
             },
             "quality": {
                 "label": "Quality",
                 "singleEvaluation": "Single Evaluation",
-                "batchEvaluation": "Batch Evaluation"
+                "batchEvaluation": "Batch Evaluation",
+                "toolTip":"Execute quality check operations, only processing segments in the pre-translation review state."
             },
             "postEdit": {
                 "label": "Post-editing",
                 "enterPostEdit": "Enter Post-editing",
                 "singlePostEdit": "Single Post-edit",
-                "batchPostEdit": "Batch Post-edit"
+                "batchPostEdit": "Batch Post-edit",
+                "toolTip":"Perform post-editing operations, only processing segments in the quality review state."
             },
             "signoff": {
                 "label": "Sign-off",
                 "signoffCurrent": "Sign-off Current",
-                "batchSignoff": "Batch Sign-off"
+                "batchSignoff": "Batch Sign-off",
+                "toolTip":"Execute sign-off operations, only processing segments in the post-editing review state."
             },
             "export": {
                 "label": "Export",

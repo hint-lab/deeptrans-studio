@@ -21,7 +21,7 @@ export default function ProjectInitPage() {
   const router = useRouter()
   const { entry, restart, updateBatchId, updateStep, updateProgress } = useProjectInit(projectId)
   const batchId = entry?.batchId || ""
-  logger.info('ProjectInitPage render projectId, batchId', `${projectId}, ${batchId}`)
+  //logger.info('ProjectInitPage render projectId, batchId', `${projectId}, ${batchId}`)
   const segPct = entry?.segPct || 0
   const termPct = entry?.termPct || 0
   const segPctRef = useRef(0)
@@ -79,7 +79,7 @@ export default function ProjectInitPage() {
     try {
       const u = new URL(`/api/projects/${projectId}/segment`, window.location.origin)
       u.searchParams.set('batchId', batchId)
-      logger.info('startSegment: ', u.toString())
+      //logger.info('startSegment: ', u.toString())
       const r = await fetch(u.toString(), { method: 'POST' })
       if (!r.ok) throw new Error('segment failed')
       // 状态由全局轮询同步
@@ -250,7 +250,7 @@ export default function ProjectInitPage() {
       statusAbortRef.current = controller
       try {
         const url = `/api/projects/${projectId}/init?batchId=${encodeURIComponent(batchId)}&wait=30000&lastSeg=${prevSeg}&lastTerms=${prevTerms}`
-        logger.info('/api/projects/projectId/init url: ', url)
+        //logger.info('/api/projects/projectId/init url: ', url)
         const s = await fetch(url, { signal: controller.signal })
         if (!s.ok) throw new Error('status failed')
         const j = await s.json()
@@ -501,7 +501,7 @@ export default function ProjectInitPage() {
               )}
               {currentStep === 'done' && (
                 <>
-                  <Button onClick={() => router.push(`/dashboard/dictionaries/${projectId}`)}>{t('gotoDict')}</Button>
+                  <Button onClick={() => router.push(`/dashboard/dictionaries/project/${projectId}`)}>{t('gotoDict')}</Button>
                   <Button onClick={() => router.push(`/ide/${projectId}`)}>{t('gotoIDE')}</Button>
                 </>
               )}

@@ -8,20 +8,27 @@ function createTransporter() {
 }
 
 export async function sendVerificationEmail(to: string, code: string) {
+  // 验证参数
+  if (!to || typeof to !== 'string') {
+    console.error('❌ 收件人邮箱无效:', { to, type: typeof to });
+    throw new Error(`收件人邮箱无效: ${to}`);
+  }
   const transporter = createTransporter();
   if (!transporter) {
+    console.error("EMAIL_SERVER is not configured");
     throw new Error("EMAIL_SERVER 未配置，无法发送邮件");
   }
   const from = process.env.EMAIL_FROM || "no-reply@example.com";
   const subject = "您的登录验证码";
   const text = `您的验证码是：${code} （2分钟内有效）`;
   const html = `<p>您的验证码是：<b>${code}</b></p><p>2分钟内有效，请勿泄露。</p>`;
-
+  console.log('✅ 参数验证通过:', { to, codeLength: code.length });
   try {
     // 可提前验证连接配置是否有效
     await transporter.verify();
   } catch (e: any) {
     // 常见原因：端口/secure 错误、凭据错误、发件人未验证
+    console.error("SMTP connection verification failed:", e);
     throw new Error(`SMTP 连接验证失败：${e?.message || e}`);
   }
 

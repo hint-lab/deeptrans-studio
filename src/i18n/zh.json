@@ -40,7 +40,10 @@
         "enterEmail": "请输入邮箱地址",
         "enterCode": "请输入验证码",
         "enterNickname": "你的昵称",
+        "sending":"发送中",
         "getCode": "获取验证码",
+        "requestTimeout":"请求超时",
+        "loggingIn":"登录中",
         "retryAfter": "{seconds}秒后重试",
         "registerAndLogin": "注册并登录",
         "codeSentDev": "开发环境验证码 123456",
@@ -466,6 +469,16 @@
             "projectDeleted": "项目已删除",
             "deleteFailed": "删除失败",
             "confirmDelete": "确认删除",
+            "deletingWithDict":"删除项目时同时删除其关联的词典",
+            "projectAndDictDeleted":"所选项目和关联词典已删除",
+            "deleteOptions":"删除选项",
+            "dictEntryCount":"词典词条数",
+            "deleteDictHint":"删除选中的词典",
+            "deleteProjectOnly":"仅删除项目",
+            "deletingProjectOnly":"仅删除项目中...",
+            "projectDeletedOnly":"项目已删除",
+            "deleteProjectAndDict":"删除项目及其关联词典",
+            "keepDictHint":"保留词典，仅删除项目",
             "status": {
                 "completed": "解析完成",
                 "parsing": "解析中…",
@@ -648,7 +661,10 @@
         "roles": {
             "professional_assistant": "专业助手",
             "syntax_evaluator": "句法连接词和情态词的用法评估助手",
+            "syntax_analyzer":"句法对比分析助手",
             "term_extractor": "术语提取助手",
+            "terminology_extractor":"文档级术语提取助手",
+            "terminology_translator":"术语翻译助手",
             "professional_translator": "专业翻译员",
             "post_editor": "译后编辑助手",
             "discourse_query_assistant": "语篇查询助手",
@@ -673,7 +689,8 @@
             "education": "教育",
             "custom": "自定义",
             "linguistics": "语言学",
-            "discourse": "语篇学"
+            "discourse": "语篇学",
+            "terminology":"术语学"
         },
         "languages": {
             "auto": "自动检测",
@@ -1279,28 +1296,30 @@
             "showSettings": "展示设置"
         },
         "translationPanel": {
-            "preWorkflow": "预翻工作流",
-            "mtReview": "MT复核",
+            "preWorkflow": "预翻译工作流",
+            "mtReview": "预翻译复核工作流",
             "qaWorkflow": "质检工作流",
-            "qaReview": "QA复核",
-            "postEditWorkflow": "译后工作流",
-            "postEditReview": "PE复核",
+            "qaReview": "质检复核工作流",
+            "postEditWorkflow": "译后编辑工作流",
+            "postEditReview": "译后复核工作流",
             "signoff": "签发",
             "outputLog": "输出日志"
         },
         "translationStages": {
             "NOT_STARTED": "未开始",
             "MT": "预翻译",
-            "MT_REVIEW": "MT复核",
+            "MT_REVIEW": "预翻译复核",
             "QA": "质检",
-            "QA_REVIEW": "QA复核",
+            "QA_REVIEW": "质检复核",
             "POST_EDIT": "译后编辑",
             "POST_EDIT_REVIEW": "译后复核",
             "SIGN_OFF": "签发",
             "COMPLETED": "完成",
             "ERROR": "错误",
             "RUNNING": "运行中",
-            "START": "开始"
+            "START": "开始",
+            "oneClickCompletion":"一键完成",
+            "oneClickCompletionDesc":"从当前分段开始，自动完成所有后续流程"
         },
         "translationStagesShort": {
             "NOT_STARTED": "未",
@@ -1316,29 +1335,33 @@
         },
         "menus": {
             "translate": {
-                "label": "深度翻译",
-                "translating": "翻译中",
+                "label": "预翻译",
+                "translating": "预译中",
                 "singleTranslation": "单例翻译",
                 "batchTranslation": "批量翻译",
                 "quickTranslation": "快速翻译",
-                "deepTranslation": "深度翻译",
-                "importGlossary": "导入术语库"
+                "deepTranslation": "预翻译",
+                "importGlossary": "导入术语库",
+                "toolTip":"执行预翻译操作，仅处理处于未开始状态的分段。"
             },
             "quality": {
-                "label": "质量评估",
-                "singleEvaluation": "单例评估",
-                "batchEvaluation": "批量评估"
+                "label": "质检",
+                "singleEvaluation": "单例质检",
+                "batchEvaluation": "批量质检",
+                "toolTip":"执行质检操作，仅处理处于预翻译复核状态的分段。"
             },
             "postEdit": {
                 "label": "译后编辑",
                 "enterPostEdit": "进入译后编辑",
                 "singlePostEdit": "单例编辑",
-                "batchPostEdit": "批量编辑"
+                "batchPostEdit": "批量编辑",
+                "toolTip":"执行译后编辑操作，仅处理处于质检复核状态的分段。"
             },
             "signoff": {
                 "label": "签发",
                 "signoffCurrent": "签发当前",
-                "batchSignoff": "批量签发"
+                "batchSignoff": "批量签发",
+                "toolTip":"执行签发操作，仅处理处于译后复核状态的分段。"
             },
             "export": {
                 "label": "导出",

@@ -2,13 +2,13 @@ import { BaseAgent, type AgentRunContext } from '../base'
 import { TermCandidate } from '@/types/terms'
 import { createAgentI18n } from '../i18n'
 
-export class MonoTermExtractAgent extends BaseAgent<{ text: string; prompt?: string; locale?: string }, TermCandidate[]> {
+export class MonoTermExtractAgent extends BaseAgent<{ text: string; prompt?: string; locale?: string; domain?: string }, TermCandidate[]> {
 
-  constructor(locale?: string) {
+  constructor(locale?: string, domain?: string) {
     super({
       name: 'mono-term-extract',
       role: 'term_extractor',
-      domain: 'general',
+      domain: domain || 'general',
       quality: 'review',
       locale: locale || 'zh'
     });

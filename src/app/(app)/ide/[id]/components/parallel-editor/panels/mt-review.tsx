@@ -102,8 +102,8 @@ export default function PreTranslatePanel() {
       console.log('genEmbedded', filtered);
       const embeddedText = await embedAndTranslateAction(
         sourceText,
-        getLanguageLabelByCode(sourceLanguage) || 'auto',
-        getLanguageLabelByCode(targetLanguage) || 'auto',
+        sourceLanguage || 'auto',
+        targetLanguage || 'auto',
         filtered
       );
       setPreOutputs({ terms, dict, translation: embeddedText });
