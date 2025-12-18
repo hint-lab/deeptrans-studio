@@ -60,7 +60,7 @@ export default function DictionaryDetailPage({ params }: { params: Promise<{ dic
       <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-2xl font-semibold">词库管理</h1>
-          <p className="text-sm text-muted-foreground">管理 {dictionary.name} 中的术语条目</p>
+          <p className="text-sm text-muted-foreground">词典 {dictionary.name || "《未命名词典》"} 中的术语条目</p>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" onClick={() => router.push("/dashboard/dictionaries")}>返回词库列表</Button>

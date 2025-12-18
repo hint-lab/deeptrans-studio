@@ -36,11 +36,9 @@ export default function DictionariesPage() {
     const [loading, setLoading] = useState(true)
     const [reloadToken, setReloadToken] = useState(0)
     useEffect(() => {
-        console.log("客户端Session状态:", status);
-        console.log("客户端Session数据:", session);
-        console.log("客户端过期时间:",  session?.expires 
-  ? new Date(session.expires).toLocaleString() 
-  : "未设置");
+        //console.log("客户端Session状态:", status);
+        //console.log("客户端Session数据:", session);
+        console.log("客户端过期时间:",  session?.expires ? new Date(session.expires).toLocaleString() : "未设置");
     }, [session, status]);
     // 汇总可供导入的词库（全部）
     const allDictionariesLite = useMemo(() => {

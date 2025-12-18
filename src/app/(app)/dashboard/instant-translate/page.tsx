@@ -47,6 +47,11 @@ interface DictionaryEntryItem {
   notes?: string | null;
 }
 
+interface DictEntry {
+  term: string;
+  translation: string;
+  notes?: string;
+}
 export default function InstantTranslatePage() {
   const { data: session } = useSession();
   const tDashboard = useTranslations("Dashboard");
@@ -103,62 +108,97 @@ export default function InstantTranslatePage() {
     return 1000;
   };
 
-  // 真正的防抖翻译函数
-  const debouncedTranslate = useCallback(
-    (text: string, source: string, target: string, style: string) => {
-      // 清除之前的定时器
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current);
+const getSelectedDictionaryEntries = async (): Promise<DictEntry[]> => {
+  if (selectedDictionaries.length === 0) return [];
+  
+  try {
+    const allEntries: DictEntry[] = [];
+    
+    // 为每个选中的词典获取条目
+    for (const dictId of selectedDictionaries) {
+      // 如果已经加载过条目，直接使用
+      if (dictionaryEntriesById[dictId]) {
+        const entries = dictionaryEntriesById[dictId];
+        allEntries.push(...entries.map(entry => ({
+          term: entry.sourceText,
+          translation: entry.targetText,
+          notes: entry.notes || undefined
+        })));
+      } else {
+        // 如果没有加载过，先加载
+        const res = await fetchDictionaryEntriesAction(dictId);
+        if (res.success && res.data) {
+          const entries = res.data as unknown as DictionaryEntryItem[];
+          allEntries.push(...entries.map(entry => ({
+            term: entry.sourceText,
+            translation: entry.targetText,
+            notes: entry.notes || undefined
+          })));
+        }
+      }
+    }
+    
+    return allEntries;
+  } catch (error) {
+    console.error('获取词典条目失败:', error);
+    return [];
+  }
+};
+// 真正的防抖翻译函数
+const debouncedTranslate = useCallback(
+  async (text: string, source: string, target: string, style: string) => {
+    // 清除之前的定时器
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
+    const delay = getDebounceDelay(text);
+
+    // 创建新的防抖定时器
+    debounceTimerRef.current = setTimeout(async () => {
+      if (!text.trim()) {
+        setTranslatedText("");
+        return;
       }
 
-      // 不再尝试在前端中断服务器端的请求，改为使用请求序号防竞态
-      // if (abortControllerRef.current) {
-      //   abortControllerRef.current.abort();
-      // }
+      // 验证目标语言
+      if (target === 'auto') {
+        toast.error(t("pleaseSelectTargetLanguage"), { description: t("targetCannotBeAuto") });
+        return;
+      }
 
-      const delay = getDebounceDelay(text);
+      // 记录当前请求序号
+      const localRequestId = ++requestIdRef.current;
 
-      // 创建新的防抖定时器
-      debounceTimerRef.current = setTimeout(() => {
-        if (!text.trim()) {
-          setTranslatedText("");
-          return;
-        }
-
-        // 验证目标语言
-        if (target === 'auto') {
-          toast.error(t("pleaseSelectTargetLanguage"), { description: t("targetCannotBeAuto") });
-          return;
-        }
-
-        // 记录当前请求序号
-        const localRequestId = ++requestIdRef.current;
-
-        setIsTranslating(true);
-        textTranslate(
+      setIsTranslating(true);
+      try {
+        // 获取选中的词典条目
+        const dictEntries = await getSelectedDictionaryEntries();
+        
+        const result: string = await textTranslate(
           text,
           source,
-          target
-        )
-          .then((result: string) => {
-            // 仅处理最新的请求结果，避免旧请求覆盖
-            if (localRequestId === requestIdRef.current) {
-              setTranslatedText(result);
-            }
-          })
-          .catch((error: unknown) => {
-            console.error('翻译错误:', error);
-            toast.error(t("translationFailed"), { description: t("retryLater") });
-          })
-          .finally(() => {
-            if (localRequestId === requestIdRef.current) {
-              setIsTranslating(false);
-            }
-          });
-      }, delay);
-    },
-    [toast, selectedDictionaries, translationStyle]
-  );
+          target,
+          dictEntries, // 传递术语库条目
+          { prompt: `使用${translationStyle}风格翻译` }
+        );
+        
+        // 仅处理最新的请求结果，避免旧请求覆盖
+        if (localRequestId === requestIdRef.current) {
+          setTranslatedText(result);
+        }
+      } catch (error: unknown) {
+        console.error('翻译错误:', error);
+        toast.error(t("translationFailed"), { description: t("retryLater") });
+      } finally {
+        if (localRequestId === requestIdRef.current) {
+          setIsTranslating(false);
+        }
+      }
+    }, delay);
+  },
+  [toast, selectedDictionaries, translationStyle, dictionaryEntriesById]
+);
 
   // 适配语言列表：源语言支持自动检测
   const sourceLanguages = languages;
@@ -218,7 +258,9 @@ export default function InstantTranslatePage() {
     if (!dictionaryEntriesById[dictionaryId]) {
       setLoadingEntries(prev => ({ ...prev, [dictionaryId]: true }));
       try {
+        console.log("加载词条此单ID:", dictionaryId);
         const res = await fetchDictionaryEntriesAction(dictionaryId);
+        console.log("加载词条结果:", res);
         if (res.success && res.data) {
           setDictionaryEntriesById(prev => ({ ...prev, [dictionaryId]: (res.data as unknown as DictionaryEntryItem[]) ?? [] }));
         }
@@ -257,11 +299,17 @@ export default function InstantTranslatePage() {
 
     setIsTranslating(true);
     try {
+      // 获取选中的词典条目
+      const dictEntries = await getSelectedDictionaryEntries();
+
       const result: string = await textTranslate(
         sourceText,
         sourceLanguage,
-        targetLanguage
+        targetLanguage,
+        dictEntries, // 传递术语库条目
+        { prompt: `使用${translationStyle}风格翻译` }
       );
+
       if (localRequestId === requestIdRef.current) {
         setTranslatedText(result);
       }

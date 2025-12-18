@@ -52,6 +52,7 @@ export const findDictionariesGivenVisibilityDB = async (visibility: 'PUBLIC' | '
   return dbTry(() => prisma.dictionary.findMany({
     where: { visibility: visibility, ...(userId ? { userId: userId } : {}) },
     orderBy: { createdAt: order },
+    include: { _count: { select: { entries: true } } },
   }))
 }
 export const findDictionariesGivenVisibilityWithEntriesDB = async (visibility: 'PUBLIC' | 'PROJECT' | 'PRIVATE', order: string = 'desc'): Promise<Dictionary[] | null> => {

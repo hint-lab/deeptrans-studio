@@ -246,7 +246,7 @@ export function DictionaryEntriesManager({
             <CardHeader>
                 <div className="flex items-center justify-between">
                     <div>
-                        <CardTitle className="text-lg">管理词典中的术语条目，共 {total} 条（第 {page} / {Math.max(1, Math.ceil(total / Math.max(1, pageSize)))} 页）</CardTitle>
+                        <CardTitle className="text-lg">术语条目，共 {total} 条（第 {page} / {Math.max(1, Math.ceil(total / Math.max(1, pageSize)))} 页）</CardTitle>
                        
                     </div>
                     <div className="flex space-x-2">

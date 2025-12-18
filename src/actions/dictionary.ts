@@ -88,6 +88,7 @@ export async function fetchDictionariesAction(visibility: "public"|"private"|"pr
         else{
             dictionaries = await findDictionariesGivenVisibilityDB('PUBLIC')
         }
+        console.log("获取词典列表:", dictionaries)
         return { success: true, data: dictionaries }
     } catch (error) {
         console.error("获取公共词典失败:", error)

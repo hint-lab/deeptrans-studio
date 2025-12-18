@@ -70,6 +70,10 @@ export const countDictionaryEntriesDB = async(where: any): Promise<number | null
 
 /** 通用查询：where + 分页 */
 export const findDictionaryEntriesDB = async(where: any, skip?: number, take?: number): Promise<DictionaryEntry[]|null> => {
+  // 如果 where 是字符串，假设它是 dictionaryId
+  if (typeof where === 'string') {
+    where = { dictionaryId: where };
+  }
   return dbTry(() => prisma.dictionaryEntry.findMany({ where, orderBy: { createdAt: 'desc' }, skip, take })) 
 }
 

@@ -12,10 +12,8 @@ export default function DashboardLayout({ children }: PropsWithChildren) {
   const interval = 15;
   useEffect(() => {
       console.log("客户端Layout Session状态:", status);
-      console.log("客户端Layout Session数据:", session);
-      console.log("客户端Layout 过期时间:",  session?.expires 
-  ? new Date(session.expires).toLocaleString() 
-  : "未设置");
+      //console.log("客户端Layout Session数据:", session);
+      //console.log("客户端Layout 过期时间:",  session?.expires ? new Date(session.expires).toLocaleString() : "未设置");
   }, [session, status]);
   useEffect(() => {
     const timer = setInterval(() => {
