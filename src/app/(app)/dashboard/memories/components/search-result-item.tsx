@@ -1,12 +1,12 @@
-"use client";
+'use client';
 
-import { Badge } from "@/components/ui/badge";
-import { Card } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
-import { Separator } from "@/components/ui/separator";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Search, Zap, Hash, TrendingUp } from "lucide-react";
-import { useTranslations } from "next-intl";
+import { Badge } from '@/components/ui/badge';
+import { Card } from '@/components/ui/card';
+import { Progress } from '@/components/ui/progress';
+import { Separator } from '@/components/ui/separator';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Search, Zap, Hash, TrendingUp } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 
 interface SearchResultItemProps {
     item: {
@@ -28,9 +28,9 @@ export function SearchResultItem({
     item,
     index,
     searchQuery,
-    showScores = true
+    showScores = true,
 }: SearchResultItemProps) {
-    const t = useTranslations("Dashboard.Memories.SearchResult");
+    const t = useTranslations('Dashboard.Memories.SearchResult');
     // 高亮搜索关键词
     const highlightText = (text: string, query: string) => {
         if (!query.trim()) return text;
@@ -40,7 +40,10 @@ export function SearchResultItem({
 
         keywords.forEach(keyword => {
             const regex = new RegExp(`(${keyword})`, 'gi');
-            highlightedText = highlightedText.replace(regex, '<mark class="bg-yellow-200 dark:bg-yellow-800 px-1 rounded">$1</mark>');
+            highlightedText = highlightedText.replace(
+                regex,
+                '<mark class="bg-yellow-200 dark:bg-yellow-800 px-1 rounded">$1</mark>'
+            );
         });
 
         return highlightedText;
@@ -63,13 +66,29 @@ export function SearchResultItem({
     const getSearchModeInfo = (mode?: string) => {
         switch (mode) {
             case 'vector':
-                return { icon: <Search className="h-3 w-3" />, label: t('vector'), color: 'bg-blue-500' };
+                return {
+                    icon: <Search className="h-3 w-3" />,
+                    label: t('vector'),
+                    color: 'bg-blue-500',
+                };
             case 'keyword':
-                return { icon: <Hash className="h-3 w-3" />, label: t('keyword'), color: 'bg-green-500' };
+                return {
+                    icon: <Hash className="h-3 w-3" />,
+                    label: t('keyword'),
+                    color: 'bg-green-500',
+                };
             case 'hybrid':
-                return { icon: <Zap className="h-3 w-3" />, label: t('hybrid'), color: 'bg-purple-500' };
+                return {
+                    icon: <Zap className="h-3 w-3" />,
+                    label: t('hybrid'),
+                    color: 'bg-purple-500',
+                };
             default:
-                return { icon: <TrendingUp className="h-3 w-3" />, label: t('search'), color: 'bg-gray-500' };
+                return {
+                    icon: <TrendingUp className="h-3 w-3" />,
+                    label: t('search'),
+                    color: 'bg-gray-500',
+                };
         }
     };
 
@@ -78,7 +97,7 @@ export function SearchResultItem({
     const scorePercentage = Math.round(finalScore * 100);
 
     return (
-        <Card className="p-4 hover:shadow-md transition-shadow duration-200">
+        <Card className="p-4 transition-shadow duration-200 hover:shadow-md">
             <div className="space-y-3">
                 {/* 头部信息：排名、分数、模式 */}
                 <div className="flex items-center justify-between">
@@ -86,7 +105,7 @@ export function SearchResultItem({
                         <Badge variant="outline" className="text-xs">
                             #{index + 1}
                         </Badge>
-                        <Badge className={`${modeInfo.color} text-white text-xs`}>
+                        <Badge className={`${modeInfo.color} text-xs text-white`}>
                             {modeInfo.icon}
                             <span className="ml-1">{modeInfo.label}</span>
                         </Badge>
@@ -96,8 +115,10 @@ export function SearchResultItem({
                         <TooltipProvider>
                             <Tooltip>
                                 <TooltipTrigger asChild>
-                                    <div className="flex items-center gap-2 cursor-help">
-                                        <span className={`text-sm font-medium ${getScoreColor(finalScore)}`}>
+                                    <div className="flex cursor-help items-center gap-2">
+                                        <span
+                                            className={`text-sm font-medium ${getScoreColor(finalScore)}`}
+                                        >
                                             {scorePercentage}%
                                         </span>
                                         <span className="text-xs text-muted-foreground">
@@ -109,12 +130,21 @@ export function SearchResultItem({
                                     <div className="space-y-2">
                                         <div className="font-medium">{t('similarityDetails')}</div>
                                         <div className="space-y-1 text-xs">
-                                            <div>{t('overallScore')}: {(finalScore * 100).toFixed(1)}%</div>
+                                            <div>
+                                                {t('overallScore')}: {(finalScore * 100).toFixed(1)}
+                                                %
+                                            </div>
                                             {item.vectorScore !== undefined && (
-                                                <div>{t('vectorScore')}: {(item.vectorScore * 100).toFixed(1)}%</div>
+                                                <div>
+                                                    {t('vectorScore')}:{' '}
+                                                    {(item.vectorScore * 100).toFixed(1)}%
+                                                </div>
                                             )}
                                             {item.keywordScore !== undefined && (
-                                                <div>{t('keywordScore')}: {(item.keywordScore * 100).toFixed(1)}%</div>
+                                                <div>
+                                                    {t('keywordScore')}:{' '}
+                                                    {(item.keywordScore * 100).toFixed(1)}%
+                                                </div>
                                             )}
                                         </div>
                                     </div>
@@ -134,13 +164,17 @@ export function SearchResultItem({
                                 {item.vectorScore !== undefined && (
                                     <div className="flex items-center gap-1">
                                         <Search className="h-3 w-3" />
-                                        <span>{t('vector')}: {(item.vectorScore * 100).toFixed(0)}%</span>
+                                        <span>
+                                            {t('vector')}: {(item.vectorScore * 100).toFixed(0)}%
+                                        </span>
                                     </div>
                                 )}
                                 {item.keywordScore !== undefined && (
                                     <div className="flex items-center gap-1">
                                         <Hash className="h-3 w-3" />
-                                        <span>{t('keyword')}: {(item.keywordScore * 100).toFixed(0)}%</span>
+                                        <span>
+                                            {t('keyword')}: {(item.keywordScore * 100).toFixed(0)}%
+                                        </span>
                                     </div>
                                 )}
                             </div>
@@ -151,27 +185,27 @@ export function SearchResultItem({
                 <Separator />
 
                 {/* 文本内容 */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                     <div className="space-y-1">
-                        <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                        <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                             {t('sourceText')}
                         </div>
                         <div
-                            className="text-sm leading-relaxed break-words"
+                            className="break-words text-sm leading-relaxed"
                             dangerouslySetInnerHTML={{
-                                __html: highlightText(item.sourceText, searchQuery)
+                                __html: highlightText(item.sourceText, searchQuery),
                             }}
                         />
                     </div>
 
                     <div className="space-y-1">
-                        <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                        <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                             {t('targetText')}
                         </div>
                         <div
-                            className="text-sm leading-relaxed break-words"
+                            className="break-words text-sm leading-relaxed"
                             dangerouslySetInnerHTML={{
-                                __html: highlightText(item.targetText, searchQuery)
+                                __html: highlightText(item.targetText, searchQuery),
                             }}
                         />
                     </div>
@@ -179,14 +213,14 @@ export function SearchResultItem({
 
                 {/* 备注 */}
                 {item.notes && (
-                    <div className="space-y-1 pt-2 border-t">
-                        <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    <div className="space-y-1 border-t pt-2">
+                        <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                             {t('notes')}
                         </div>
                         <div
-                            className="text-xs text-muted-foreground leading-relaxed break-words"
+                            className="break-words text-xs leading-relaxed text-muted-foreground"
                             dangerouslySetInnerHTML={{
-                                __html: highlightText(item.notes, searchQuery)
+                                __html: highlightText(item.notes, searchQuery),
                             }}
                         />
                     </div>

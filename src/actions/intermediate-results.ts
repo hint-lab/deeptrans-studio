@@ -1,15 +1,22 @@
-"use server";
+'use server';
 
-import { fetchDocumentItemIntermediateResultsDB } from "@/db/documentItem";
-import { updateDocumentItemByIdDB, findDocumentItemMetadataByIdDB, clearDocumentItemIntermediateResultsDB } from "@/db/documentItem";
+import { fetchDocumentItemIntermediateResultsDB } from '@/db/documentItem';
+import {
+    updateDocumentItemByIdDB,
+    findDocumentItemMetadataByIdDB,
+    clearDocumentItemIntermediateResultsDB,
+} from '@/db/documentItem';
 
 // 保存预翻译中间结果
-export async function savePreTranslateResultsAction(id: string, results: {
-    terms?: any;
-    dict?: any;
-    embedded?: any;
-    targetText?: any;
-}) {
+export async function savePreTranslateResultsAction(
+    id: string,
+    results: {
+        terms?: any;
+        dict?: any;
+        embedded?: any;
+        targetText?: any;
+    }
+) {
     try {
         return await updateDocumentItemByIdDB(id, {
             preTranslateTerms: results.terms as any,
@@ -23,16 +30,16 @@ export async function savePreTranslateResultsAction(id: string, results: {
     }
 }
 
-
-
-
 // 保存质检中间结果
-export async function saveQualityAssureResultsAction(id: string, results: {
-    biTerm?: any;
-    syntax?: any;
-    syntaxEmbedded?: any;
-    dislikedPairs?: Record<string, boolean>;
-}) {
+export async function saveQualityAssureResultsAction(
+    id: string,
+    results: {
+        biTerm?: any;
+        syntax?: any;
+        syntaxEmbedded?: any;
+        dislikedPairs?: Record<string, boolean>;
+    }
+) {
     try {
         const meta = await findDocumentItemMetadataByIdDB(id);
         return await updateDocumentItemByIdDB(id, {
@@ -40,7 +47,9 @@ export async function saveQualityAssureResultsAction(id: string, results: {
             qualityAssureSyntax: results.syntax as any,
             qualityAssureSyntaxEmbedded: results.syntaxEmbedded as any,
             // 将用户踩的对对齐结果存入 metadata
-            metadata: results.dislikedPairs ? { ...(meta || {}), qaDislikedPairs: results.dislikedPairs } : undefined,
+            metadata: results.dislikedPairs
+                ? { ...(meta || {}), qaDislikedPairs: results.dislikedPairs }
+                : undefined,
         } as any);
     } catch (error) {
         console.error('保存质检结果失败:', error);
@@ -49,11 +58,14 @@ export async function saveQualityAssureResultsAction(id: string, results: {
 }
 
 // 保存译后编辑中间结果
-export async function savePostEditResultsAction(id: string, results: {
-    query?: any;
-    evaluation?: any;
-    rewrite?: any;
-}) {
+export async function savePostEditResultsAction(
+    id: string,
+    results: {
+        query?: any;
+        evaluation?: any;
+        rewrite?: any;
+    }
+) {
     try {
         return await updateDocumentItemByIdDB(id, {
             postEditQuery: results.query as any,

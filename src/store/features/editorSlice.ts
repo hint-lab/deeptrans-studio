@@ -14,7 +14,7 @@ const initialState: EditorState = {
     sourceEditorId: null,
     targetEditorId: null,
     sourceContent: '',
-    targetContent: ''
+    targetContent: '',
 };
 
 export const editorSlice = createSlice({
@@ -35,8 +35,8 @@ export const editorSlice = createSlice({
         },
         setTargetContent: (state, action: PayloadAction<string>) => {
             state.targetContent = action.payload;
-        }
-    }
+        },
+    },
 });
 
 export const {
@@ -44,7 +44,7 @@ export const {
     setSourceEditorId,
     setTargetEditorId,
     setSourceContent,
-    setTargetContent
+    setTargetContent,
 } = editorSlice.actions;
 
 // 选择器
@@ -54,4 +54,4 @@ export const selectTargetEditorId = (state: RootState) => state.editor.targetEdi
 export const selectSourceContent = (state: RootState) => state.editor.sourceContent;
 export const selectTargetContent = (state: RootState) => state.editor.targetContent;
 
-export default editorSlice.reducer; 
+export default editorSlice.reducer;

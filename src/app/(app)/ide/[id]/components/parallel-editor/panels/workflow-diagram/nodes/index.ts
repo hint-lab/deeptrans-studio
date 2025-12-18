@@ -10,5 +10,5 @@ export * from './TerminalNode';
 export const nodeTypes = {
     agentNode: AgentNode,
     processingNode: ProcessingNode,
-    terminalNode: TerminalNode
-}; 
+    terminalNode: TerminalNode,
+};

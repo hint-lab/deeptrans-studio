@@ -10,10 +10,7 @@ export async function POST(request: Request) {
         const { email, password, name } = body;
 
         if (!email || !password) {
-            return NextResponse.json(
-                { error: '邮箱和密码不能为空' },
-                { status: 400 }
-            );
+            return NextResponse.json({ error: '邮箱和密码不能为空' }, { status: 400 });
         }
 
         // 检查用户是否已存在
@@ -22,10 +19,7 @@ export async function POST(request: Request) {
         });
 
         if (existingUser) {
-            return NextResponse.json(
-                { error: '该邮箱已被注册' },
-                { status: 400 }
-            );
+            return NextResponse.json({ error: '该邮箱已被注册' }, { status: 400 });
         }
 
         // 密码加密
@@ -49,9 +43,6 @@ export async function POST(request: Request) {
         });
     } catch (error) {
         console.error('注册错误:', error);
-        return NextResponse.json(
-            { error: '注册失败' },
-            { status: 500 }
-        );
+        return NextResponse.json({ error: '注册失败' }, { status: 500 });
     }
-} 
+}

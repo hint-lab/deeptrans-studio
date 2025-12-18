@@ -1,13 +1,12 @@
-import React, { ComponentType } from 'react'
-import Image from 'next/image'
-import { useState, useEffect } from 'react'
-import Loading from './loading'
+import React, { ComponentType } from 'react';
+import Image from 'next/image';
+import { useState, useEffect } from 'react';
+import Loading from './loading';
 
 function LoadingMessage() {
     return (
         <>
-            <div className="fixed flex flex-col justify-center items-center top-0
-  left-0 w-full h-full bg-gradient-to-br from-gray-900 via-gray-800 to-orange-400 z-50">
+            <div className="fixed left-0 top-0 z-50 flex h-full w-full flex-col items-center justify-center bg-gradient-to-br from-gray-900 via-gray-800 to-orange-400">
                 <Image
                     src="/wechat.svg"
                     style={{ display: 'flex', width: '20vw', height: '20vw' }}
@@ -19,7 +18,7 @@ function LoadingMessage() {
                 <br />
             </div>
         </>
-    )
+    );
 }
 function withSplashScreen(WrappedComponent: ComponentType<any>) {
     return function (props: any) {

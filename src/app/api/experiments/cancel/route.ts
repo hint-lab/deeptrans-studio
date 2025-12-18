@@ -6,10 +6,7 @@ export async function POST(req: NextRequest) {
         const { jobId } = await req.json();
 
         if (!jobId) {
-            return NextResponse.json(
-                { success: false, error: 'Missing jobId' },
-                { status: 400 }
-            );
+            return NextResponse.json({ success: false, error: 'Missing jobId' }, { status: 400 });
         }
 
         const cancelled = await cancelExperiment(jobId);
@@ -23,7 +20,7 @@ export async function POST(req: NextRequest) {
 
         return NextResponse.json({
             success: true,
-            message: 'Experiment cancelled successfully'
+            message: 'Experiment cancelled successfully',
         });
     } catch (error) {
         console.error('Failed to cancel experiment:', error);

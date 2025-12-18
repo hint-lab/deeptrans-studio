@@ -1,11 +1,11 @@
 'use server';
 
-import { findProjectByIdDB } from "@/db/project";
-import { findDocumentByIdDB } from "@/db/document";
-import { auth } from "@/auth";
-import { DocumentTab, DocumentItemTab, ExplorerTabs } from "@/types/explorerTabs";
-import { findDocumentItemsByDocumentIdDB, DocumentItem } from "@/db/documentItem";
-import { getTranslations } from "next-intl/server";
+import { findProjectByIdDB } from '@/db/project';
+import { findDocumentByIdDB } from '@/db/document';
+import { auth } from '@/auth';
+import { DocumentTab, DocumentItemTab, ExplorerTabs } from '@/types/explorerTabs';
+import { findDocumentItemsByDocumentIdDB, DocumentItem } from '@/db/documentItem';
+import { getTranslations } from 'next-intl/server';
 
 // 在文件开头添加类型定义
 type Metadata = {
@@ -21,7 +21,8 @@ export async function fetchProjectTabsAction(projectId: string): Promise<Explore
     const session = await auth();
     const t = await getTranslations('IDE.explorerPanel');
 
-    if (!session?.user?.id) return { projectId: "0", projectName: t('welcomePage'), documentTabs: [] };
+    if (!session?.user?.id)
+        return { projectId: '0', projectName: t('welcomePage'), documentTabs: [] };
 
     try {
         const project = await findProjectByIdDB(projectId);
@@ -34,23 +35,23 @@ export async function fetchProjectTabsAction(projectId: string): Promise<Explore
                 items: documentItems.map((item: DocumentItem, index: number) => ({
                     id: item.id,
                     name: t('segment', { index: index + 1 }),
-                    status: item.status
+                    status: item.status,
                 })),
-                collapsed: false
+                collapsed: false,
             });
         }
         const projectTabs = {
             projectId: projectId,
             projectName: project?.name || t('project'),
-            documentTabs: documentTabs
+            documentTabs: documentTabs,
         };
-        console.log(projectTabs)
+        console.log(projectTabs);
         if (!projectTabs.documentTabs.length) {
-            return { projectId: "0", projectName: t('welcomePage'), documentTabs: [] };
+            return { projectId: '0', projectName: t('welcomePage'), documentTabs: [] };
         }
         return projectTabs;
     } catch (error) {
-        console.error("获取项目文档失败:", error);
-        return { projectId: "0", projectName: t('welcomePage'), documentTabs: [] };
+        console.error('获取项目文档失败:', error);
+        return { projectId: '0', projectName: t('welcomePage'), documentTabs: [] };
     }
 }

@@ -1,16 +1,16 @@
-"use client";
+'use client';
 
-import { Moon, Sun } from "lucide-react"
-import UserNavDropDown from "./user-nav-dropdown";
-import Image from "next/image";
-import { Button } from "@/components/ui/button";
-import { useTheme } from "next-themes"; // 引入主题钩子
-import { useEffect, useState } from "react";
-import Link from "next/link";
-import { useSidebar } from "@/hooks/useSidebar";
-import { SidebarToggle } from "@/components/sidebar-toggle";
-import LocaleSwitcher from "@/components/locale-switcher";
-import { useTranslations } from "next-intl";
+import { Moon, Sun } from 'lucide-react';
+import UserNavDropDown from './user-nav-dropdown';
+import Image from 'next/image';
+import { Button } from '@/components/ui/button';
+import { useTheme } from 'next-themes'; // 引入主题钩子
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { useSidebar } from '@/hooks/useSidebar';
+import { SidebarToggle } from '@/components/sidebar-toggle';
+import LocaleSwitcher from '@/components/locale-switcher';
+import { useTranslations } from 'next-intl';
 
 export default function Header() {
     const t = useTranslations('Dashboard.Header');
@@ -24,10 +24,10 @@ export default function Header() {
     const logoTheme = resolvedTheme || theme;
     if (!mounted) {
         return (
-            <div className="flex z-50 size-full justify-between items-center bg-background/95 backdrop-blur px-4">
+            <div className="z-50 flex size-full items-center justify-between bg-background/95 px-4 backdrop-blur">
                 <div className="h-6 w-[50px]" />
                 <div className="ml-auto flex items-center space-x-4 px-3">
-                    <div className="w-10 h-10" />
+                    <div className="h-10 w-10" />
                     <UserNavDropDown />
                 </div>
             </div>
@@ -35,12 +35,12 @@ export default function Header() {
     }
 
     return (
-        <div className="flex z-50 size-full justify-between items-center bg-background/95 backdrop-blur px-4">
+        <div className="z-50 flex size-full items-center justify-between bg-background/95 px-4 backdrop-blur">
             <SidebarToggle isOpen={isSidebarOpen} onToggle={toggleSidebar} />
             <Link href="/dashboard">
                 <Image
                     alt="Logo"
-                    src={logoTheme === "dark" ? "/logo3_dark.svg" : "/logo3.svg"}
+                    src={logoTheme === 'dark' ? '/logo3_dark.svg' : '/logo3.svg'}
                     width={50}
                     height={20}
                     priority
@@ -52,14 +52,10 @@ export default function Header() {
                 <Button
                     variant="ghost"
                     size="icon"
-                    onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+                    onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
                     aria-label={t('toggleTheme')}
                 >
-                    {theme === "dark" ? (
-                        <Sun className="h-4 w-4" />
-                    ) : (
-                        <Moon className="h-4 w-4" />
-                    )}
+                    {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
                 </Button>
                 <UserNavDropDown />
             </div>

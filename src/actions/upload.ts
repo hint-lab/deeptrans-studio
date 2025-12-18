@@ -17,7 +17,11 @@ const storageConfig = {
 // 创建存储服务实例
 const storageService = createStorageService(storageConfig);
 
-export async function getUploadUrlAction(fileName: string, contentType: string, projectName: string) {
+export async function getUploadUrlAction(
+    fileName: string,
+    contentType: string,
+    projectName: string
+) {
     try {
         console.log('开始获取上传 URL:', { fileName, contentType, projectName });
 
@@ -41,7 +45,7 @@ export async function getUploadUrlAction(fileName: string, contentType: string, 
             error: error instanceof Error ? error.message : '获取上传 URL 失败',
         };
     }
-} 
+}
 
 // 通过 Server Action 接收文件并由服务端完成上传，避免浏览器直传的 CORS/内网不可达问题
 export async function uploadFileAction(formData: FormData) {
@@ -56,7 +60,11 @@ export async function uploadFileAction(formData: FormData) {
             return { success: false, error: '缺少项目名称' };
         }
 
-        const result = await storageService.getUploadUrl(file.name, (file as any).type || 'application/octet-stream', projectName);
+        const result = await storageService.getUploadUrl(
+            file.name,
+            (file as any).type || 'application/octet-stream',
+            projectName
+        );
 
         const arrayBuffer = await file.arrayBuffer();
         const putRes = await fetch(result.uploadUrl, {
@@ -68,8 +76,13 @@ export async function uploadFileAction(formData: FormData) {
         });
         if (!putRes.ok) {
             let text = '';
-            try { text = await putRes.text(); } catch {}
-            return { success: false, error: `上传失败: ${putRes.status} ${putRes.statusText} ${text}` };
+            try {
+                text = await putRes.text();
+            } catch {}
+            return {
+                success: false,
+                error: `上传失败: ${putRes.status} ${putRes.statusText} ${text}`,
+            };
         }
 
         return {
@@ -94,6 +107,9 @@ export async function getFileUrlAction(fileName: string) {
         const url = await storageService.getFileUrl(fileName);
         return { success: true, data: { fileUrl: url } };
     } catch (error) {
-        return { success: false, error: error instanceof Error ? error.message : '获取文件地址失败' };
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : '获取文件地址失败',
+        };
     }
 }

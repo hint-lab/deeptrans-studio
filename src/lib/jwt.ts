@@ -1,5 +1,5 @@
-import jwt from "jsonwebtoken";
-import { UserRole } from "@prisma/client";
+import jwt from 'jsonwebtoken';
+import { UserRole } from '@prisma/client';
 
 interface JWTPayload {
     id: string;
@@ -28,7 +28,7 @@ export const verifyJwtToken = (token: string): JWTPayload | null => {
         const secret = process.env.JWT_SECRET || 'your-secret-key';
         return jwt.verify(token, secret) as JWTPayload;
     } catch (error) {
-        console.error("JWT验证失败:", error);
+        console.error('JWT验证失败:', error);
         return null;
     }
 };
@@ -43,6 +43,6 @@ export const generateAuthToken = (user: { id: string; phone?: string; role?: Use
         id: user.id,
         phone: user.phone,
         role: user.role,
-        iat: Math.floor(Date.now() / 1000)
+        iat: Math.floor(Date.now() / 1000),
     });
-}; 
+};

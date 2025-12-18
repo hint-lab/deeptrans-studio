@@ -8,16 +8,17 @@ type TerminalVariant = 'start' | 'end';
 
 export function TerminalNode({ data }: any) {
     const t = useTranslations('IDE.workflow');
-    const variant: TerminalVariant = (data?.variant === 'end' || data?.label === t('end')) ? 'end' : 'start';
+    const variant: TerminalVariant =
+        data?.variant === 'end' || data?.label === t('end') ? 'end' : 'start';
     const isStart = variant === 'start';
 
     return (
         <div
             className={cn(
-                'w-24 px-3 py-1.5 rounded-full flex items-center justify-center gap-1.5 shadow-sm border text-xs select-none',
+                'flex w-24 select-none items-center justify-center gap-1.5 rounded-full border px-3 py-1.5 text-xs shadow-sm',
                 isStart
-                    ? 'bg-gradient-to-r from-rose-500 to-fuchsia-500 text-white border-rose-600'
-                    : 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white border-emerald-600'
+                    ? 'border-rose-600 bg-gradient-to-r from-rose-500 to-fuchsia-500 text-white'
+                    : 'border-emerald-600 bg-gradient-to-r from-emerald-500 to-teal-500 text-white'
             )}
         >
             <Handle type="target" position={Position.Left} id="input" className="!opacity-0" />
@@ -26,12 +27,10 @@ export function TerminalNode({ data }: any) {
             ) : (
                 <CheckCircle2 className="h-3.5 w-3.5 opacity-90" />
             )}
-            <span className="font-medium tracking-wide truncate">
+            <span className="truncate font-medium tracking-wide">
                 {data?.label || (isStart ? t('start') : t('end'))}
             </span>
             <Handle type="source" position={Position.Right} id="output" className="!opacity-0" />
         </div>
     );
 }
-
-

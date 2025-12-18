@@ -1,13 +1,19 @@
-import { MenubarMenu, MenubarTrigger, MenubarContent, MenubarItem, MenubarSeparator } from "@/components/ui/menubar";
-import { useTargetEditor } from "@/hooks/useEditor";
-import { useActiveDocumentItem } from "@/hooks/useActiveDocumentItem";
-import { updateDocItemStatusAction } from "@/actions/document-item";
-import { useTranslationState } from "@/hooks/useTranslation";
+import {
+    MenubarMenu,
+    MenubarTrigger,
+    MenubarContent,
+    MenubarItem,
+    MenubarSeparator,
+} from '@/components/ui/menubar';
+import { useTargetEditor } from '@/hooks/useEditor';
+import { useActiveDocumentItem } from '@/hooks/useActiveDocumentItem';
+import { updateDocItemStatusAction } from '@/actions/document-item';
+import { useTranslationState } from '@/hooks/useTranslation';
 import { useTranslations } from 'next-intl';
-import { toast } from "sonner";
-import { useState } from "react";
-import type { TranslationStage } from "@/store/features/translationSlice";
-import { useExplorerTabs } from "@/hooks/useExplorerTabs"; // 新增导入
+import { toast } from 'sonner';
+import { useState } from 'react';
+import type { TranslationStage } from '@/store/features/translationSlice';
+import { useExplorerTabs } from '@/hooks/useExplorerTabs'; // 新增导入
 
 export function EditMenu() {
     const t = useTranslations('IDE.menu');
@@ -17,10 +23,10 @@ export function EditMenu() {
     const { currentStage, setCurrentStage } = useTranslationState();
     const { updateDocumentItemStatus } = useExplorerTabs(); // 新增：获取更新函数
     const [isProcessing, setIsProcessing] = useState(false);
-    
+
     // 定义有效的阶段键类型
     type TranslationStageKey = Exclude<TranslationStage, null>;
-    
+
     // 类型守卫函数
     const isValidStage = (stage: TranslationStage | null): stage is TranslationStageKey => {
         return stage !== null && stage !== undefined;
@@ -30,27 +36,27 @@ export function EditMenu() {
     const stageMapping = {
         // 前进映射 [当前阶段]: 下一阶段
         forward: {
-            'NOT_STARTED': 'MT',
-            'MT': 'MT_REVIEW',
-            'MT_REVIEW': 'QA',
-            'QA': 'QA_REVIEW',
-            'QA_REVIEW': 'POST_EDIT',
-            'POST_EDIT': 'POST_EDIT_REVIEW',
-            'POST_EDIT_REVIEW': 'SIGN_OFF',
-            'SIGN_OFF': 'COMPLETED',
+            NOT_STARTED: 'MT',
+            MT: 'MT_REVIEW',
+            MT_REVIEW: 'QA',
+            QA: 'QA_REVIEW',
+            QA_REVIEW: 'POST_EDIT',
+            POST_EDIT: 'POST_EDIT_REVIEW',
+            POST_EDIT_REVIEW: 'SIGN_OFF',
+            SIGN_OFF: 'COMPLETED',
         } as Record<TranslationStageKey, TranslationStageKey>,
-        
+
         // 回退映射 [当前阶段]: 上一阶段
         backward: {
-            'MT': 'NOT_STARTED',
-            'MT_REVIEW': 'MT',
-            'QA': 'MT_REVIEW',
-            'QA_REVIEW': 'QA',
-            'POST_EDIT': 'QA_REVIEW',
-            'POST_EDIT_REVIEW': 'POST_EDIT',
-            'SIGN_OFF': 'POST_EDIT_REVIEW',
-            'COMPLETED': 'SIGN_OFF',
-        } as Record<TranslationStageKey, TranslationStageKey>
+            MT: 'NOT_STARTED',
+            MT_REVIEW: 'MT',
+            QA: 'MT_REVIEW',
+            QA_REVIEW: 'QA',
+            POST_EDIT: 'QA_REVIEW',
+            POST_EDIT_REVIEW: 'POST_EDIT',
+            SIGN_OFF: 'POST_EDIT_REVIEW',
+            COMPLETED: 'SIGN_OFF',
+        } as Record<TranslationStageKey, TranslationStageKey>,
     };
 
     const undo = () => target.editor?.chain().focus().undo().run();
@@ -62,13 +68,13 @@ export function EditMenu() {
     const handleRollback = async () => {
         const id = (activeDocumentItem as any)?.id;
         if (!id) {
-            toast.error("没有激活的文档项");
+            toast.error('没有激活的文档项');
             return;
         }
 
         // 使用类型守卫检查
         if (!isValidStage(currentStage) || currentStage === 'NOT_STARTED') {
-            toast.info("已经是初始状态，无法回退");
+            toast.info('已经是初始状态，无法回退');
             return;
         }
 
@@ -82,17 +88,17 @@ export function EditMenu() {
         try {
             // 1. 更新数据库状态
             await updateDocItemStatusAction(id, prevStage);
-            
+
             // 2. 更新侧边栏状态
             updateDocumentItemStatus(id, prevStage);
-            
+
             // 3. 更新当前组件状态
             setCurrentStage(prevStage);
-            
+
             toast.success(`已回退到 ${prevStage} 状态`);
         } catch (error) {
-            console.error("回退失败:", error);
-            toast.error("回退失败，请稍后重试");
+            console.error('回退失败:', error);
+            toast.error('回退失败，请稍后重试');
         } finally {
             setIsProcessing(false);
         }
@@ -101,13 +107,13 @@ export function EditMenu() {
     const handleAdvance = async () => {
         const id = (activeDocumentItem as any)?.id;
         if (!id) {
-            toast.error("没有激活的文档项");
+            toast.error('没有激活的文档项');
             return;
         }
 
         // 使用类型守卫检查
         if (!isValidStage(currentStage) || currentStage === 'COMPLETED') {
-            toast.info("已经是完成状态，无法前进");
+            toast.info('已经是完成状态，无法前进');
             return;
         }
 
@@ -121,46 +127,52 @@ export function EditMenu() {
         try {
             // 1. 更新数据库状态
             await updateDocItemStatusAction(id, nextStage);
-            
+
             // 2. 更新侧边栏状态
             updateDocumentItemStatus(id, nextStage);
-            
+
             // 3. 更新当前组件状态
             setCurrentStage(nextStage);
-            
+
             // 根据新状态提供相应提示
             const stageMessages: Record<TranslationStageKey, string> = {
-                'NOT_STARTED': "未开始",
-                'MT': "已进入预翻译阶段",
-                'MT_REVIEW': "请复核预翻译结果",
-                'QA': "已进入质量评估阶段",
-                'QA_REVIEW': "请复核质量评估结果",
-                'POST_EDIT': "已进入译后编辑阶段",
-                'POST_EDIT_REVIEW': "请复核译后编辑结果",
-                'SIGN_OFF': "已进入签发阶段",
-                'COMPLETED': "翻译流程已完成",
-                'ERROR': "状态异常，请检查",
+                NOT_STARTED: '未开始',
+                MT: '已进入预翻译阶段',
+                MT_REVIEW: '请复核预翻译结果',
+                QA: '已进入质量评估阶段',
+                QA_REVIEW: '请复核质量评估结果',
+                POST_EDIT: '已进入译后编辑阶段',
+                POST_EDIT_REVIEW: '请复核译后编辑结果',
+                SIGN_OFF: '已进入签发阶段',
+                COMPLETED: '翻译流程已完成',
+                ERROR: '状态异常，请检查',
             };
-            
+
             toast.success(stageMessages[nextStage] || `已前进到 ${nextStage} 状态`);
         } catch (error) {
-            console.error("前进失败:", error);
-            toast.error("前进失败，请稍后重试");
+            console.error('前进失败:', error);
+            toast.error('前进失败，请稍后重试');
         } finally {
             setIsProcessing(false);
         }
     };
 
     // 检查按钮是否应该禁用 - 使用类型守卫
-    const canRollback = isValidStage(currentStage) && currentStage !== 'NOT_STARTED' && stageMapping.backward[currentStage];
-    const canAdvance = isValidStage(currentStage) && currentStage !== 'COMPLETED' && stageMapping.forward[currentStage];
+    const canRollback =
+        isValidStage(currentStage) &&
+        currentStage !== 'NOT_STARTED' &&
+        stageMapping.backward[currentStage];
+    const canAdvance =
+        isValidStage(currentStage) &&
+        currentStage !== 'COMPLETED' &&
+        stageMapping.forward[currentStage];
 
     return (
         <MenubarMenu>
             <MenubarTrigger>
-                <span className="flex items-center whitespace-nowrap gap-2 cursor-pointer hover:opacity-90">
+                <span className="flex cursor-pointer items-center gap-2 whitespace-nowrap hover:opacity-90">
                     {t('edit')}
-                    {isProcessing && " (处理中...)"}
+                    {isProcessing && ' (处理中...)'}
                 </span>
             </MenubarTrigger>
             <MenubarContent>
@@ -180,24 +192,28 @@ export function EditMenu() {
                     {tEditor('paste')}
                 </MenubarItem>
                 <MenubarSeparator />
-                <MenubarItem 
-                    onClick={handleRollback} 
+                <MenubarItem
+                    onClick={handleRollback}
                     disabled={!canRollback || isProcessing}
-                    className={!canRollback ? "opacity-50 cursor-not-allowed" : ""}
+                    className={!canRollback ? 'cursor-not-allowed opacity-50' : ''}
                 >
                     {tEditor('rollback')}
                     <span className="ml-2 text-xs text-muted-foreground">
-                        {canRollback && isValidStage(currentStage) ? `→ ${stageMapping.backward[currentStage]}` : ""}
+                        {canRollback && isValidStage(currentStage)
+                            ? `→ ${stageMapping.backward[currentStage]}`
+                            : ''}
                     </span>
                 </MenubarItem>
-                <MenubarItem 
-                    onClick={handleAdvance} 
+                <MenubarItem
+                    onClick={handleAdvance}
                     disabled={!canAdvance || isProcessing}
-                    className={!canAdvance ? "opacity-50 cursor-not-allowed" : ""}
+                    className={!canAdvance ? 'cursor-not-allowed opacity-50' : ''}
                 >
                     {tEditor('advance')}
                     <span className="ml-2 text-xs text-muted-foreground">
-                        {canAdvance && isValidStage(currentStage) ? `→ ${stageMapping.forward[currentStage]}` : ""}
+                        {canAdvance && isValidStage(currentStage)
+                            ? `→ ${stageMapping.forward[currentStage]}`
+                            : ''}
                     </span>
                 </MenubarItem>
             </MenubarContent>

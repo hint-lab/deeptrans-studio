@@ -1,4 +1,4 @@
-import pkg from "@prisma/client";
+import pkg from '@prisma/client';
 const { PrismaClient } = pkg as unknown as { PrismaClient: new () => any };
 
 declare global {
@@ -10,7 +10,7 @@ declare global {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const prisma: any = globalThis.prisma || new (PrismaClient as any)();
 
-if (process.env.NODE_ENV !== "production") {
+if (process.env.NODE_ENV !== 'production') {
     globalThis.prisma = prisma;
 }
 

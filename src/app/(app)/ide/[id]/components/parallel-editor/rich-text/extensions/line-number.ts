@@ -41,7 +41,8 @@ const LineNumber = Extension.create<LineNumberOptions>({
                 let lineNumbersElement = editorContainer.querySelector('.line-numbers-container');
                 if (!lineNumbersElement) {
                     lineNumbersElement = document.createElement('div');
-                    lineNumbersElement.className = 'line-numbers-container absolute left-0 top-0 h-full w-8 bg-muted text-muted-foreground text-xs';
+                    lineNumbersElement.className =
+                        'line-numbers-container absolute left-0 top-0 h-full w-8 bg-muted text-muted-foreground text-xs';
                     editorContainer.insertBefore(lineNumbersElement, parentElement);
                 }
 
@@ -62,7 +63,9 @@ const LineNumber = Extension.create<LineNumberOptions>({
                 };
 
                 // 获取所有块级元素
-                const blocks = editorDOM.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, blockquote, pre');
+                const blocks = editorDOM.querySelectorAll(
+                    'p, h1, h2, h3, h4, h5, h6, li, blockquote, pre'
+                );
 
                 // 计算实际行位置
                 let lineNumber = 1;
@@ -85,34 +88,40 @@ const LineNumber = Extension.create<LineNumberOptions>({
                     // 如果块高度大于行高，则有多行
                     if (blockRect.height > lineHeight * 1.5) {
                         // 计算额外行数(向下取整，因为第一行已添加)
-                        const additionalLines = Math.floor((blockRect.height - lineHeight / 2) / lineHeight);
+                        const additionalLines = Math.floor(
+                            (blockRect.height - lineHeight / 2) / lineHeight
+                        );
 
                         // 为每一额外行添加行号
                         for (let i = 1; i <= additionalLines; i++) {
-                            const topPosition = relativeTop + (i * lineHeight);
-                            lineNumbersElement.appendChild(createLineMarker(topPosition, lineNumber++));
+                            const topPosition = relativeTop + i * lineHeight;
+                            lineNumbersElement.appendChild(
+                                createLineMarker(topPosition, lineNumber++)
+                            );
                         }
                     }
                 });
-            }
+            },
         };
     },
 
     addCommands() {
         return {
-            toggleLineNumbers: () => ({ editor }) => {
-                this.options.showLineNumbers = !this.options.showLineNumbers;
-                const editorElement = editor.view.dom.parentElement;
-                if (editorElement) {
-                    if (this.options.showLineNumbers) {
-                        editorElement.classList.add('show-line-numbers');
-                        this.storage.updateLineNumbers(editor);
-                    } else {
-                        editorElement.classList.remove('show-line-numbers');
+            toggleLineNumbers:
+                () =>
+                ({ editor }) => {
+                    this.options.showLineNumbers = !this.options.showLineNumbers;
+                    const editorElement = editor.view.dom.parentElement;
+                    if (editorElement) {
+                        if (this.options.showLineNumbers) {
+                            editorElement.classList.add('show-line-numbers');
+                            this.storage.updateLineNumbers(editor);
+                        } else {
+                            editorElement.classList.remove('show-line-numbers');
+                        }
                     }
-                }
-                return true;
-            },
+                    return true;
+                },
         };
     },
 
@@ -122,7 +131,7 @@ const LineNumber = Extension.create<LineNumberOptions>({
 
     onUpdate() {
         this.storage.updateLineNumbers(this.editor);
-    }
+    },
 });
 
-export default LineNumber; 
+export default LineNumber;

@@ -6,7 +6,7 @@ export interface DictEntry {
     dictionaryId?: string;
     id?: string;
 }
-  
+
 export interface TermCandidate {
     term: string;
     score?: number;

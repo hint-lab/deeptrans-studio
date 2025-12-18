@@ -1,6 +1,16 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
 
-export type TranslationStage = 'NOT_STARTED' | 'MT' | 'MT_REVIEW' | 'QA' |  'QA_REVIEW'  | 'POST_EDIT' | 'POST_EDIT_REVIEW' | 'SIGN_OFF' | 'ERROR' | 'COMPLETED';
+export type TranslationStage =
+    | 'NOT_STARTED'
+    | 'MT'
+    | 'MT_REVIEW'
+    | 'QA'
+    | 'QA_REVIEW'
+    | 'POST_EDIT'
+    | 'POST_EDIT_REVIEW'
+    | 'SIGN_OFF'
+    | 'ERROR'
+    | 'COMPLETED';
 
 interface TranslationState {
     currentStage: TranslationStage;
@@ -15,7 +25,7 @@ const initialState: TranslationState = {
     sourceLanguage: 'auto',
     targetLanguage: 'auto',
     sourceText: '',
-    targetText: ''
+    targetText: '',
 };
 
 export const translationSlice = createSlice({
@@ -39,8 +49,8 @@ export const translationSlice = createSlice({
         },
         setTargetText: (state, action: PayloadAction<string>) => {
             state.targetText = action.payload;
-        }
-    }
+        },
+    },
 });
 
 export const {
@@ -48,7 +58,7 @@ export const {
     setSourceLanguage,
     setTargetLanguage,
     setSourceText,
-    setTargetText
+    setTargetText,
 } = translationSlice.actions;
 
-export default translationSlice.reducer; 
+export default translationSlice.reducer;

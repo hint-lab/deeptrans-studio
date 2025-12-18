@@ -77,21 +77,21 @@ export const DEFAULT_HYBRID_CONFIG: HybridSearchConfig = {
         topK: 10,
         metric: 'COSINE',
         ef: 128,
-        weight: 0.7
+        weight: 0.7,
     },
     keywordSearch: {
         enabled: true,
         topK: 10,
         matchType: 'contains',
         boostFactor: 1.0,
-        weight: 0.3
+        weight: 0.3,
     },
     fusionStrategy: {
         method: 'weighted_sum',
         weights: {
             vectorWeight: 0.7,
-            keywordWeight: 0.3
-        }
+            keywordWeight: 0.3,
+        },
     },
-    finalTopK: 10
+    finalTopK: 10,
 };

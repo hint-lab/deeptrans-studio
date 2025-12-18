@@ -1,9 +1,14 @@
-"use client";
-import { MenubarMenu, MenubarTrigger, MenubarContent, MenubarCheckboxItem } from "@/components/ui/menubar";
-import { useRightPanel } from "@/hooks/useRightPanel";
-import { useSidebar } from "@/hooks/useSidebar";
-import { useBottomPanel } from "@/hooks/useBottomPanel";
-import { useState } from "react";
+'use client';
+import {
+    MenubarMenu,
+    MenubarTrigger,
+    MenubarContent,
+    MenubarCheckboxItem,
+} from '@/components/ui/menubar';
+import { useRightPanel } from '@/hooks/useRightPanel';
+import { useSidebar } from '@/hooks/useSidebar';
+import { useBottomPanel } from '@/hooks/useBottomPanel';
+import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 
 export function ViewMenu() {
@@ -16,12 +21,13 @@ export function ViewMenu() {
     return (
         <>
             <MenubarMenu>
-                <MenubarTrigger><span className="flex items-center whitespace-nowrap gap-2 cursor-pointer hover:opacity-90">{t('view')}</span></MenubarTrigger>
+                <MenubarTrigger>
+                    <span className="flex cursor-pointer items-center gap-2 whitespace-nowrap hover:opacity-90">
+                        {t('view')}
+                    </span>
+                </MenubarTrigger>
                 <MenubarContent>
-                    <MenubarCheckboxItem
-                        checked={isSidebarOpen}
-                        onCheckedChange={toggleSidebar}
-                    >
+                    <MenubarCheckboxItem checked={isSidebarOpen} onCheckedChange={toggleSidebar}>
                         <span>{t('sidebar')}</span>
                     </MenubarCheckboxItem>
 
@@ -31,7 +37,6 @@ export function ViewMenu() {
                     >
                         <span>{t('chatPanel')}</span>
                     </MenubarCheckboxItem>
-
 
                     <MenubarCheckboxItem
                         checked={isBottomPanelOpen}

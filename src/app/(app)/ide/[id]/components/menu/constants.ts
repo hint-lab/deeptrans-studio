@@ -11,4 +11,4 @@ export const MENU_ICONS = {
         DEFAULT: 16,
         LARGE: 24,
     },
-} as const; 
+} as const;

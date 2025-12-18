@@ -46,7 +46,7 @@ import { getDocsTranslations, getDocsT } from "./i18n";
 export default async function DocsHomePage() {
   const translations = await getDocsTranslations();
   const t = getDocsT(translations);
-  
+
   return (
     <div>
       <h1>{t('home.title')}</h1>
@@ -65,12 +65,12 @@ export default async function GettingStartedPage() {
   const translations = await getPageTranslations();
   const t = getPageT(translations);
   const page = translations.gettingStarted; // 直接访问页面对象
-  
+
   return (
     <div>
       <h1>{t('gettingStarted.title')}</h1>
       <p>{t('gettingStarted.subtitle')}</p>
-      
+
       {/* 访问复杂对象 */}
       {Object.entries(page.steps).map(([key, step]) => (
         <div key={key}>
@@ -90,36 +90,39 @@ export default async function GettingStartedPage() {
 - `meta`: 页面元数据
 - `navigation`: 导航菜单项
 - `home`: 首页完整内容
-  - `cards`: 卡片内容
-  - `features`: 特性介绍
-  - `quickLinks`: 快速链接
+    - `cards`: 卡片内容
+    - `features`: 特性介绍
+    - `quickLinks`: 快速链接
 - `common`: 通用文案
 
 ### pages-zh/ 和 pages-en/ 目录（拆分后的子页面翻译）
 
 每个页面都有独立的 JSON 文件：
+
 - 中文：`pages-zh/gettingStarted-zh.json`、`pages-zh/concepts-zh.json` 等
 - 英文：`pages-en/gettingStarted-en.json`、`pages-en/concepts-en.json` 等
 
 每个页面文件包含：
+
 - `title`: 页面标题
 - `subtitle`: 页面副标题
 - 页面特定内容（如 steps、concepts 等）
 
 示例：
+
 ```json
 {
-  "gettingStarted": {
-    "title": "快速开始",
-    "subtitle": "...",
-    "steps": {
-      "step1": {
-        "title": "...",
-        "description": "...",
-        "tips": ["...", "..."]
-      }
+    "gettingStarted": {
+        "title": "快速开始",
+        "subtitle": "...",
+        "steps": {
+            "step1": {
+                "title": "...",
+                "description": "...",
+                "tips": ["...", "..."]
+            }
+        }
     }
-  }
 }
 ```
 
@@ -149,15 +152,19 @@ export default async function GettingStartedPage() {
 ## 工具函数
 
 ### `getDocsTranslations()`
+
 返回首页和导航的翻译对象
 
 ### `getPageTranslations()`
+
 返回子页面的翻译对象
 
 ### `getDocsT(translations)`
+
 返回首页翻译函数
 
 ### `getPageT(translations)`
+
 返回子页面翻译函数
 
 ## 注意事项

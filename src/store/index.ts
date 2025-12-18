@@ -15,23 +15,23 @@ import rightPaneReducer from './features/rightPaneSlice';
 import projectInitReducer from './features/projectInitSlice';
 import workFlowStepReducer from './features/workFlowStepSlice';
 export const store = configureStore({
-  reducer: {
-    editor: editorReducer,
-    translation: translationReducer,
-    sidebar: sidebarReducer,
-    chatbar: chatbarReducer,
-    explorerTabs: explorerTabsReducer,
-    tabBar: tabBarReducer,
-    activeDocument: activeDocumentReducer,
-    activeDocumentItem: activeDocumentItemReducer,
-    dialog: dialogReducer,
-    log: logReducer,
-    panel: panelReducer,
-    running: runningReducer,
-    rightPane: rightPaneReducer,
-    projectInit: projectInitReducer,
-    workFlowStep: workFlowStepReducer,
-  },
+    reducer: {
+        editor: editorReducer,
+        translation: translationReducer,
+        sidebar: sidebarReducer,
+        chatbar: chatbarReducer,
+        explorerTabs: explorerTabsReducer,
+        tabBar: tabBarReducer,
+        activeDocument: activeDocumentReducer,
+        activeDocumentItem: activeDocumentItemReducer,
+        dialog: dialogReducer,
+        log: logReducer,
+        panel: panelReducer,
+        running: runningReducer,
+        rightPane: rightPaneReducer,
+        projectInit: projectInitReducer,
+        workFlowStep: workFlowStepReducer,
+    },
 });
 
 // Infer the type of store

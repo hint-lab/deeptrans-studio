@@ -17,7 +17,11 @@ export class MinioStorageService implements StorageService {
         this.bucket = config.bucket;
     }
 
-    async getUploadUrl(fileName: string, contentType: string, projectName: string): Promise<UploadResult> {
+    async getUploadUrl(
+        fileName: string,
+        contentType: string,
+        projectName: string
+    ): Promise<UploadResult> {
         // 确保 bucket 存在
         const bucketExists = await this.client.bucketExists(this.bucket);
         if (!bucketExists) {
@@ -53,4 +57,4 @@ export class MinioStorageService implements StorageService {
     async getFileUrl(fileName: string): Promise<string> {
         return this.client.presignedGetObject(this.bucket, fileName, 24 * 60 * 60);
     }
-} 
+}

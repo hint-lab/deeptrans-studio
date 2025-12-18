@@ -1,10 +1,16 @@
-"use client";
+'use client';
 
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { useTranslations } from "next-intl";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { useTranslations } from 'next-intl';
 
-export function PreferencesDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
+export function PreferencesDialog({
+    open,
+    onOpenChange,
+}: {
+    open: boolean;
+    onOpenChange: (v: boolean) => void;
+}) {
     const tLogo = useTranslations('IDE.menus.logo');
     const tShort = useTranslations('IDE.shortcuts');
     const safeShort = (key: string) => {
@@ -32,11 +38,13 @@ export function PreferencesDialog({ open, onOpenChange }: { open: boolean; onOpe
                 <div className="grid gap-4 py-2">
                     <div className="grid gap-2">
                         <Label>{safeShort('title')}</Label>
-                        <div className="rounded-md border p-3 text-sm space-y-2">
+                        <div className="space-y-2 rounded-md border p-3 text-sm">
                             {shortcuts.map(it => (
                                 <div key={it.id} className="flex items-center justify-between">
                                     <span>{safeShort(it.id)}</span>
-                                    <span className="font-mono text-xs text-muted-foreground">{it.combo}</span>
+                                    <span className="font-mono text-xs text-muted-foreground">
+                                        {it.combo}
+                                    </span>
                                 </div>
                             ))}
                         </div>

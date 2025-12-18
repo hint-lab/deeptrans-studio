@@ -5,7 +5,9 @@ import { toggle } from '@/store/features/dialogSlice';
 
 export const useDialog = () => {
     const dispatch = useAppDispatch();
-    const isDialogOpen = useAppSelector((state) => (state.dialog as { isOpen: boolean })?.isOpen ?? false);
+    const isDialogOpen = useAppSelector(
+        state => (state.dialog as { isOpen: boolean })?.isOpen ?? false
+    );
 
     const toggleDialog = () => dispatch(toggle());
 

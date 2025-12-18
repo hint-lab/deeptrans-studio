@@ -25,7 +25,9 @@
     "test:docx": "tsx scripts/test-docx-parser.ts",
     "test:segment": "tsx scripts/test-segment.ts",
     "test:terms": "tsx scripts/test-doc-terms.ts",
-    "test:milvus": "tsx scripts/milvus-smoke-test.ts"
+    "test:milvus": "tsx scripts/milvus-smoke-test.ts",
+    "format": "prettier --write \"{app,components,lib,pages,src,styles,utils}/**/*.{js,jsx,ts,tsx,json,css,scss,md,mdx}\"",
+    "format:check": "prettier --check \"{app,components,lib,pages,src,styles,utils}/**/*.{js,jsx,ts,tsx,json,css,scss,md,mdx}\""
   },
   "dependencies": {
     "@ai-sdk/openai": "^2.0.24",

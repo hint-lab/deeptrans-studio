@@ -1,9 +1,15 @@
 'use server';
-import { findProjectsByUserIdDB, createProjectDB, updateProjectByIdDB, deleteProjectByIdDB, findProjectByIdDB } from "@/db/project";
-import { auth } from "@/auth";
-import { unstable_noStore as noStore } from "next/cache";
-import { findProjectDictionaryAction } from "@/actions/dictionary";
-import { updateProjectDictionaryBindingsAction } from "@/actions/project-bindings";
+import {
+    findProjectsByUserIdDB,
+    createProjectDB,
+    updateProjectByIdDB,
+    deleteProjectByIdDB,
+    findProjectByIdDB,
+} from '@/db/project';
+import { auth } from '@/auth';
+import { unstable_noStore as noStore } from 'next/cache';
+import { findProjectDictionaryAction } from '@/actions/dictionary';
+import { updateProjectDictionaryBindingsAction } from '@/actions/project-bindings';
 
 export interface CreateProjectData {
     name: string;
@@ -48,9 +54,9 @@ export async function createNewProjectAction(data: CreateProjectData) {
                 url: data.fileInfo.fileUrl,
                 mimeType: data.fileInfo.contentType,
                 size: data.fileInfo.size,
-                status: 'WAITING'
-            }
-        }
+                status: 'WAITING',
+            },
+        },
     } as any);
 
     // 自动创建并绑定项目词典
@@ -82,14 +88,14 @@ export interface UpdateProjectData {
 
 export async function updateProjectInfoAction(id: string, data: UpdateProjectData) {
     const session = await auth();
-    if (!session?.user?.id) throw new Error("未授权");
+    if (!session?.user?.id) throw new Error('未授权');
 
     return updateProjectByIdDB(id, data as any);
 }
 
 export async function removeProjectAction(id: string) {
     const session = await auth();
-    if (!session?.user?.id) throw new Error("未授权");
+    if (!session?.user?.id) throw new Error('未授权');
 
     return deleteProjectByIdDB(id as any);
 }
@@ -99,14 +105,13 @@ export async function removeProjectAction(id: string) {
 // 获取单个项目（用于 IDE 读取语言等只读信息）
 export async function fetchProjectByIdAction(projectId: string) {
     const session = await auth();
-    if (!session?.user?.id) throw new Error("未授权");
+    if (!session?.user?.id) throw new Error('未授权');
 
     const project = await findProjectByIdDB(projectId as any);
     if (!project) return null;
     // 可选：校验归属
     if ((project as any).userId && (project as any).userId !== session.user.id) {
-        throw new Error("无权访问该项目");
+        throw new Error('无权访问该项目');
     }
     return project;
 }
-

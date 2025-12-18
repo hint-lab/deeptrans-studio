@@ -12,7 +12,7 @@ export const DialogSlice = createSlice({
     name: 'Dialog',
     initialState,
     reducers: {
-        toggle: (state) => {
+        toggle: state => {
             state.isOpen = !state.isOpen;
         },
     },

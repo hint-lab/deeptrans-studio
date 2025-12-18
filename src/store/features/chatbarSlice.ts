@@ -15,7 +15,7 @@ export const ChatBarContentSlice = createSlice({
     name: 'chatBar',
     initialState,
     reducers: {
-        toggle: (state) => {
+        toggle: state => {
             state.isOpen = !state.isOpen;
         },
         setContent: (state, action: PayloadAction<Message[]>) => {
@@ -24,15 +24,19 @@ export const ChatBarContentSlice = createSlice({
         appendContent: (state, action: PayloadAction<Message>) => {
             state.content.push(action.payload);
         },
-        updateById: (state, action: PayloadAction<{ id: string; message: Omit<Message, 'id'> }>) => {
+        updateById: (
+            state,
+            action: PayloadAction<{ id: string; message: Omit<Message, 'id'> }>
+        ) => {
             const { id, message } = action.payload;
-            state.content = state.content.map((m) => (m.id === id ? { ...message, id } : m));
+            state.content = state.content.map(m => (m.id === id ? { ...message, id } : m));
         },
-        clearContent: (state) => {
+        clearContent: state => {
             state.content = [];
         },
     },
 });
 
-export const { toggle, setContent, appendContent, updateById, clearContent } = ChatBarContentSlice.actions;
+export const { toggle, setContent, appendContent, updateById, clearContent } =
+    ChatBarContentSlice.actions;
 export default ChatBarContentSlice.reducer;

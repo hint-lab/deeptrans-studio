@@ -1,6 +1,6 @@
-import { prisma } from "@/lib/db";
-import { UserRole, type User as PrismaUser } from "@prisma/client";
-import { dbTry } from "./utils";
+import { prisma } from '@/lib/db';
+import { UserRole, type User as PrismaUser } from '@prisma/client';
+import { dbTry } from './utils';
 export type User = PrismaUser;
 
 export type UserCreateInput = {
@@ -24,16 +24,18 @@ export type UserUpdateInput = Partial<{
 
 // 创建
 export const createUserDB = async (data: UserCreateInput): Promise<User | null> => {
-    return dbTry(() => prisma.user.create({
-        data: {
-            name: data.name ?? null,
-            email: data.email ?? null,
-            avatar: data.avatar ?? null,
-            password: data.password ?? null,
-            role: data.role ?? UserRole.USER,
-            tenantId: data.tenantId ?? null,
-        },
-    }));
+    return dbTry(() =>
+        prisma.user.create({
+            data: {
+                name: data.name ?? null,
+                email: data.email ?? null,
+                avatar: data.avatar ?? null,
+                password: data.password ?? null,
+                role: data.role ?? UserRole.USER,
+                tenantId: data.tenantId ?? null,
+            },
+        })
+    );
 };
 
 // 查找

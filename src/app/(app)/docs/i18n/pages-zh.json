@@ -1,165 +1,159 @@
 {
-  "gettingStarted": {
-    "title": "快速开始",
-    "subtitle": "通过这个5分钟的入门指南，您将学会如何创建第一个翻译项目，上传文档，并完成一个完整的翻译工作流程。",
-    "alert": "开始之前，请确保您已经有了 DeepTrans Studio 的访问权限。如果还没有，请联系管理员开通账户。",
-    "stepsTitle": "分步指南",
-    "steps": {
-      "step1": {
-        "number": "1",
-        "title": "创建项目",
-        "description": "登录后，点击\"新建项目\"按钮开始。填写项目名称、选择源语言和目标语言。",
-        "tips": ["项目名称建议使用有意义的标识", "可以同时创建多个语言对"]
-      },
-      "step2": {
-        "number": "2",
-        "title": "上传文档",
-        "description": "支持多种格式：DOCX、PDF、TXT、Markdown等。拖拽文件或点击上传按钮。",
-        "tips": ["支持批量上传", "大文件会自动分段处理"]
-      },
-      "step3": {
-        "number": "3",
-        "title": "文档解析",
-        "description": "系统会自动解析文档结构，提取可翻译内容，并进行智能分段。",
-        "tips": ["可以查看解析进度", "支持手动调整分段"]
-      },
-      "step4": {
-        "number": "4",
-        "title": "开始翻译",
-        "description": "进入翻译编辑器，可以使用AI辅助翻译、术语库、翻译记忆等功能。",
-        "tips": ["快捷键提高效率", "实时保存不丢失"]
-      },
-      "step5": {
-        "number": "5",
-        "title": "质量检查",
-        "description": "使用内置的质量评估工具检查译文质量，包括术语一致性、语法检查等。",
-        "tips": ["自动标记问题", "支持批量修复"]
-      },
-      "step6": {
-        "number": "6",
-        "title": "导出交付",
-        "description": "完成翻译后，可以导出为原始格式或其他格式，保持文档样式。",
-        "tips": ["支持多种导出格式", "可以生成翻译报告"]
-      }
+    "gettingStarted": {
+        "title": "快速开始",
+        "subtitle": "通过这个5分钟的入门指南，您将学会如何创建第一个翻译项目，上传文档，并完成一个完整的翻译工作流程。",
+        "alert": "开始之前，请确保您已经有了 DeepTrans Studio 的访问权限。如果还没有，请联系管理员开通账户。",
+        "stepsTitle": "分步指南",
+        "steps": {
+            "step1": {
+                "number": "1",
+                "title": "创建项目",
+                "description": "登录后，点击\"新建项目\"按钮开始。填写项目名称、选择源语言和目标语言。",
+                "tips": ["项目名称建议使用有意义的标识", "可以同时创建多个语言对"]
+            },
+            "step2": {
+                "number": "2",
+                "title": "上传文档",
+                "description": "支持多种格式：DOCX、PDF、TXT、Markdown等。拖拽文件或点击上传按钮。",
+                "tips": ["支持批量上传", "大文件会自动分段处理"]
+            },
+            "step3": {
+                "number": "3",
+                "title": "文档解析",
+                "description": "系统会自动解析文档结构，提取可翻译内容，并进行智能分段。",
+                "tips": ["可以查看解析进度", "支持手动调整分段"]
+            },
+            "step4": {
+                "number": "4",
+                "title": "开始翻译",
+                "description": "进入翻译编辑器，可以使用AI辅助翻译、术语库、翻译记忆等功能。",
+                "tips": ["快捷键提高效率", "实时保存不丢失"]
+            },
+            "step5": {
+                "number": "5",
+                "title": "质量检查",
+                "description": "使用内置的质量评估工具检查译文质量，包括术语一致性、语法检查等。",
+                "tips": ["自动标记问题", "支持批量修复"]
+            },
+            "step6": {
+                "number": "6",
+                "title": "导出交付",
+                "description": "完成翻译后，可以导出为原始格式或其他格式，保持文档样式。",
+                "tips": ["支持多种导出格式", "可以生成翻译报告"]
+            }
+        },
+        "nextSteps": {
+            "title": "下一步",
+            "description": "现在您已经了解了基本流程，可以探索更多高级功能：",
+            "links": {
+                "workflows": "深入了解翻译工作流",
+                "ai": "探索AI智能助手",
+                "ui": "熟悉界面操作"
+            }
+        }
     },
-    "nextSteps": {
-      "title": "下一步",
-      "description": "现在您已经了解了基本流程，可以探索更多高级功能：",
-      "links": {
-        "workflows": "深入了解翻译工作流",
-        "ai": "探索AI智能助手",
-        "ui": "熟悉界面操作"
-      }
-    }
-  },
-  "concepts": {
-    "title": "核心概念",
-    "subtitle": "理解 DeepTrans Studio 的核心概念有助于您更高效地使用系统。这里介绍了系统中的关键术语、数据结构和工作原理。",
-    "hierarchyTitle": "数据层次结构",
     "concepts": {
-      "project": {
-        "title": "项目 (Project)",
-        "description": "顶级组织单位，包含完整的翻译工作",
-        "details": [
-          "一个项目对应一个翻译任务",
-          "包含源语言、目标语言、领域等配置",
-          "可以包含多个文档",
-          "支持团队协作和权限管理"
+        "title": "核心概念",
+        "subtitle": "理解 DeepTrans Studio 的核心概念有助于您更高效地使用系统。这里介绍了系统中的关键术语、数据结构和工作原理。",
+        "hierarchyTitle": "数据层次结构",
+        "concepts": {
+            "project": {
+                "title": "项目 (Project)",
+                "description": "顶级组织单位，包含完整的翻译工作",
+                "details": [
+                    "一个项目对应一个翻译任务",
+                    "包含源语言、目标语言、领域等配置",
+                    "可以包含多个文档",
+                    "支持团队协作和权限管理"
+                ]
+            },
+            "document": {
+                "title": "文档 (Document)",
+                "description": "项目中的单个文件",
+                "details": [
+                    "支持多种格式：DOCX、PDF、TXT等",
+                    "自动解析文档结构",
+                    "保留原始格式信息",
+                    "可以预览和下载"
+                ]
+            },
+            "segment": {
+                "title": "分段 (Segment)",
+                "description": "文档中的最小翻译单元",
+                "details": [
+                    "通常是一个句子或段落",
+                    "包含源文本和目标文本",
+                    "有独立的状态和版本",
+                    "支持批注和评论"
+                ]
+            },
+            "terminology": {
+                "title": "术语 (Term)",
+                "description": "专业领域的词汇和翻译对照",
+                "details": [
+                    "可以是项目级或全局级",
+                    "支持多语言对照",
+                    "自动高亮和提示",
+                    "支持批量导入导出"
+                ]
+            },
+            "memory": {
+                "title": "翻译记忆 (Translation Memory)",
+                "description": "历史翻译的数据库",
+                "details": ["自动匹配相似句子", "提高翻译一致性", "减少重复工作", "支持模糊匹配"]
+            },
+            "workflow": {
+                "title": "工作流 (Workflow)",
+                "description": "翻译过程的流程定义",
+                "details": [
+                    "包含多个阶段：翻译、审校、定稿",
+                    "每个阶段有不同的权限",
+                    "支持自动化任务",
+                    "可以自定义流程"
+                ]
+            }
+        }
+    },
+    "workflows": {
+        "title": "工作流",
+        "subtitle": "翻译、评估、译后编辑、审核等流程节点与切换。",
+        "items": [
+            "自动初译：批量翻译分段，并更新分段状态。",
+            "质量评估：调用评估服务，写入结果与日志。",
+            "译后编辑：在编辑器中修订内容并保存。",
+            "过程审核：阶段通过/回退。"
         ]
-      },
-      "document": {
-        "title": "文档 (Document)",
-        "description": "项目中的单个文件",
-        "details": [
-          "支持多种格式：DOCX、PDF、TXT等",
-          "自动解析文档结构",
-          "保留原始格式信息",
-          "可以预览和下载"
-        ]
-      },
-      "segment": {
-        "title": "分段 (Segment)",
-        "description": "文档中的最小翻译单元",
-        "details": [
-          "通常是一个句子或段落",
-          "包含源文本和目标文本",
-          "有独立的状态和版本",
-          "支持批注和评论"
-        ]
-      },
-      "terminology": {
-        "title": "术语 (Term)",
-        "description": "专业领域的词汇和翻译对照",
-        "details": [
-          "可以是项目级或全局级",
-          "支持多语言对照",
-          "自动高亮和提示",
-          "支持批量导入导出"
-        ]
-      },
-      "memory": {
-        "title": "翻译记忆 (Translation Memory)",
-        "description": "历史翻译的数据库",
-        "details": [
-          "自动匹配相似句子",
-          "提高翻译一致性",
-          "减少重复工作",
-          "支持模糊匹配"
-        ]
-      },
-      "workflow": {
-        "title": "工作流 (Workflow)",
-        "description": "翻译过程的流程定义",
-        "details": [
-          "包含多个阶段：翻译、审校、定稿",
-          "每个阶段有不同的权限",
-          "支持自动化任务",
-          "可以自定义流程"
-        ]
-      }
+    },
+    "installation": {
+        "title": "安装与配置",
+        "subtitle": "如何安装和配置 DeepTrans Studio"
+    },
+    "ui": {
+        "title": "界面指南",
+        "subtitle": "熟悉 DeepTrans Studio 的界面"
+    },
+    "serverActions": {
+        "title": "Server Actions API",
+        "subtitle": "API 参考文档"
+    },
+    "state": {
+        "title": "状态管理",
+        "subtitle": "了解应用的状态管理"
+    },
+    "ai": {
+        "title": "AI 智能代理",
+        "subtitle": "了解 AI 功能和智能助手"
+    },
+    "database": {
+        "title": "数据库设计",
+        "subtitle": "数据库架构和设计文档"
+    },
+    "troubleshooting": {
+        "title": "故障排查",
+        "subtitle": "常见问题和解决方案"
+    },
+    "faq": {
+        "title": "常见问题",
+        "subtitle": "常见问题解答"
     }
-  },
-  "workflows": {
-    "title": "工作流",
-    "subtitle": "翻译、评估、译后编辑、审核等流程节点与切换。",
-    "items": [
-      "自动初译：批量翻译分段，并更新分段状态。",
-      "质量评估：调用评估服务，写入结果与日志。",
-      "译后编辑：在编辑器中修订内容并保存。",
-      "过程审核：阶段通过/回退。"
-    ]
-  },
-  "installation": {
-    "title": "安装与配置",
-    "subtitle": "如何安装和配置 DeepTrans Studio"
-  },
-  "ui": {
-    "title": "界面指南",
-    "subtitle": "熟悉 DeepTrans Studio 的界面"
-  },
-  "serverActions": {
-    "title": "Server Actions API",
-    "subtitle": "API 参考文档"
-  },
-  "state": {
-    "title": "状态管理",
-    "subtitle": "了解应用的状态管理"
-  },
-  "ai": {
-    "title": "AI 智能代理",
-    "subtitle": "了解 AI 功能和智能助手"
-  },
-  "database": {
-    "title": "数据库设计",
-    "subtitle": "数据库架构和设计文档"
-  },
-  "troubleshooting": {
-    "title": "故障排查",
-    "subtitle": "常见问题和解决方案"
-  },
-  "faq": {
-    "title": "常见问题",
-    "subtitle": "常见问题解答"
-  }
 }
-

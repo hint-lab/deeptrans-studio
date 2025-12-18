@@ -13,8 +13,8 @@ type UseRunningResult = {
 
 export const useRunningState = (): UseRunningResult => {
     const dispatch = useAppDispatch();
-    const isRunning = useAppSelector((state) => (state as any)?.running?.isRunning ?? false);
-    const errorMessage = useAppSelector((state) => (state as any)?.running?.errorMessage ?? '');
+    const isRunning = useAppSelector(state => (state as any)?.running?.isRunning ?? false);
+    const errorMessage = useAppSelector(state => (state as any)?.running?.errorMessage ?? '');
 
     const setIsRunning = (value: boolean) => dispatch(setRunning(value));
     const setRunningErrorMessage = (message: string) => dispatch(setErrorMessage(message));
@@ -30,4 +30,3 @@ export const useRunningState = (): UseRunningResult => {
 };
 
 export default useRunningState;
-

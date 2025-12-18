@@ -1,140 +1,139 @@
 {
-  "meta": {
-    "title": "DeepTrans Studio 文档",
-    "description": "欢迎来到 DeepTrans Studio 的完整文档。这是一个智能翻译工作台，集成了机器翻译、质量评估、译后编辑和项目管理功能。无论您是翻译专家、项目经理还是开发者，这里都有您需要的指南和参考资料。"
-  },
-  "navigation": {
-    "overview": "概览",
-    "gettingStarted": "快速开始",
-    "installation": "安装与配置",
-    "concepts": "核心概念",
-    "workflows": "翻译工作流",
-    "ui": "界面指南",
-    "serverActions": "API参考",
-    "state": "状态管理",
-    "ai": "AI 智能代理",
-    "database": "数据库设计",
-    "troubleshooting": "故障排查",
-    "faq": "常见问题"
-  },
-  "home": {
-    "title": "DeepTrans Studio 文档",
-    "subtitle": "欢迎来到 DeepTrans Studio 的完整文档。这是一个智能翻译工作台,集成了机器翻译、质量评估、译后编辑和项目管理功能。无论您是翻译专家、项目经理还是开发者,这里都有您需要的指南和参考资料。",
-    "cards": {
-      "gettingStarted": {
-        "title": "快速开始",
-        "description": "5分钟上手指南，快速了解基本功能和操作流程",
-        "badges": ["入门必读", "基础操作"]
-      },
-      "workflows": {
-        "title": "翻译工作流",
-        "description": "详细了解预译、质检、译后编辑的完整工作流程",
-        "badges": ["核心功能", "工作流程"]
-      },
-      "concepts": {
-        "title": "核心概念",
-        "description": "理解项目、文档、分段等核心概念和术语",
-        "badges": ["基础概念", "术语解释"]
-      },
-      "ai": {
-        "title": "AI 智能代理",
-        "description": "了解语篇查询、质量评估、嵌入改写等AI功能",
-        "badges": ["AI功能", "智能助手"]
-      },
-      "ui": {
-        "title": "界面指南",
-        "description": "熟悉编辑器、面板、工具栏等界面元素",
-        "badges": ["界面操作", "使用技巧"]
-      },
-      "troubleshooting": {
-        "title": "故障排查",
-        "description": "常见问题解决方案和故障排查指南",
-        "badges": ["问题解决", "维护指南"]
-      }
+    "meta": {
+        "title": "DeepTrans Studio 文档",
+        "description": "欢迎来到 DeepTrans Studio 的完整文档。这是一个智能翻译工作台，集成了机器翻译、质量评估、译后编辑和项目管理功能。无论您是翻译专家、项目经理还是开发者，这里都有您需要的指南和参考资料。"
     },
-    "features": {
-      "title": "核心特性",
-      "items": {
-        "workflow": {
-          "title": "智能翻译工作流",
-          "description": "从预译到质检，再到译后编辑，完整的翻译生产链路，每个环节都有AI智能助手。"
+    "navigation": {
+        "overview": "概览",
+        "gettingStarted": "快速开始",
+        "installation": "安装与配置",
+        "concepts": "核心概念",
+        "workflows": "翻译工作流",
+        "ui": "界面指南",
+        "serverActions": "API参考",
+        "state": "状态管理",
+        "ai": "AI 智能代理",
+        "database": "数据库设计",
+        "troubleshooting": "故障排查",
+        "faq": "常见问题"
+    },
+    "home": {
+        "title": "DeepTrans Studio 文档",
+        "subtitle": "欢迎来到 DeepTrans Studio 的完整文档。这是一个智能翻译工作台,集成了机器翻译、质量评估、译后编辑和项目管理功能。无论您是翻译专家、项目经理还是开发者,这里都有您需要的指南和参考资料。",
+        "cards": {
+            "gettingStarted": {
+                "title": "快速开始",
+                "description": "5分钟上手指南，快速了解基本功能和操作流程",
+                "badges": ["入门必读", "基础操作"]
+            },
+            "workflows": {
+                "title": "翻译工作流",
+                "description": "详细了解预译、质检、译后编辑的完整工作流程",
+                "badges": ["核心功能", "工作流程"]
+            },
+            "concepts": {
+                "title": "核心概念",
+                "description": "理解项目、文档、分段等核心概念和术语",
+                "badges": ["基础概念", "术语解释"]
+            },
+            "ai": {
+                "title": "AI 智能代理",
+                "description": "了解语篇查询、质量评估、嵌入改写等AI功能",
+                "badges": ["AI功能", "智能助手"]
+            },
+            "ui": {
+                "title": "界面指南",
+                "description": "熟悉编辑器、面板、工具栏等界面元素",
+                "badges": ["界面操作", "使用技巧"]
+            },
+            "troubleshooting": {
+                "title": "故障排查",
+                "description": "常见问题解决方案和故障排查指南",
+                "badges": ["问题解决", "维护指南"]
+            }
         },
-        "collaboration": {
-          "title": "实时协作编辑",
-          "description": "支持多人同时编辑，实时同步更新，完整的版本控制和审核流程。"
+        "features": {
+            "title": "核心特性",
+            "items": {
+                "workflow": {
+                    "title": "智能翻译工作流",
+                    "description": "从预译到质检，再到译后编辑，完整的翻译生产链路，每个环节都有AI智能助手。"
+                },
+                "collaboration": {
+                    "title": "实时协作编辑",
+                    "description": "支持多人同时编辑，实时同步更新，完整的版本控制和审核流程。"
+                },
+                "quality": {
+                    "title": "质量保证体系",
+                    "description": "术语一致性检查、语法检查、译文质量评分，多维度保证翻译质量。"
+                },
+                "management": {
+                    "title": "项目管理集成",
+                    "description": "完整的项目生命周期管理，从创建到交付，全程可视化跟踪。"
+                }
+            }
         },
-        "quality": {
-          "title": "质量保证体系",
-          "description": "术语一致性检查、语法检查、译文质量评分，多维度保证翻译质量。"
-        },
-        "management": {
-          "title": "项目管理集成",
-          "description": "完整的项目生命周期管理，从创建到交付，全程可视化跟踪。"
+        "quickLinks": {
+            "title": "常用链接",
+            "installation": "安装与配置",
+            "faq": "常见问题",
+            "api": "API参考",
+            "database": "数据库设计"
         }
-      }
     },
-    "quickLinks": {
-      "title": "常用链接",
-      "installation": "安装与配置",
-      "faq": "常见问题",
-      "api": "API参考",
-      "database": "数据库设计"
+    "gettingStarted": {
+        "title": "快速开始",
+        "description": "5分钟快速上手 DeepTrans Studio"
+    },
+    "installation": {
+        "title": "安装与配置",
+        "description": "如何安装和配置 DeepTrans Studio"
+    },
+    "concepts": {
+        "title": "核心概念",
+        "description": "理解 DeepTrans Studio 的核心概念"
+    },
+    "workflows": {
+        "title": "翻译工作流",
+        "description": "了解完整的翻译工作流程"
+    },
+    "ui": {
+        "title": "界面指南",
+        "description": "熟悉 DeepTrans Studio 的界面"
+    },
+    "serverActions": {
+        "title": "Server Actions API",
+        "description": "API 参考文档"
+    },
+    "state": {
+        "title": "状态管理",
+        "description": "了解应用的状态管理"
+    },
+    "ai": {
+        "title": "AI 智能代理",
+        "description": "了解 AI 功能和智能助手"
+    },
+    "database": {
+        "title": "数据库设计",
+        "description": "数据库架构和设计文档"
+    },
+    "troubleshooting": {
+        "title": "故障排查",
+        "description": "常见问题和解决方案"
+    },
+    "faq": {
+        "title": "常见问题",
+        "description": "常见问题解答"
+    },
+    "common": {
+        "readMore": "阅读更多",
+        "previous": "上一页",
+        "next": "下一页",
+        "onThisPage": "本页目录",
+        "backToTop": "返回顶部",
+        "lastUpdated": "最后更新",
+        "copy": "复制",
+        "copied": "已复制",
+        "copyCode": "复制代码"
     }
-  },
-  "gettingStarted": {
-    "title": "快速开始",
-    "description": "5分钟快速上手 DeepTrans Studio"
-  },
-  "installation": {
-    "title": "安装与配置",
-    "description": "如何安装和配置 DeepTrans Studio"
-  },
-  "concepts": {
-    "title": "核心概念",
-    "description": "理解 DeepTrans Studio 的核心概念"
-  },
-  "workflows": {
-    "title": "翻译工作流",
-    "description": "了解完整的翻译工作流程"
-  },
-  "ui": {
-    "title": "界面指南",
-    "description": "熟悉 DeepTrans Studio 的界面"
-  },
-  "serverActions": {
-    "title": "Server Actions API",
-    "description": "API 参考文档"
-  },
-  "state": {
-    "title": "状态管理",
-    "description": "了解应用的状态管理"
-  },
-  "ai": {
-    "title": "AI 智能代理",
-    "description": "了解 AI 功能和智能助手"
-  },
-  "database": {
-    "title": "数据库设计",
-    "description": "数据库架构和设计文档"
-  },
-  "troubleshooting": {
-    "title": "故障排查",
-    "description": "常见问题和解决方案"
-  },
-  "faq": {
-    "title": "常见问题",
-    "description": "常见问题解答"
-  },
-  "common": {
-    "readMore": "阅读更多",
-    "previous": "上一页",
-    "next": "下一页",
-    "onThisPage": "本页目录",
-    "backToTop": "返回顶部",
-    "lastUpdated": "最后更新",
-    "copy": "复制",
-    "copied": "已复制",
-    "copyCode": "复制代码"
-  }
 }
-

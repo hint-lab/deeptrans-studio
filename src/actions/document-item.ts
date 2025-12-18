@@ -1,12 +1,8 @@
 'use server';
 
-import {
-    findDocumentItemByIdDB,
-    updateDocumentItemByIdDB
-} from "@/db/documentItem";
-import { findDocumentByIdDB, updateDocumentStatusDB } from "@/db/document";
-import type { TranslationStage } from "@prisma/client";
-
+import { findDocumentItemByIdDB, updateDocumentItemByIdDB } from '@/db/documentItem';
+import { findDocumentByIdDB, updateDocumentStatusDB } from '@/db/document';
+import type { TranslationStage } from '@prisma/client';
 
 export type ContentIDType = {
     id: string;
@@ -29,23 +25,21 @@ type Metadata = {
     [key: string]: any;
 };
 
-
 // 更新文档项原文
 export async function updateOriginalTextAction(itemId: string, sourceText: string) {
-
     try {
         return await updateDocumentItemByIdDB(itemId, { sourceText });
     } catch (error) {
-        console.error("更新原文失败:", error);
-        throw new Error("更新原文失败");
+        console.error('更新原文失败:', error);
+        throw new Error('更新原文失败');
     }
 }
 export async function updateTranslationAction(itemId: string, targetText: string) {
     try {
         return await updateDocumentItemByIdDB(itemId, { targetText });
     } catch (error) {
-        console.error("更新译文失败:", error);
-        throw new Error("更新译文失败");
+        console.error('更新译文失败:', error);
+        throw new Error('更新译文失败');
     }
 }
 
@@ -57,12 +51,10 @@ export async function updateDocItemStatusAction(itemId: string, status: Translat
 
         return updated;
     } catch (error) {
-        console.error("更新文档项状态失败:", error);
-        throw new Error((error as any)?.message || "更新文档项状态失败");
+        console.error('更新文档项状态失败:', error);
+        throw new Error((error as any)?.message || '更新文档项状态失败');
     }
 }
-
-
 
 // 根据内容ID获取详细内容
 export const getContentByIdAction = async (id: string) => {
@@ -80,10 +72,10 @@ export const getContentByIdAction = async (id: string) => {
         return {
             sourceText: documentItem.sourceText,
             targetText: target,
-            status: (documentItem as any)?.status || 'NOT_STARTED'
+            status: (documentItem as any)?.status || 'NOT_STARTED',
         };
     } catch (error) {
-        console.error("获取文档内容失败:", error);
+        console.error('获取文档内容失败:', error);
         throw error;
     }
 };
@@ -97,10 +89,7 @@ export async function getDocumentPreviewByItemIdAction(itemId: string) {
         if (!doc) return null;
         return { documentId: doc.id, url: doc.url, mimeType: doc.mimeType, name: doc.originalName };
     } catch (error) {
-        console.error("获取预览信息失败:", error);
+        console.error('获取预览信息失败:', error);
         return null;
     }
 }
-
-
-

@@ -1,6 +1,5 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 
-
 interface RunningState {
     isRunning: boolean;
     errorMessage: string;
@@ -8,7 +7,7 @@ interface RunningState {
 
 const initialState: RunningState = {
     isRunning: false,
-    errorMessage: ''
+    errorMessage: '',
 };
 
 export const runningSlice = createSlice({
@@ -21,12 +20,9 @@ export const runningSlice = createSlice({
         setErrorMessage: (state, action: PayloadAction<string>) => {
             state.errorMessage = action.payload;
         },
-    }
+    },
 });
 
-export const {
-    setRunning,
-    setErrorMessage
-} = runningSlice.actions;
+export const { setRunning, setErrorMessage } = runningSlice.actions;
 
-export default runningSlice.reducer; 
+export default runningSlice.reducer;

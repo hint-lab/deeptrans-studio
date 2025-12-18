@@ -1,0 +1,14 @@
+.next
+node_modules
+public
+*.log
+*.lock
+*.min.js
+dist
+build
+coverage
+.env*
+!.env.example
+# Docker volumes
+/volumes/
+volumes/**

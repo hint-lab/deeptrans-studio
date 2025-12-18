@@ -8,4 +8,4 @@ export function createStorageService(config: StorageConfig): StorageService {
         default:
             throw new Error(`不支持的存储类型: ${config.type}`);
     }
-} 
+}
