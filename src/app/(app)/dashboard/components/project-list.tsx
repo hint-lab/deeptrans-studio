@@ -10,6 +10,13 @@ import { ChevronRight, Edit2, Trash2, BookMarked, Library } from "lucide-react";
 import { ProjectDictionariesDialog } from "./project-resource-dialogs";
 import { ProjectMemoriesDialog } from "./project-resource-dialogs";
 import { Checkbox } from "@/components/ui/checkbox";
+
+import { removeProjectAction, updateProjectInfoAction } from "@/actions/project";
+import { toast } from "sonner";
+import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { useTranslations } from "next-intl";
 // Avoid importing Prisma types in client components
 type Project = {
   id: string;
@@ -18,13 +25,26 @@ type Project = {
   sourceLanguage: string;
   targetLanguage: string;
 };
-import { removeProjectAction, updateProjectInfoAction } from "@/actions/project";
-import { toast } from "sonner";
-import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { useTranslations } from "next-intl";
-
+// 添加全局加载遮罩组件
+const GlobalLoadingOverlay = ({ isLoading }: { isLoading: boolean }) => {
+  if (!isLoading) return null;
+  
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-background/90 backdrop-blur-sm">
+      <div className="flex flex-col items-center gap-4 p-6 rounded-lg bg-card shadow-lg border">
+        <div className="h-16 w-16 animate-spin rounded-full border-[3px] border-primary border-t-transparent"></div>
+        <div className="text-xl font-semibold text-foreground">
+          正在跳转到项目IDE窗口...
+        </div>
+        <div className="text-sm text-muted-foreground text-center">
+          请稍候，正在加载项目数据
+          <br />
+          <span className="text-xs opacity-70">这可能需要几秒钟时间</span>
+        </div>
+      </div>
+    </div>
+  );
+};
 type ProjectWithDoc = Project & { documents?: { id: string; status?: string }[] };
 export default function ProjectList({ projects, onDeleted }: { projects: ProjectWithDoc[]; onDeleted?: (id: string) => void }) {
   const t = useTranslations('Dashboard.ProjectList');
@@ -40,7 +60,25 @@ export default function ProjectList({ projects, onDeleted }: { projects: Project
     dictionaries?: Array<{id: string; name: string; entryCount: number; isShared?: boolean}>;
   } | null>(null);
 
-const [deleteWithDictionary, setDeleteWithDictionary] = useState(true);
+  const [deleteWithDictionary, setDeleteWithDictionary] = useState(true);
+  const [loadingProjectId, setLoadingProjectId] = useState<string | null>(null);
+  const [showLoadingOverlay, setShowLoadingOverlay] = useState(false);
+  const handleProjectClick = async (project: ProjectWithDoc) => {
+    const st = (project as ProjectWithDoc).documents?.[0]?.status;
+    setShowLoadingOverlay(true);
+    setLoadingProjectId(project.id);
+    try {
+      if (st && (st !== 'PREPROCESSED' && st !== 'TRANSLATING' && st !== 'COMPLETED')) {
+        await router.push(`/dashboard/projects/${project.id}/init`);
+      } else {
+        await router.push(`/ide/${project.id}`);
+      }
+    } catch (error) {
+      console.error('Navigation error:', error);
+      setLoadingProjectId(null);
+      setShowLoadingOverlay(false);
+    } 
+  };
 
 // 点击删除按钮时获取词典信息
 const handleDeleteClick = async (project: ProjectWithDoc) => {
@@ -84,21 +122,18 @@ const handleDeleteClick = async (project: ProjectWithDoc) => {
     return firstWord.slice(0, 2).toUpperCase(); // 拉丁字母取前两个字母
   };
   return (
+    <>
+    <GlobalLoadingOverlay isLoading={showLoadingOverlay} />
     <div className="flex flex-col gap-2 pt-4">
       {projects.map((project, index) => (
         <div
           key={index}
-          className="flex h-[80px] animate-slide-in-left cursor-pointer bg-secondary justify-between rounded-md border border-gray-200 p-3 py-4 text-left text-sm hover:border-2 hover:border-primary hover:bg-secondary/50"
+           className={`flex h-[80px] animate-slide-in-left cursor-pointer bg-secondary justify-between rounded-md border border-gray-200 p-3 py-4 text-left text-sm hover:border-2 hover:border-primary hover:bg-secondary/50 ${loadingProjectId === project.id ? 'opacity-30 pointer-events-none' : ''
+        }`}
           style={{ animationDelay: `${index * 50}ms` }}
-          onClick={() => {
-            const st = (project as ProjectWithDoc).documents?.[0]?.status;
-            if (st && (st !== 'PREPROCESSED' && st !== 'TRANSLATING' && st !== 'COMPLETED')) {
-              router.push(`/dashboard/projects/${project.id}/init`);
-              return;
-            }
-            router.push(`/ide/${project.id}`);
-          }}
+           onClick={() => handleProjectClick(project)}
         >
+
           <div className="flex w-full flex-col gap-2">
             <div className="flex w-full items-center gap-5">
               <div className="flex-none items-center justify-center">
@@ -110,9 +145,14 @@ const handleDeleteClick = async (project: ProjectWithDoc) => {
                 </svg>
               </div>
               <div className="w-[480px] flex-grow flex-col justify-between space-y-[4px]">
-                <div className="text-md font-semibold text-foreground">
-                  {project.name}
-                </div>
+                  <div className="flex items-center gap-2 text-md font-semibold text-foreground">
+                    {project.name}
+                    {loadingProjectId === project.id && (
+                      <div className="ml-2">
+                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent"></div>
+                      </div>
+                    )}
+                  </div>
                 <div className="flex items-center text-xs font-light text-muted-foreground">
                   {project.sourceLanguage}{"->"}{project.targetLanguage}
                   <div className="mx-2 h-2 w-[1px] bg-muted-foreground" />
@@ -359,6 +399,7 @@ const handleDeleteClick = async (project: ProjectWithDoc) => {
         <ProjectMemoriesDialog projectId={memDialog} open={!!memDialog} onOpenChange={(v) => !v && setMemDialog(null)} />
       )}
     </div>
+  </>
   );
 }
 
