@@ -1,14 +1,12 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { getRedis } from '@/lib/redis';
+import { queryDictionaryEntriesExactByScope } from '@/actions/dictionary';
+import { uploadFileAction } from '@/actions/upload';
+import { auth } from '@/auth';
 import {
     findDocumentsByProjectIdDB,
-    updateDocumentStructuredDB,
-    updateDocumentStatusDB,
+    updateDocumentStructuredDB
 } from '@/db/document';
-import { DocumentStatus } from '@/types/enums';
-import { auth } from '@/auth';
-import { uploadFileAction } from '@/actions/upload';
-import { queryDictionaryEntriesExactByScope } from '@/actions/dictionary';
+import { getRedis } from '@/lib/redis';
+import { NextRequest, NextResponse } from 'next/server';
 
 async function handlePersist(only: any, batchId: string, projectIdFromParams: string) {
     const redis = await getRedis();
@@ -19,7 +17,7 @@ async function handlePersist(only: any, batchId: string, projectIdFromParams: st
     let structuredObj: any = undefined;
     try {
         structuredObj = docxStructStored ? JSON.parse(String(docxStructStored)) : undefined;
-    } catch {}
+    } catch { }
     const htmlContent = String(previewHtmlStored || '');
     if (!structuredObj && !htmlContent) {
         return NextResponse.json({ error: 'no parse artifacts to persist' }, { status: 400 });
@@ -69,10 +67,7 @@ async function handlePersist(only: any, batchId: string, projectIdFromParams: st
     };
     try {
         await updateDocumentStructuredDB(only.id, stored);
-    } catch {}
-    try {
-        await updateDocumentStatusDB(only.id, DocumentStatus.PREPROCESSED as any);
-    } catch {}
+    } catch { }
     return NextResponse.json({ ok: true, step: 'persist', artifacts: stored });
 }
 
@@ -84,7 +79,7 @@ export async function POST(req: NextRequest, ctx: any) {
         let body: any = {};
         try {
             body = await req.json();
-        } catch {}
+        } catch { }
         const batchId = String(q.get('batchId') || body?.batchId || '');
         const mode = (q.get('action') as any) || body?.mode;
         const terms = body?.terms || undefined;
@@ -187,7 +182,7 @@ export async function GET(req: NextRequest, ctx: any) {
             try {
                 const obj = termsJson ? JSON.parse(String(termsJson)) : null;
                 if (obj && Array.isArray(obj.terms)) terms = obj.terms.slice(0, 20);
-            } catch {}
+            } catch { }
             let segments: Array<{ type: string; sourceText: string }> | undefined;
             try {
                 const obj = segItemJson ? JSON.parse(String(segItemJson)) : null;
@@ -216,7 +211,7 @@ export async function GET(req: NextRequest, ctx: any) {
                         if (parts.length) segments = parts;
                     }
                 }
-            } catch {}
+            } catch { }
             if (previewMode && Array.isArray(segments) && !showAll) {
                 segments = segments.slice(0, 20);
             }
@@ -252,12 +247,12 @@ export async function GET(req: NextRequest, ctx: any) {
                     }
                 }
                 dict = out;
-            } catch {}
+            } catch { }
 
             let docxStructured: any = undefined;
             try {
                 docxStructured = docxStruct ? JSON.parse(String(docxStruct)) : undefined;
-            } catch {}
+            } catch { }
             return {
                 segProgress,
                 termsProgress,

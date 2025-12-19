@@ -1,14 +1,14 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { DocumentStatus } from '@/types/enums';
-import { getRedis } from '@/lib/redis';
 import {
-    findDocumentsByProjectIdDB,
     findDocumentByIdDB,
+    findDocumentsByProjectIdDB,
     updateDocumentStatusDB,
 } from '@/db/document';
 import { extractTextFromUrl } from '@/lib/file-parser';
 import { extractDocxFromUrl } from '@/lib/parsers/docx-parser';
-import { TTL_PREVIEW, TTL_BATCH, setTextWithTTL } from '@/lib/redis-ttl';
+import { getRedis } from '@/lib/redis';
+import { TTL_BATCH, TTL_PREVIEW, setTextWithTTL } from '@/lib/redis-ttl';
+import { DocumentStatus } from '@/types/enums';
+import { NextRequest, NextResponse } from 'next/server';
 
 function makePreviewHtmlFromText(content: string): string {
     const raw = String(content || '').slice(0, 5000);
@@ -28,7 +28,7 @@ export async function POST(req: NextRequest, ctx: any) {
         let body: any = {};
         try {
             body = await req.json();
-        } catch {}
+        } catch { }
         const batchId = String(q.get('batchId') || body?.batchId || '');
         const docIdFromReq = String(q.get('docId') || body?.documentId || '') || undefined;
         if (!batchId) return NextResponse.json({ error: 'missing batchId' }, { status: 400 });
@@ -38,10 +38,6 @@ export async function POST(req: NextRequest, ctx: any) {
             : (await findDocumentsByProjectIdDB(projectIdFromParams))?.[0];
         if (!only || !only.url)
             return NextResponse.json({ error: 'document not found' }, { status: 404 });
-        try {
-            await updateDocumentStatusDB(only.id, DocumentStatus.PARSING as any);
-        } catch {}
-
         let content = '';
         let previewHtml: string | undefined;
         try {
@@ -58,7 +54,7 @@ export async function POST(req: NextRequest, ctx: any) {
                     TTL_BATCH
                 );
             }
-        } catch {}
+        } catch { }
         if (!content) {
             const { text } = await extractTextFromUrl(only.url);
             content = String(text || '').trim();
@@ -75,8 +71,8 @@ export async function POST(req: NextRequest, ctx: any) {
                 TTL_PREVIEW
             );
         try {
-            await updateDocumentStatusDB(only.id, DocumentStatus.PREPROCESSED as any);
-        } catch {}
+            await updateDocumentStatusDB(only.id, DocumentStatus.PARSING as any);
+        } catch { }
         return NextResponse.json({ ok: true, step: 'parse' });
     } catch (e: any) {
         try {
@@ -86,9 +82,9 @@ export async function POST(req: NextRequest, ctx: any) {
             if (only?.id) {
                 try {
                     await updateDocumentStatusDB(only.id, DocumentStatus.ERROR as any);
-                } catch {}
+                } catch { }
             }
-        } catch {}
+        } catch { }
         return NextResponse.json({ error: e?.message || 'parse failed' }, { status: 500 });
     }
 }

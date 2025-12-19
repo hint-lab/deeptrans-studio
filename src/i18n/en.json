@@ -473,6 +473,7 @@
             "projectAndDictDeleted": "Project and associated dictionaries deleted",
             "deleteOptions": "Delete Options",
             "dictEntryCount": "{{count}} entries",
+            "emptyDictionary": "empty Dictionary",
             "deleteDictHint": "Delete selected dictionaries",
             "deleteProjectOnly": "Delete Project Only",
             "deletingProjectOnly": "Deleteing Project Only...",

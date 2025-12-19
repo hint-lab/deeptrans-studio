@@ -1,18 +1,16 @@
 'use server';
 
 import {
-    findDocumentsByProjectIdDB,
-    updateDocumentStatusDB,
     findDocumentByIdDB,
+    findDocumentsByProjectIdDB,
     findDocumentWithItemsByIdDB,
+    updateDocumentStatusDB,
 } from '@/db/document';
 import {
     createDocumentItemsBulkDB,
     deleteDocumentItemsByDocumentIdDB,
     type DocumentItem,
 } from '@/db/documentItem';
-import { buildSentencePlaceholders } from '@/lib/placeholder';
-import { updateDocumentByIdDB } from '@/db/document';
 import { DocumentStatus } from '@/types/enums';
 export type ContentIDType = {
     id: string;
@@ -63,8 +61,8 @@ export async function applySegmentAction(documentId: string, items: PreviewSegme
             const typeToPersist = styleName
                 ? String(styleName)
                 : typeof lvl === 'number'
-                  ? `HEADING-${lvl}`
-                  : rawType || normalizedType;
+                    ? `HEADING-${lvl}`
+                    : rawType || normalizedType;
             return {
                 documentId,
                 order: idx + 1,
@@ -81,8 +79,8 @@ export async function applySegmentAction(documentId: string, items: PreviewSegme
     await createDocumentItemsBulkDB(normalized as any);
     // 适配新数据结构：不再写入 segment* 字段，状态流转统一使用 Document.status
     try {
-        await updateDocumentStatusDB(documentId, DocumentStatus.PREPROCESSED as any);
-    } catch {}
+        await updateDocumentStatusDB(documentId, DocumentStatus.SEGMENTING as any);
+    } catch { }
     return { count: normalized.length, projectId: doc.projectId } as {
         count: number;
         projectId: string;

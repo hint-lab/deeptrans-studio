@@ -1,15 +1,13 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { DocumentStatus } from '@/types/enums';
+import { bulkUpsertEntriesAction, findProjectDictionaryAction } from '@/actions/dictionary';
+import { extractDocumentTermsAction, translateTermsBatchAction } from '@/actions/project-init';
 import { auth } from '@/auth';
-import { getRedis } from '@/lib/redis';
-import { findProjectDictionaryAction, bulkUpsertEntriesAction } from '@/actions/dictionary';
-import { findBlankDictionaryEntriesBySourcesDB } from '@/db/dictionaryEntry';
+import { findBlankDictionaryEntriesBySourcesDB, updateDictionaryEntryTargetTextDB } from '@/db/dictionaryEntry';
 import { findDocumentsByProjectIdDB, updateDocumentStatusDB } from '@/db/document';
-import { extractTextFromUrl } from '@/lib/file-parser';
-import { extractDocumentTermsAction } from '@/actions/project-init';
-import { updateDictionaryEntryTargetTextDB } from '@/db/dictionaryEntry';
-import { translateTermsBatchAction } from '@/actions/project-init';
 import { findProjectByIdDB } from '@/db/project';
+import { extractTextFromUrl } from '@/lib/file-parser';
+import { getRedis } from '@/lib/redis';
+import { DocumentStatus } from '@/types/enums';
+import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(req: NextRequest, ctx: any) {
     try {
@@ -50,7 +48,7 @@ export async function POST(req: NextRequest, ctx: any) {
                     unique = Array.from(
                         new Set(terms.map(t => String(t?.term || '').trim()).filter(Boolean))
                     );
-                } catch {}
+                } catch { }
             }
         }
         // 兜底：若 Redis 中暂无术语，尝试即时抽取一个简版术语表（不经队列）
@@ -74,7 +72,7 @@ export async function POST(req: NextRequest, ctx: any) {
                         );
                     }
                 }
-            } catch {}
+            } catch { }
         }
         if (!unique.length) return NextResponse.json({ error: 'empty terms' }, { status: 400 });
 
@@ -164,9 +162,9 @@ export async function POST(req: NextRequest, ctx: any) {
                 ? await (await import('@/db/document')).findDocumentByIdDB(documentId)
                 : (await findDocumentsByProjectIdDB(projectId))?.[0];
             if (only?.id) {
-                await updateDocumentStatusDB(only.id, DocumentStatus.PREPROCESSED as any);
+                await updateDocumentStatusDB(only.id, DocumentStatus.COMPLETED as any);
             }
-        } catch {}
+        } catch { }
         return NextResponse.json({ ok: true, dictionaryId, inserted, updated, skipped });
     } catch (e: any) {
         try {
@@ -176,9 +174,9 @@ export async function POST(req: NextRequest, ctx: any) {
             if (only?.id) {
                 try {
                     await updateDocumentStatusDB(only.id, DocumentStatus.ERROR as any);
-                } catch {}
+                } catch { }
             }
-        } catch {}
+        } catch { }
         return NextResponse.json({ error: e?.message || 'apply failed' }, { status: 500 });
     }
 }

@@ -473,6 +473,7 @@
             "projectAndDictDeleted": "所选项目和关联词典已删除",
             "deleteOptions": "删除选项",
             "dictEntryCount": "词典词条数",
+            "emptyDictionary": "空词典",
             "deleteDictHint": "删除选中的词典",
             "deleteProjectOnly": "仅删除项目",
             "deletingProjectOnly": "仅删除项目中...",

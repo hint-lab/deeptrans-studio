@@ -1,29 +1,26 @@
 'use client';
-import { type ComponentProps } from 'react';
-import { formatDistanceToNow } from 'date-fns/formatDistanceToNow';
-import { type Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { formatDistanceToNow } from 'date-fns/formatDistanceToNow';
 // import Image from "next/image"; // 替换为文本 SVG 图标
-import React, { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { ChevronRight, Edit2, Trash2, BookMarked, Library } from 'lucide-react';
-import { ProjectDictionariesDialog } from './project-resource-dialogs';
-import { ProjectMemoriesDialog } from './project-resource-dialogs';
 import { Checkbox } from '@/components/ui/checkbox';
+import { BookMarked, ChevronRight, Edit2, Library, Trash2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useState } from 'react';
+import { ProjectDictionariesDialog, ProjectMemoriesDialog } from './project-resource-dialogs';
 
-import { removeProjectAction, updateProjectInfoAction } from '@/actions/project';
-import { toast } from 'sonner';
-import { Input } from '@/components/ui/input';
+import { updateProjectInfoAction } from '@/actions/project';
 import {
     Dialog,
     DialogContent,
-    DialogHeader,
-    DialogTitle,
     DialogDescription,
     DialogFooter,
+    DialogHeader,
+    DialogTitle,
 } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useTranslations } from 'next-intl';
+import { toast } from 'sonner';
 // Avoid importing Prisma types in client components
 type Project = {
     id: string;
@@ -147,9 +144,8 @@ export default function ProjectList({
                 {projects.map((project, index) => (
                     <div
                         key={index}
-                        className={`flex h-[80px] animate-slide-in-left cursor-pointer justify-between rounded-md border border-gray-200 bg-secondary p-3 py-4 text-left text-sm hover:border-2 hover:border-primary hover:bg-secondary/50 ${
-                            loadingProjectId === project.id ? 'pointer-events-none opacity-30' : ''
-                        }`}
+                        className={`flex h-[80px] animate-slide-in-left cursor-pointer justify-between rounded-md border border-gray-200 bg-secondary p-3 py-4 text-left text-sm hover:border-2 hover:border-primary hover:bg-secondary/50 ${loadingProjectId === project.id ? 'pointer-events-none opacity-30' : ''
+                            }`}
                         style={{ animationDelay: `${index * 50}ms` }}
                         onClick={() => handleProjectClick(project)}
                     >
@@ -208,34 +204,34 @@ export default function ProjectList({
                                                         className={
                                                             (project as ProjectWithDoc)
                                                                 .documents?.[0]?.status ===
-                                                            'COMPLETED'
+                                                                'COMPLETED'
                                                                 ? 'text-green-600'
                                                                 : (project as ProjectWithDoc)
-                                                                        .documents?.[0]?.status ===
+                                                                    .documents?.[0]?.status ===
                                                                     'PREPROCESSED'
-                                                                  ? 'text-purple-600'
-                                                                  : (project as ProjectWithDoc)
-                                                                          .documents?.[0]
-                                                                          ?.status === 'TRANSLATING'
-                                                                    ? 'text-blue-600'
+                                                                    ? 'text-purple-600'
                                                                     : (project as ProjectWithDoc)
+                                                                        .documents?.[0]
+                                                                        ?.status === 'TRANSLATING'
+                                                                        ? 'text-blue-600'
+                                                                        : (project as ProjectWithDoc)
                                                                             .documents?.[0]
                                                                             ?.status ===
                                                                             'PARSING' ||
-                                                                        (project as ProjectWithDoc)
-                                                                            .documents?.[0]
-                                                                            ?.status ===
+                                                                            (project as ProjectWithDoc)
+                                                                                .documents?.[0]
+                                                                                ?.status ===
                                                                             'SEGMENTING' ||
-                                                                        (project as ProjectWithDoc)
-                                                                            .documents?.[0]
-                                                                            ?.status ===
+                                                                            (project as ProjectWithDoc)
+                                                                                .documents?.[0]
+                                                                                ?.status ===
                                                                             'TERMS_EXTRACTING'
-                                                                      ? 'text-amber-600'
-                                                                      : (project as ProjectWithDoc)
-                                                                              .documents?.[0]
-                                                                              ?.status === 'ERROR'
-                                                                        ? 'text-red-600'
-                                                                        : 'text-muted-foreground'
+                                                                            ? 'text-amber-600'
+                                                                            : (project as ProjectWithDoc)
+                                                                                .documents?.[0]
+                                                                                ?.status === 'ERROR'
+                                                                                ? 'text-red-600'
+                                                                                : 'text-muted-foreground'
                                                         }
                                                     >
                                                         {(project as ProjectWithDoc).documents?.[0]
@@ -421,9 +417,7 @@ export default function ProjectList({
                                                 </Label>
                                                 <div className="mt-1 text-xs text-muted-foreground">
                                                     {dict.entryCount > 0
-                                                        ? t('dictEntryCount', {
-                                                              count: dict.entryCount,
-                                                          })
+                                                        ? t('dictEntryCount') + ":" + dict.entryCount
                                                         : t('emptyDictionary')}
                                                     {dict.isShared && ` · ${t('sharedDictionary')}`}
                                                 </div>
@@ -537,7 +531,7 @@ export default function ProjectList({
                                     }}
                                 >
                                     {deleteTarget?.dictionaries &&
-                                    deleteTarget.dictionaries.length > 0
+                                        deleteTarget.dictionaries.length > 0
                                         ? deleteWithDictionary
                                             ? t('deleteProjectAndDict')
                                             : t('deleteProject')

@@ -1,16 +1,15 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { DocumentStatus } from '@/types/enums';
-import { getQueue } from '@/worker/queue';
-import { getRedis } from '@/lib/redis';
-import { TTL_PROGRESS, TTL_BATCH, setJSONWithTTL, setTextWithTTL } from '@/lib/redis-ttl';
+import { getFileUrlAction } from '@/actions/upload';
 import {
-    findDocumentsByProjectIdDB,
     findDocumentByIdDB,
+    findDocumentsByProjectIdDB,
     updateDocumentStatusDB,
 } from '@/db/document';
 import { createDocumentItemsBulkDB, deleteDocumentItemsByDocumentIdDB } from '@/db/documentItem';
 import { extractTextFromUrl } from '@/lib/file-parser';
-import { getFileUrlAction } from '@/actions/upload';
+import { getRedis } from '@/lib/redis';
+import { TTL_BATCH, TTL_PROGRESS, setJSONWithTTL, setTextWithTTL } from '@/lib/redis-ttl';
+import { DocumentStatus } from '@/types/enums';
+import { NextRequest, NextResponse } from 'next/server';
 
 async function buildTextFromStructuredHelper(
     only: any,
@@ -27,7 +26,7 @@ async function buildTextFromStructuredHelper(
             try {
                 const r = await getFileUrlAction(String(artifacts.jsonFile));
                 jsonUrl = (r as any)?.data?.fileUrl || null;
-            } catch {}
+            } catch { }
         }
         if (!jsonUrl) return '';
         const r = await fetch(jsonUrl);
@@ -65,7 +64,7 @@ export async function POST(req: NextRequest, ctx: any) {
         let body: any = {};
         try {
             body = await req.json();
-        } catch {}
+        } catch { }
         const batchId = String(q.get('batchId') || body?.batchId || '');
         const docIdFromReq = String(q.get('docId') || body?.documentId || '') || undefined;
         const segment = {
@@ -79,10 +78,6 @@ export async function POST(req: NextRequest, ctx: any) {
             : (await findDocumentsByProjectIdDB(projectIdFromParams))?.[0];
         if (!only || !only.url)
             return NextResponse.json({ error: 'document not found' }, { status: 404 });
-        try {
-            await updateDocumentStatusDB(only.id, DocumentStatus.SEGMENTING as any);
-        } catch {}
-
         // 构造正文（优先 structured）
         const isPreview = segment?.preview === true;
         const previewHead = Math.max(500, Math.min(8000, Number(segment?.headChars ?? 2000)));
@@ -94,7 +89,7 @@ export async function POST(req: NextRequest, ctx: any) {
             try {
                 const { text } = await extractTextFromUrl(only.url);
                 bodyText = String(text || '').trim();
-            } catch {}
+            } catch { }
         }
         if (!bodyText) return NextResponse.json({ error: 'empty content' }, { status: 400 });
 
@@ -115,7 +110,7 @@ export async function POST(req: NextRequest, ctx: any) {
                     const obj = JSON.parse(String(raw));
                     if (Array.isArray(obj?.paragraphs)) paragraphs = obj.paragraphs as any[];
                 }
-            } catch {}
+            } catch { }
             // 若 Redis 不存在，尝试从对象存储读取
             if (!paragraphs.length) {
                 try {
@@ -125,14 +120,14 @@ export async function POST(req: NextRequest, ctx: any) {
                         try {
                             const r = await getFileUrlAction(String(artifacts.jsonFile));
                             jsonUrl = (r as any)?.data?.fileUrl || null;
-                        } catch {}
+                        } catch { }
                     }
                     if (jsonUrl) {
                         const r = await fetch(jsonUrl);
                         const j = await r.json();
                         if (Array.isArray(j?.paragraphs)) paragraphs = j.paragraphs as any[];
                     }
-                } catch {}
+                } catch { }
             }
             const out: Array<{ type: string; sourceText: string; metadata?: any }> = [];
             const title = String((only as any)?.originalName || '').trim();
@@ -149,8 +144,8 @@ export async function POST(req: NextRequest, ctx: any) {
                     level && level >= 1 && level <= 6
                         ? `HEADING-${level}`
                         : styleName
-                          ? String(styleName).toUpperCase()
-                          : 'PARAGRAPH';
+                            ? String(styleName).toUpperCase()
+                            : 'PARAGRAPH';
                 out.push({
                     type,
                     sourceText: t,
@@ -182,7 +177,7 @@ export async function POST(req: NextRequest, ctx: any) {
                 const obj = JSON.parse(String(raw));
                 if (Array.isArray(obj?.paragraphs)) paragraphsAll = obj.paragraphs as any[];
             }
-        } catch {}
+        } catch { }
         if (!paragraphsAll.length) {
             try {
                 const docs = await findDocumentsByProjectIdDB(projectIdFromParams as any);
@@ -193,14 +188,14 @@ export async function POST(req: NextRequest, ctx: any) {
                     try {
                         const r = await getFileUrlAction(String(artifacts.jsonFile));
                         jsonUrl = (r as any)?.data?.fileUrl || null;
-                    } catch {}
+                    } catch { }
                 }
                 if (jsonUrl) {
                     const r = await fetch(jsonUrl);
                     const j = await r.json();
                     if (Array.isArray(j?.paragraphs)) paragraphsAll = j.paragraphs as any[];
                 }
-            } catch {}
+            } catch { }
         }
         const outAll: Array<{ type: string; sourceText: string; metadata?: any }> = [];
         const titleFull = String((only as any)?.originalName || '').trim();
@@ -217,8 +212,8 @@ export async function POST(req: NextRequest, ctx: any) {
                 level && level >= 1 && level <= 6
                     ? `HEADING-${level}`
                     : styleName
-                      ? String(styleName).toUpperCase()
-                      : 'PARAGRAPH';
+                        ? String(styleName).toUpperCase()
+                        : 'PARAGRAPH';
             outAll.push({
                 type,
                 sourceText: t,
@@ -239,7 +234,7 @@ export async function POST(req: NextRequest, ctx: any) {
             if (docId && outAll.length) {
                 try {
                     await deleteDocumentItemsByDocumentIdDB(docId);
-                } catch {}
+                } catch { }
                 const items = outAll.map((s, idx) => ({
                     documentId: docId,
                     order: idx + 1,
@@ -251,10 +246,10 @@ export async function POST(req: NextRequest, ctx: any) {
                 }));
                 if (items.length) await createDocumentItemsBulkDB(items as any);
             }
-        } catch {}
+        } catch { }
         try {
-            await updateDocumentStatusDB(only.id, DocumentStatus.PREPROCESSED as any);
-        } catch {}
+            await updateDocumentStatusDB(only.id, DocumentStatus.SEGMENTING as any);
+        } catch { }
         return NextResponse.json({ ok: true, step: 'segment' });
     } catch (e: any) {
         try {
@@ -264,9 +259,9 @@ export async function POST(req: NextRequest, ctx: any) {
             if (only?.id) {
                 try {
                     await updateDocumentStatusDB(only.id, DocumentStatus.ERROR as any);
-                } catch {}
+                } catch { }
             }
-        } catch {}
+        } catch { }
         return NextResponse.json({ error: e?.message || 'segment failed' }, { status: 500 });
     }
 }
@@ -323,7 +318,7 @@ export async function GET(req: NextRequest, ctx: any) {
                         if (parts.length) segments = parts;
                     }
                 }
-            } catch {}
+            } catch { }
             if (previewMode && Array.isArray(segments) && !showAll)
                 segments = segments.slice(0, 20);
             return { segProgress, segments };
