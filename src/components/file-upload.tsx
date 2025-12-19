@@ -1,9 +1,9 @@
-import { useState, useCallback } from 'react';
-import { FileRejection, useDropzone } from 'react-dropzone';
-import { Button } from '@/components/ui/button';
-import { toast } from 'sonner';
 import { getUploadUrlAction, uploadFileAction } from '@/actions/upload';
+import { Button } from '@/components/ui/button';
 import { useTranslations } from 'next-intl';
+import { useCallback, useState } from 'react';
+import { FileRejection, useDropzone } from 'react-dropzone';
+import { toast } from 'sonner';
 
 interface FileUploadProps {
     onUploadComplete: (fileInfo: {
@@ -44,6 +44,9 @@ export function FileUpload({
 }: FileUploadProps) {
     const t = useTranslations(elementName);
     const [isUploading, setIsUploading] = useState(false);
+    const resetUpload = useCallback(() => {
+        setUploadedFile(null);
+    }, []);
     const [uploadedFile, setUploadedFile] = useState<{
         fileName: string;
         originalName: string;
@@ -162,19 +165,23 @@ export function FileUpload({
                 setIsUploading(false);
             }
         },
-        [onUploadComplete, projectName]
+        [onUploadComplete, projectName, t]
     );
 
     const onDrop = useCallback(
         (acceptedFiles: File[]) => {
             console.log(t('fileDrop'), acceptedFiles);
             if (acceptedFiles.length === 0) return;
+
+            // 重置上传状态
+            setUploadedFile(null);
+
             const file = acceptedFiles[0];
             if (file) {
                 uploadFile(file);
             }
         },
-        [uploadFile]
+        [uploadFile, t]
     );
     const onDropRejected = useCallback(
         (rejections: FileRejection[]) => {
@@ -226,7 +233,10 @@ export function FileUpload({
                     <Button
                         className="w-full bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600"
                         disabled={isUploading}
-                        onClick={open}
+                        onClick={() => {
+                            resetUpload();  // 先重置状态
+                            open();         // 再打开文件选择器
+                        }}
                     >
                         {isUploading ? t('uploading') : t('reupload')}
                     </Button>

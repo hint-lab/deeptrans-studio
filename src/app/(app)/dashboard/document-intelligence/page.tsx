@@ -1,21 +1,10 @@
 'use client';
-import React, { useState, useEffect } from 'react';
+import { fetchDictionariesAction, fetchDictionaryEntriesAction } from '@/actions/dictionary';
+import { parseDocxAction } from '@/actions/parse-docx';
+import { runPreTranslateAction } from '@/actions/pre-translate';
 import { FileUpload } from '@/components/file-upload';
-import { Button } from '@/components/ui/button';
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
+import { Button } from '@/components/ui/button';
 import {
     Dialog,
     DialogContent,
@@ -23,38 +12,51 @@ import {
     DialogTitle,
     DialogTrigger,
 } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import {
-    Settings,
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
+import { Separator } from '@/components/ui/separator';
+import { Switch } from '@/components/ui/switch';
+import {
     BookOpen,
-    Globe,
     FileText,
-    Image as ImageIcon,
+    Globe,
     Search,
-    Plus,
-    X,
-    ChevronDown,
-    ChevronUp,
+    X
 } from 'lucide-react';
 import { useSession } from 'next-auth/react';
-import { toast } from 'sonner';
-import { fetchDictionariesAction } from '@/actions/dictionary';
-import { fetchDictionaryEntriesAction } from '@/actions/dictionary';
 import { useTranslations } from 'next-intl';
-
-// 动态语言选项 - 将在组件内部基于翻译创建
-
-// 翻译引擎选项
-const translationEngines = [
-    { key: 'deepseek', label: 'DeepSeek' },
-    { key: 'openai', label: 'OpenAI' },
-    { key: 'google', label: 'Google' },
-];
+import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 
 export default function DocumentIntelligencePage() {
     const { data: session } = useSession();
     const tDashboard = useTranslations('Dashboard');
     const t = useTranslations('Dashboard.DocumentTranslate');
-
+    // 在现有状态之后添加以下状态
+    const [uploadedFile, setUploadedFile] = useState<{
+        fileName: string;
+        originalName: string;
+        fileUrl: string;
+        contentType: string;
+        size: number;
+    } | null>(null);
+    const [fileName, setFileName] = useState<string | null>(null);
+    const [isTranslating, setIsTranslating] = useState(false);
+    const [translationProgress, setTranslationProgress] = useState(0);
+    const [translationResult, setTranslationResult] = useState<{
+        content: string;
+        sourceLanguage: string;
+        targetLanguage: string;
+        engine: string;
+        fileName: string;
+    } | null>(null);
     // 动态语言选项
     const sourceLanguages = [
         { key: 'auto', label: tDashboard('autoDetect') },
@@ -73,7 +75,8 @@ export default function DocumentIntelligencePage() {
     const [preserveFormatting, setPreserveFormatting] = useState(true);
     const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
     const [selectedDictionaries, setSelectedDictionaries] = useState<string[]>([]);
-
+    const [translationStyle, setTranslationStyle] = useState('formal');
+    const [qualityLevel, setQualityLevel] = useState('standard');
     // 与即时翻译一致的词库状态
     interface DictionarySummary {
         id: string;
@@ -100,7 +103,123 @@ export default function DocumentIntelligencePage() {
     >({});
     const [loadingEntries, setLoadingEntries] = useState<Record<string, boolean>>({});
     const [dictionarySearch, setDictionarySearch] = useState('');
+    const handleUploadComplete = (fileInfo: {
+        fileName: string;
+        originalName: string;
+        fileUrl: string;
+        contentType: string;
+        size: number;
+    }) => {
+        setFileName(fileInfo.fileName);
+        setTaskStatus('pending');
+        setTranslatedContent(null);
+        setTranslationResult(null);
+        setUploadedFile(fileInfo);
+        toast.success(t('uploadSuccess'));
+    };
+    const handleDownloadResult = () => {
+        if (!translatedContent || !translationResult) return;
 
+        const blob = new Blob([translatedContent], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `translated_${translationResult.fileName}.txt`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        toast.success(t('downloadSuccess'));
+    };
+    const handleTranslateDocument = async () => {
+        if (!uploadedFile) {
+            toast.error(t('noDocumentUploaded'));
+            return;
+        }
+
+        if (!session?.user?.id) {
+            toast.error(t('loginRequired'));
+            return;
+        }
+
+        setIsTranslating(true);
+        setTranslationProgress(0);
+        setTaskStatus('processing');
+
+        // 模拟进度更新（实际应用中可能来自WebSocket或轮询）
+        const progressInterval = setInterval(() => {
+            setTranslationProgress(prev => {
+                if (prev >= 90) {
+                    clearInterval(progressInterval);
+                    return prev;
+                }
+                return prev + 10;
+            });
+        }, 500);
+
+        try {
+            const { success, data, error } = await parseDocxAction(uploadedFile.fileUrl);
+            let content = '';
+            let previewHtml: string | undefined;
+            if (data) {
+                content = String(data.text || '').trim();
+            }
+            // 构建翻译参数
+            const translationParams = {
+                sourceText: data?.text || '',
+                sourceLanguage: sourceLanguage,
+                targetLanguage: targetLanguage,
+                options: {
+                    userId: session.user.id
+                }
+            };
+            // 调用翻译API
+            const res = await runPreTranslateAction(translationParams.sourceText,
+                translationParams.sourceLanguage,
+                translationParams.targetLanguage,
+                translationParams.options);
+            const result = {
+                success: true,
+                data: {
+                    translatedContent: res.translation,
+                    sourceLanguage: translationParams.sourceLanguage,
+                    targetLanguage: translationParams.targetLanguage,
+                    engine: "deepseek",
+                    fileName: uploadedFile.fileName,
+                    // 可选的其他字段
+                    wordCount: 1250,
+                    timeUsed: 3.5
+                }
+            };
+            clearInterval(progressInterval);
+            setTranslationProgress(100);
+
+            if (result.success && result.data) {
+                setTranslatedContent(result.data.translatedContent);
+                setTranslationResult({
+                    content: result.data.translatedContent,
+                    sourceLanguage: result.data.sourceLanguage || sourceLanguage,
+                    targetLanguage: result.data.targetLanguage || targetLanguage,
+                    engine: result.data.engine || translationEngine,
+                    fileName: fileName || 'document',
+                });
+                setTaskStatus('completed');
+                toast.success(t('translationSuccess'));
+            } else {
+                setTaskStatus('failed');
+                //toast.error(result.error || t('translationFailed'));
+            }
+        } catch (error) {
+            clearInterval(progressInterval);
+            setTaskStatus('failed');
+            console.error('Translation error:', error);
+            toast.error(t('translationError'));
+        } finally {
+            setIsTranslating(false);
+            setTimeout(() => setTranslationProgress(0), 1000);
+        }
+    };
     // 加载公共/私有词典（不加载词条）
     useEffect(() => {
         const loadDictionaries = async () => {
@@ -356,67 +475,67 @@ export default function DocumentIntelligencePage() {
                                                             {expandedDictionaryIds.includes(
                                                                 dictionary.id
                                                             ) && (
-                                                                <div className="mt-3">
-                                                                    {(loadingEntries[
-                                                                        dictionary.id
-                                                                    ] ?? false) ? (
-                                                                        <div className="text-sm text-gray-500">
-                                                                            {t('loadingTerms')}
-                                                                        </div>
-                                                                    ) : (
-                                                                        <div className="max-h-40 space-y-2 overflow-auto pr-1">
-                                                                            {(
-                                                                                dictionaryEntriesById[
+                                                                    <div className="mt-3">
+                                                                        {(loadingEntries[
+                                                                            dictionary.id
+                                                                        ] ?? false) ? (
+                                                                            <div className="text-sm text-gray-500">
+                                                                                {t('loadingTerms')}
+                                                                            </div>
+                                                                        ) : (
+                                                                            <div className="max-h-40 space-y-2 overflow-auto pr-1">
+                                                                                {(
+                                                                                    dictionaryEntriesById[
                                                                                     dictionary.id
-                                                                                ] ?? []
-                                                                            ).map(
-                                                                                (
-                                                                                    entry: DictionaryEntryItem
-                                                                                ) => (
-                                                                                    <div
-                                                                                        key={
-                                                                                            entry.id
-                                                                                        }
-                                                                                        className="text-sm text-gray-700 dark:text-gray-300"
-                                                                                    >
-                                                                                        <span className="font-medium">
-                                                                                            {
-                                                                                                entry.sourceText
+                                                                                    ] ?? []
+                                                                                ).map(
+                                                                                    (
+                                                                                        entry: DictionaryEntryItem
+                                                                                    ) => (
+                                                                                        <div
+                                                                                            key={
+                                                                                                entry.id
                                                                                             }
-                                                                                        </span>
-                                                                                        <span className="mx-2 text-gray-400">
-                                                                                            →
-                                                                                        </span>
-                                                                                        <span>
-                                                                                            {
-                                                                                                entry.targetText
-                                                                                            }
-                                                                                        </span>
-                                                                                        {entry.notes ? (
-                                                                                            <span className="ml-2 text-xs text-gray-400">
-                                                                                                (
+                                                                                            className="text-sm text-gray-700 dark:text-gray-300"
+                                                                                        >
+                                                                                            <span className="font-medium">
                                                                                                 {
-                                                                                                    entry.notes
+                                                                                                    entry.sourceText
                                                                                                 }
-                                                                                                )
                                                                                             </span>
-                                                                                        ) : null}
-                                                                                    </div>
-                                                                                )
-                                                                            )}
-                                                                            {!(
-                                                                                dictionaryEntriesById[
+                                                                                            <span className="mx-2 text-gray-400">
+                                                                                                →
+                                                                                            </span>
+                                                                                            <span>
+                                                                                                {
+                                                                                                    entry.targetText
+                                                                                                }
+                                                                                            </span>
+                                                                                            {entry.notes ? (
+                                                                                                <span className="ml-2 text-xs text-gray-400">
+                                                                                                    (
+                                                                                                    {
+                                                                                                        entry.notes
+                                                                                                    }
+                                                                                                    )
+                                                                                                </span>
+                                                                                            ) : null}
+                                                                                        </div>
+                                                                                    )
+                                                                                )}
+                                                                                {!(
+                                                                                    dictionaryEntriesById[
                                                                                     dictionary.id
-                                                                                ] ?? []
-                                                                            ).length && (
-                                                                                <div className="text-sm text-gray-500">
-                                                                                    {t('noTerms')}
-                                                                                </div>
-                                                                            )}
-                                                                        </div>
-                                                                    )}
-                                                                </div>
-                                                            )}
+                                                                                    ] ?? []
+                                                                                ).length && (
+                                                                                        <div className="text-sm text-gray-500">
+                                                                                            {t('noTerms')}
+                                                                                        </div>
+                                                                                    )}
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                )}
                                                         </div>
                                                     ))}
                                                 </div>
@@ -505,67 +624,67 @@ export default function DocumentIntelligencePage() {
                                                             {expandedDictionaryIds.includes(
                                                                 dictionary.id
                                                             ) && (
-                                                                <div className="mt-3">
-                                                                    {(loadingEntries[
-                                                                        dictionary.id
-                                                                    ] ?? false) ? (
-                                                                        <div className="text-sm text-gray-500">
-                                                                            {t('loadingTerms')}
-                                                                        </div>
-                                                                    ) : (
-                                                                        <div className="max-h-40 space-y-2 overflow-auto pr-1">
-                                                                            {(
-                                                                                dictionaryEntriesById[
+                                                                    <div className="mt-3">
+                                                                        {(loadingEntries[
+                                                                            dictionary.id
+                                                                        ] ?? false) ? (
+                                                                            <div className="text-sm text-gray-500">
+                                                                                {t('loadingTerms')}
+                                                                            </div>
+                                                                        ) : (
+                                                                            <div className="max-h-40 space-y-2 overflow-auto pr-1">
+                                                                                {(
+                                                                                    dictionaryEntriesById[
                                                                                     dictionary.id
-                                                                                ] ?? []
-                                                                            ).map(
-                                                                                (
-                                                                                    entry: DictionaryEntryItem
-                                                                                ) => (
-                                                                                    <div
-                                                                                        key={
-                                                                                            entry.id
-                                                                                        }
-                                                                                        className="text-sm text-gray-700 dark:text-gray-300"
-                                                                                    >
-                                                                                        <span className="font-medium">
-                                                                                            {
-                                                                                                entry.sourceText
+                                                                                    ] ?? []
+                                                                                ).map(
+                                                                                    (
+                                                                                        entry: DictionaryEntryItem
+                                                                                    ) => (
+                                                                                        <div
+                                                                                            key={
+                                                                                                entry.id
                                                                                             }
-                                                                                        </span>
-                                                                                        <span className="mx-2 text-gray-400">
-                                                                                            →
-                                                                                        </span>
-                                                                                        <span>
-                                                                                            {
-                                                                                                entry.targetText
-                                                                                            }
-                                                                                        </span>
-                                                                                        {entry.notes ? (
-                                                                                            <span className="ml-2 text-xs text-gray-400">
-                                                                                                (
+                                                                                            className="text-sm text-gray-700 dark:text-gray-300"
+                                                                                        >
+                                                                                            <span className="font-medium">
                                                                                                 {
-                                                                                                    entry.notes
+                                                                                                    entry.sourceText
                                                                                                 }
-                                                                                                )
                                                                                             </span>
-                                                                                        ) : null}
-                                                                                    </div>
-                                                                                )
-                                                                            )}
-                                                                            {!(
-                                                                                dictionaryEntriesById[
+                                                                                            <span className="mx-2 text-gray-400">
+                                                                                                →
+                                                                                            </span>
+                                                                                            <span>
+                                                                                                {
+                                                                                                    entry.targetText
+                                                                                                }
+                                                                                            </span>
+                                                                                            {entry.notes ? (
+                                                                                                <span className="ml-2 text-xs text-gray-400">
+                                                                                                    (
+                                                                                                    {
+                                                                                                        entry.notes
+                                                                                                    }
+                                                                                                    )
+                                                                                                </span>
+                                                                                            ) : null}
+                                                                                        </div>
+                                                                                    )
+                                                                                )}
+                                                                                {!(
+                                                                                    dictionaryEntriesById[
                                                                                     dictionary.id
-                                                                                ] ?? []
-                                                                            ).length && (
-                                                                                <div className="text-sm text-gray-500">
-                                                                                    {t('noTerms')}
-                                                                                </div>
-                                                                            )}
-                                                                        </div>
-                                                                    )}
-                                                                </div>
-                                                            )}
+                                                                                    ] ?? []
+                                                                                ).length && (
+                                                                                        <div className="text-sm text-gray-500">
+                                                                                            {t('noTerms')}
+                                                                                        </div>
+                                                                                    )}
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                )}
                                                         </div>
                                                     ))}
                                                 </div>
@@ -587,10 +706,40 @@ export default function DocumentIntelligencePage() {
                     <div className="p-4">
                         <div className="mb-3 w-full">
                             <FileUpload
-                                onUploadComplete={() => setTaskStatus('pending')}
+                                onUploadComplete={handleUploadComplete}
                                 projectName={t('temporaryDocument')}
                                 elementName="Dashboard.DocumentTranslate"
                             />
+                            {uploadedFile && (
+                                <div className="mt-4 rounded-lg border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-900/20">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center space-x-3">
+                                            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-green-100 dark:bg-green-800">
+                                                <FileText className="h-5 w-5 text-green-600 dark:text-green-300" />
+                                            </div>
+                                            <div>
+                                                <h4 className="font-medium text-green-800 dark:text-green-300">
+                                                    {fileName}
+                                                </h4>
+                                                <p className="text-sm text-green-600 dark:text-green-400">
+                                                    {t('readyForTranslation')}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => {
+                                                setUploadedFile(null);
+                                                setFileName(null);
+                                                setTaskStatus('idle');
+                                            }}
+                                        >
+                                            <X className="h-4 w-4" />
+                                        </Button>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                         <div className="mt-2 text-sm text-purple-600">
                             {t('supportedFileTypes')}
@@ -601,16 +750,36 @@ export default function DocumentIntelligencePage() {
                 {showAdvancedOptions && (
                     <div className="rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
                         <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
-                            <div className="text-lg font-medium">{t('advancedOptions')}</div>
+                            <div className="flex items-center justify-between">
+                                <div className="text-lg font-medium">{t('advancedOptions')}</div>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setShowAdvancedOptions(false)}
+                                >
+                                    <X className="h-4 w-4" />
+                                </Button>
+                            </div>
                         </div>
                         <div className="p-4">
-                            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                                <div className="flex items-center space-x-2">
+                            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                                <div className="space-y-2">
+                                    <Label className="text-sm font-medium">
+                                        {t('translationEngine')}
+                                    </Label>
+                                    <Select value={translationEngine} onValueChange={setTranslationEngine}>
+                                        <SelectTrigger>
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                    </Select>
+                                </div>
+
+                                <div className="space-y-2">
                                     <Label className="text-sm font-medium">
                                         {t('translationStyle')}
                                     </Label>
-                                    <Select>
-                                        <SelectTrigger className="w-32">
+                                    <Select value={translationStyle} onValueChange={setTranslationStyle}>
+                                        <SelectTrigger>
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -632,12 +801,13 @@ export default function DocumentIntelligencePage() {
                                         </SelectContent>
                                     </Select>
                                 </div>
-                                <div className="flex items-center space-x-2">
+
+                                <div className="space-y-2">
                                     <Label className="text-sm font-medium">
                                         {t('qualityLevel')}
                                     </Label>
-                                    <Select>
-                                        <SelectTrigger className="w-32">
+                                    <Select value={qualityLevel} onValueChange={setQualityLevel}>
+                                        <SelectTrigger>
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -659,18 +829,114 @@ export default function DocumentIntelligencePage() {
                         <div className="text-lg font-medium">{t('translate')}</div>
                     </div>
                     <div className="p-4">
-                        <Button className="w-40" disabled={taskStatus !== 'pending'}>
-                            {t('startTranslation')}
-                        </Button>
-                        {translatedContent && (
-                            <div className="mt-6">
-                                <div className="mb-2 text-lg font-semibold">
-                                    {t('translationResult')}
+                        <div className="flex items-center space-x-4">
+                            <Button
+                                className="w-40"
+                                onClick={handleTranslateDocument}
+                                disabled={!uploadedFile || isTranslating || taskStatus === 'processing'}
+                            >
+                                {isTranslating ? (
+                                    <>
+                                        <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                                        {t('translating')} {translationProgress}%
+                                    </>
+                                ) : (
+                                    t('startTranslation')
+                                )}
+                            </Button>
+
+                            {taskStatus === 'processing' && (
+                                <div className="flex-1">
+                                    <div className="h-2 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
+                                        <div
+                                            className="h-full rounded-full bg-gradient-to-r from-blue-500 to-purple-600 transition-all duration-300"
+                                            style={{ width: `${translationProgress}%` }}
+                                        />
+                                    </div>
                                 </div>
-                                <div className="max-h-96 overflow-auto whitespace-pre-wrap text-sm">
-                                    {translatedContent}
+                            )}
+                            {taskStatus === 'failed' && (
+                                <div className="mt-6 rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/20">
+                                    <div className="flex items-center">
+                                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-100 dark:bg-red-800">
+                                            <X className="h-5 w-5 text-red-600 dark:text-red-300" />
+                                        </div>
+                                        <div className="ml-4">
+                                            <h4 className="font-medium text-red-800 dark:text-red-300">
+                                                {t('translationFailed')}
+                                            </h4>
+                                            <p className="text-sm text-red-600 dark:text-red-400">
+                                                {t('pleaseTryAgain')}
+                                            </p>
+                                        </div>
+                                        <Button
+                                            className="ml-auto"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={handleTranslateDocument}
+                                        >
+                                            {t('retry')}
+                                        </Button>
+                                    </div>
                                 </div>
-                                <Button className="mt-4">{t('downloadResult')}</Button>
+                            )}
+                        </div>
+
+                        {translatedContent && translationResult && (
+                            <div className="mt-6 rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-800">
+                                <div className="mb-4 flex items-center justify-between">
+                                    <div>
+                                        <div className="text-lg font-semibold">
+                                            {t('translationResult')}
+                                        </div>
+                                        <div className="text-sm text-gray-500 dark:text-gray-400">
+                                            {t('sourceLanguage')}: {translationResult.sourceLanguage} →
+                                            {t('targetLanguage')}: {translationResult.targetLanguage}
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center space-x-2">
+                                        <Badge variant="outline">
+                                            {translationResult.fileName}
+                                        </Badge>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => {
+                                                // 复制到剪贴板
+                                                navigator.clipboard.writeText(translatedContent);
+                                                toast.success(t('copiedToClipboard'));
+                                            }}
+                                        >
+                                            {t('copy')}
+                                        </Button>
+                                    </div>
+                                </div>
+
+                                <ScrollArea className="h-96 rounded-md border p-4">
+                                    <div className="whitespace-pre-wrap text-sm leading-relaxed">
+                                        {translatedContent}
+                                    </div>
+                                </ScrollArea>
+
+                                <div className="mt-4 flex space-x-3">
+                                    <Button
+                                        onClick={handleDownloadResult}
+                                        className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700"
+                                    >
+                                        <FileText className="mr-2 h-4 w-4" />
+                                        {t('downloadResult')}
+                                    </Button>
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => {
+                                            // 保存到我的翻译
+                                            //handleSaveTranslation();
+                                        }}
+                                    >
+                                        <BookOpen className="mr-2 h-4 w-4" />
+                                        {t('saveToMyTranslations')}
+                                    </Button>
+                                </div>
                             </div>
                         )}
                     </div>
