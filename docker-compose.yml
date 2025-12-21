@@ -14,7 +14,7 @@ services:
     networks:
       - app_local
 
-  traefik:             
+  traefik:
     image: traefik:v3.5
     container_name: deeptrans-traefik
     ports:
@@ -60,7 +60,7 @@ services:
       retries: 3
     networks:
       - app_local
-    
+
 
   redis:
     image: redis:7-alpine
@@ -117,7 +117,7 @@ services:
 
 
   milvus:
-    container_name: deepmed-milvus
+    container_name: deeptrans-milvus
     image: milvusdb/milvus:v2.3.10
     command: ["milvus", "run", "standalone"]
     security_opt:
@@ -147,7 +147,7 @@ services:
     networks:
       - app_local
     restart: always
- 
+
 
   attu:
     image: zilliz/attu:latest
@@ -161,21 +161,6 @@ services:
     restart: unless-stopped
     networks:
       - app_local
-
-  # pdfmath:
-  #   build:
-  #     context: .
-  #     dockerfile: DockerFile.pdfMath
-  #   image: deeptrans-studio-pdfmath:latest
-  #   container_name: pdf2zh-next
-  #   command: ["pdf2zh_api"]
-  #   ports:
-  #     - "7861:7861"  # 仅暴露 API 端口
-  #   environment:
-  #     # 仅保留 GenericAPI 选择与固定 URL
-  #     TRANSLATE_ENGINE_TYPE: "GenericAPI"
-  #     GENERIC_API_URL: "http://deeptrans-worker:8000/v1/translate"
-  #   restart: unless-stopped
 
 networks:
   web:

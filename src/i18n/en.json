@@ -257,7 +257,16 @@
             "openFile": "Open File",
             "uploadingText": "Uploading...",
             "supportedFormats": "Supports JPG, PNG, Webp image formats, max 10MB",
-            "loadEntriesFailed": "Failed to load entries"
+            "loadEntriesFailed": "Failed to load entries",
+            "saveToMyTranslations": "save To My Translations",
+            "sourceLanguage": "source Language",
+            "targetLanguage": "target Language",
+            "copy": "Copy",
+            "readyForTranslation": "ready For Translation",
+            "downloadSuccess": "download Success",
+            "translationSuccess": "translation Success",
+            "copiedToClipboard": "copied",
+            "loginRequired": "You need to log in to use image translation"
         },
         "Dictionaries": {
             "title": "Dictionary Management",

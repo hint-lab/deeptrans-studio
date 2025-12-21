@@ -856,29 +856,15 @@ export default function DocumentIntelligencePage() {
                                 </div>
                             )}
                             {taskStatus === 'failed' && (
-                                <div className="mt-6 rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/20">
-                                    <div className="flex items-center">
-                                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-100 dark:bg-red-800">
-                                            <X className="h-5 w-5 text-red-600 dark:text-red-300" />
-                                        </div>
-                                        <div className="ml-4">
-                                            <h4 className="font-medium text-red-800 dark:text-red-300">
-                                                {t('translationFailed')}
-                                            </h4>
-                                            <p className="text-sm text-red-600 dark:text-red-400">
-                                                {t('pleaseTryAgain')}
-                                            </p>
-                                        </div>
-                                        <Button
-                                            className="ml-auto"
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={handleTranslateDocument}
-                                        >
-                                            {t('retry')}
-                                        </Button>
-                                    </div>
-                                </div>
+                                <Button
+                                    className="w-40"
+                                    onClick={() => {
+                                        // 复制到剪贴板
+                                        handleTranslateDocument
+                                        toast.success(t('translationFailed'));
+                                    }}>
+                                    {t('retry')}
+                                </Button>
                             )}
                         </div>
 

@@ -129,6 +129,8 @@
             "translatedTextCopied": "译文已复制到剪贴板"
         },
         "DocumentTranslate": {
+            "pleaseTryAgain": "请重试",
+            "retry": "重试",
             "title": "文档翻译",
             "description": "上传文档进行版式识别与翻译，支持词库的添加和使用。",
             "uploadDocument": "上传文档",
@@ -198,6 +200,10 @@
             "loadEntriesFailed": "加载词条失败"
         },
         "ImageTranslate": {
+            "translationError": "翻译出错",
+            "translationFailed": "翻译失败",
+            "pleaseTryAgain": "请重试",
+            "retry": "重试",
             "title": "图片翻译",
             "description": "上传图片进行 OCR 识别并翻译，支持词库的添加和使用。",
             "uploadImage": "上传图片",
@@ -257,7 +263,16 @@
             "fileType": "类型",
             "openFile": "打开文件",
             "uploadingText": "正在上传...",
-            "loadEntriesFailed": "加载词条失败"
+            "loadEntriesFailed": "加载词条失败",
+            "saveToMyTranslations": "保存到我的翻译",
+            "sourceLanguage": "源语言",
+            "targetLanguage": "目标语言",
+            "copy": "复制",
+            "readyForTranslation": "准备翻译",
+            "downloadSuccess": "下载成功",
+            "translationSuccess": "翻译成功",
+            "copiedToClipboard": "复制到剪贴板",
+            "loginRequired": "需要登录"
         },
         "Dictionaries": {
             "title": "词库管理",
