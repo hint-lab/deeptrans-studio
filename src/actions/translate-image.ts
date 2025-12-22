@@ -29,6 +29,9 @@ export async function fetchTextFromImg(
     const timeout = options?.timeout || 60000
 
     try {
+        if (process.env.NODE_ENV === 'production') {
+            imageUrl = imageUrl.replace('127.0.0.1', process.env.NEXT_PUBLIC_MINIO_ENDPOINT || 'minio.deeptrans.studio');
+        }
         const ocr_auth_url = process.env.OCR_AUTH_URL ?? 'http://localhost:5000/api/v1/auth/token';
         const ocr_base_url = process.env.OCR_BASE_URL ?? 'http://localhost:5000/api/v1/ocr/url';
         console.log(ocr_auth_url)
