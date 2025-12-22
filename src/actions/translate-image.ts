@@ -29,9 +29,25 @@ export async function fetchTextFromImg(
     const timeout = options?.timeout || 60000
 
     try {
+        const url = new URL(imageUrl);
+        console.log(url)
         if (process.env.NODE_ENV === 'production') {
-            imageUrl = imageUrl.replace('127.0.0.1', process.env.NEXT_PUBLIC_MINIO_ENDPOINT || 'minio.deeptrans.studio');
+            if (
+                url.hostname === 'localhost' ||
+                url.hostname === '127.0.0.1' ||
+                url.hostname === 'minio'   // Docker内部网络名
+            ) {
+                const minioEndpoint = process.env.MINIO_PUBLIC_ENDPOINT || 'http://minio.deeptrans.studio';
+                const minioUrl = new URL(minioEndpoint);
+
+                // 保持原有协议，如果minioEndpoint没有协议，使用https
+                const protocol = minioUrl.protocol || url.protocol || 'https:';
+                url.protocol = protocol;
+                url.hostname = minioUrl.hostname || minioEndpoint;
+                url.port = process.env.MINIO_PUBLIC_PORT || '80'; // 默认端口为80
+            }
         }
+        console.log(url)
         const ocr_auth_url = process.env.OCR_AUTH_URL ?? 'http://localhost:5000/api/v1/auth/token';
         const ocr_base_url = process.env.OCR_BASE_URL ?? 'http://localhost:5000/api/v1/ocr/url';
         console.log(ocr_auth_url)
@@ -59,7 +75,7 @@ export async function fetchTextFromImg(
                 'Authorization': `Bearer ${access_token}`,
             },
             body: JSON.stringify({
-                "image_url": imageUrl,
+                "image_url": url,
                 "language": "eng",
                 "psm": "6",
                 "oem": "3"
