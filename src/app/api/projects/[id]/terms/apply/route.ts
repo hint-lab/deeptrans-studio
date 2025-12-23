@@ -74,7 +74,7 @@ export async function POST(req: NextRequest, ctx: any) {
                 }
             } catch { }
         }
-        if (!unique.length) return NextResponse.json({ error: 'empty terms' }, { status: 400 });
+        //if (!unique.length) return NextResponse.json({ error: 'empty terms' }, { status: 400 });
 
         // 找/建项目词库（封装，PROJECT 可见性）
         const found = await findProjectDictionaryAction(projectId);
