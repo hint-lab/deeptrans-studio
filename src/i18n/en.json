@@ -491,6 +491,8 @@
             "deleteOptions": "Delete Options",
             "dictEntryCount": "{{count}} entries",
             "emptyDictionary": "empty Dictionary",
+            "sharedDictionary": "shared Dictionary",
+            "sharedWarning": "shared Warning",
             "deleteDictHint": "Delete selected dictionaries",
             "deleteProjectOnly": "Delete Project Only",
             "deletingProjectOnly": "Deleteing Project Only...",
