@@ -3,16 +3,14 @@ export interface APIResponse<T> {
     error?: boolean;
     message?: string;
     data?: T;
-  }
-  
-  export interface Message {
+}
+
+export interface Message {
     message: string;
-  }
-  
-  
-  export interface Token {
-    accessToken: string,
-    refreshToken: string,
-    tokenType: string
-  }
-  
+}
+
+export interface Token {
+    accessToken: string;
+    refreshToken: string;
+    tokenType: string;
+}

@@ -19,4 +19,4 @@ export interface UploadResult {
 export interface StorageService {
     getUploadUrl(fileName: string, contentType: string, projectName: string): Promise<UploadResult>;
     getFileUrl(fileName: string): Promise<string>;
-} 
+}

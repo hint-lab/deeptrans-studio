@@ -99,9 +99,8 @@ export const LANGUAGES: Array<{ id: string; key: LanguageKey; labelKey: string }
 ];
 
 export function getTranslatedLanguages(translate: (key: string) => string) {
-    return LANGUAGES.map((lang) => ({
+    return LANGUAGES.map(lang => ({
         ...lang,
         label: translate(lang.labelKey),
     }));
 }
-

@@ -1,7 +1,15 @@
 'use server';
 
+import { createLogger } from '@/lib/logger';
 import { createStorageService } from '@/lib/storage/factory';
-
+const logger = createLogger({
+    type: 'actions:upload',
+}, {
+    json: false,// 开启json格式输出
+    pretty: false, // 关闭开发环境美化输出
+    colors: true, // 仅当json：false时启用颜色输出可用
+    includeCaller: false, // 日志不包含调用者
+});
 // 存储服务配置
 const storageConfig = {
     type: (process.env.STORAGE_TYPE || 'minio') as 'minio' | 'cos',
@@ -17,31 +25,35 @@ const storageConfig = {
 // 创建存储服务实例
 const storageService = createStorageService(storageConfig);
 
-export async function getUploadUrlAction(fileName: string, contentType: string, projectName: string) {
+export async function getUploadUrlAction(
+    fileName: string,
+    contentType: string,
+    projectName: string
+) {
     try {
-        console.log('开始获取上传 URL:', { fileName, contentType, projectName });
+        logger.debug('开始获取上传 URL:', { fileName, contentType, projectName });
 
         if (!fileName || !contentType || !projectName) {
-            console.error('参数缺失:', { fileName, contentType, projectName });
+            logger.error('参数缺失:', { fileName, contentType, projectName });
             throw new Error('缺少必要参数');
         }
 
         // 获取上传 URL
         const result = await storageService.getUploadUrl(fileName, contentType, projectName);
-        console.log('获取上传 URL 成功:', result);
+        logger.debug('获取上传 URL 成功:', result);
 
         return {
             success: true,
             data: result,
         };
     } catch (error) {
-        console.error('获取上传 URL 失败:', error);
+        logger.error('获取上传 URL 失败:', error);
         return {
             success: false,
             error: error instanceof Error ? error.message : '获取上传 URL 失败',
         };
     }
-} 
+}
 
 // 通过 Server Action 接收文件并由服务端完成上传，避免浏览器直传的 CORS/内网不可达问题
 export async function uploadFileAction(formData: FormData) {
@@ -56,7 +68,11 @@ export async function uploadFileAction(formData: FormData) {
             return { success: false, error: '缺少项目名称' };
         }
 
-        const result = await storageService.getUploadUrl(file.name, (file as any).type || 'application/octet-stream', projectName);
+        const result = await storageService.getUploadUrl(
+            file.name,
+            (file as any).type || 'application/octet-stream',
+            projectName
+        );
 
         const arrayBuffer = await file.arrayBuffer();
         const putRes = await fetch(result.uploadUrl, {
@@ -68,8 +84,13 @@ export async function uploadFileAction(formData: FormData) {
         });
         if (!putRes.ok) {
             let text = '';
-            try { text = await putRes.text(); } catch {}
-            return { success: false, error: `上传失败: ${putRes.status} ${putRes.statusText} ${text}` };
+            try {
+                text = await putRes.text();
+            } catch { }
+            return {
+                success: false,
+                error: `上传失败: ${putRes.status} ${putRes.statusText} ${text}`,
+            };
         }
 
         return {
@@ -94,6 +115,9 @@ export async function getFileUrlAction(fileName: string) {
         const url = await storageService.getFileUrl(fileName);
         return { success: true, data: { fileUrl: url } };
     } catch (error) {
-        return { success: false, error: error instanceof Error ? error.message : '获取文件地址失败' };
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : '获取文件地址失败',
+        };
     }
 }

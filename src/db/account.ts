@@ -1,7 +1,6 @@
-import { prisma } from "@/lib/db";
-import { type Account } from "@prisma/client";
-import { dbTry } from "./utils";
-
+import { prisma } from '@/lib/db';
+import { type Account } from '@prisma/client';
+import { dbTry } from './utils';
 
 export type AccountCreateInput = {
     userId: string;
@@ -48,9 +47,15 @@ export const deleteAccountByIdDB = async (id: string): Promise<Account | null> =
     return dbTry(() => prisma.account.delete({ where: { id } }));
 };
 
-export const upsertAccountByUserIdDB = async (userId: string, data: AccountUpdateInput): Promise<Account | null> => {
+export const upsertAccountByUserIdDB = async (
+    userId: string,
+    data: AccountUpdateInput
+): Promise<Account | null> => {
     return dbTry(async () => {
-        const existing = await prisma.account.findFirst({ where: { userId }, select: { id: true } });
+        const existing = await prisma.account.findFirst({
+            where: { userId },
+            select: { id: true },
+        });
         if (existing) return prisma.account.update({ where: { id: existing.id }, data });
         return prisma.account.create({ data: { ...(data || {}), userId } });
     });

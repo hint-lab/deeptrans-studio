@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
 
         return NextResponse.json({
             success: true,
-            result
+            result,
         });
     } catch (error) {
         console.error('Failed to get experiment result:', error);

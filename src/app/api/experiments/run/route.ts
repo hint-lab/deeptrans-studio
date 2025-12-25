@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({
             success: true,
             jobId,
-            message: 'Experiment started successfully'
+            message: 'Experiment started successfully',
         });
     } catch (error) {
         console.error('Failed to start experiment:', error);

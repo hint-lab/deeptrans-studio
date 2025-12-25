@@ -1,6 +1,10 @@
 // Preprocess Agents - 预处理智能体
-export { DocumentTermExtractAgent} from './preprocess/DocumentTermExtractAgent';
-export { DocumentTermTranslateAgent, type DocumentTermTranslateInput, type DocumentTermTranslateItem } from './preprocess/DocumentTermTranslateAgent';
+export { DocumentTermExtractAgent } from './preprocess/DocumentTermExtractAgent';
+export {
+    DocumentTermTranslateAgent,
+    type DocumentTermTranslateInput,
+    type DocumentTermTranslateItem,
+} from './preprocess/DocumentTermTranslateAgent';
 export { MonoTermExtractAgent } from './pre-translate/MonoTermExtractAgent';
 export { DictLookupAgent } from './pre-translate/DictLookupAgent';
 export { TermEmbedTranslateAgent } from './pre-translate/TermEmbedTranslateAgent';

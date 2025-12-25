@@ -46,7 +46,7 @@ export const logSlice = createSlice({
                 }
             }
         },
-        clearLogs: (state) => {
+        clearLogs: state => {
             state.logs = [];
 
             // 清除 localStorage
@@ -62,4 +62,4 @@ export const logSlice = createSlice({
 });
 
 export const { addLog, clearLogs } = logSlice.actions;
-export default logSlice.reducer; 
+export default logSlice.reducer;

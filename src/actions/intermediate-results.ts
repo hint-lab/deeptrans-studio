@@ -1,15 +1,25 @@
-"use server";
+'use server';
 
-import { fetchDocumentItemIntermediateResultsDB } from "@/db/documentItem";
-import { updateDocumentItemByIdDB, findDocumentItemMetadataByIdDB, clearDocumentItemIntermediateResultsDB } from "@/db/documentItem";
-
+import { clearDocumentItemIntermediateResultsDB, fetchDocumentItemIntermediateResultsDB, findDocumentItemMetadataByIdDB, updateDocumentItemByIdDB } from '@/db/documentItem';
+import { createLogger } from '@/lib/logger';
+const logger = createLogger({
+    type: 'actions:intermediate-results',
+}, {
+    json: false,// 开启json格式输出
+    pretty: false, // 关闭开发环境美化输出
+    colors: true, // 仅当json：false时启用颜色输出可用
+    includeCaller: false, // 日志不包含调用者
+});
 // 保存预翻译中间结果
-export async function savePreTranslateResultsAction(id: string, results: {
-    terms?: any;
-    dict?: any;
-    embedded?: any;
-    targetText?: any;
-}) {
+export async function savePreTranslateResultsAction(
+    id: string,
+    results: {
+        terms?: any;
+        dict?: any;
+        embedded?: any;
+        targetText?: any;
+    }
+) {
     try {
         return await updateDocumentItemByIdDB(id, {
             preTranslateTerms: results.terms as any,
@@ -18,21 +28,21 @@ export async function savePreTranslateResultsAction(id: string, results: {
             targetText: results.targetText as any,
         } as any);
     } catch (error) {
-        console.error('保存预翻译结果失败:', error);
+        logger.error('保存预翻译结果失败:', error);
         throw error;
     }
 }
 
-
-
-
 // 保存质检中间结果
-export async function saveQualityAssureResultsAction(id: string, results: {
-    biTerm?: any;
-    syntax?: any;
-    syntaxEmbedded?: any;
-    dislikedPairs?: Record<string, boolean>;
-}) {
+export async function saveQualityAssureResultsAction(
+    id: string,
+    results: {
+        biTerm?: any;
+        syntax?: any;
+        syntaxEmbedded?: any;
+        dislikedPairs?: Record<string, boolean>;
+    }
+) {
     try {
         const meta = await findDocumentItemMetadataByIdDB(id);
         return await updateDocumentItemByIdDB(id, {
@@ -40,20 +50,25 @@ export async function saveQualityAssureResultsAction(id: string, results: {
             qualityAssureSyntax: results.syntax as any,
             qualityAssureSyntaxEmbedded: results.syntaxEmbedded as any,
             // 将用户踩的对对齐结果存入 metadata
-            metadata: results.dislikedPairs ? { ...(meta || {}), qaDislikedPairs: results.dislikedPairs } : undefined,
+            metadata: results.dislikedPairs
+                ? { ...(meta || {}), qaDislikedPairs: results.dislikedPairs }
+                : undefined,
         } as any);
     } catch (error) {
-        console.error('保存质检结果失败:', error);
+        logger.error('保存质检结果失败:', error);
         throw error;
     }
 }
 
 // 保存译后编辑中间结果
-export async function savePostEditResultsAction(id: string, results: {
-    query?: any;
-    evaluation?: any;
-    rewrite?: any;
-}) {
+export async function savePostEditResultsAction(
+    id: string,
+    results: {
+        query?: any;
+        evaluation?: any;
+        rewrite?: any;
+    }
+) {
     try {
         return await updateDocumentItemByIdDB(id, {
             postEditQuery: results.query as any,
@@ -61,7 +76,7 @@ export async function savePostEditResultsAction(id: string, results: {
             postEditRewrite: results.rewrite as any,
         } as any);
     } catch (error) {
-        console.error('保存译后编辑结果失败:', error);
+        logger.error('保存译后编辑结果失败:', error);
         throw error;
     }
 }
@@ -94,7 +109,7 @@ export async function getDocumentItemIntermediateResultsAction(id: string) {
             metadata: item.metadata,
         };
     } catch (error) {
-        console.error('获取中间结果失败:', error);
+        logger.error('获取中间结果失败:', error);
         throw error;
     }
 }
@@ -104,7 +119,7 @@ export async function clearDocumentItemIntermediateResultsAction(id: string) {
     try {
         return await clearDocumentItemIntermediateResultsDB(id);
     } catch (error) {
-        console.error('清空中间结果失败:', error);
+        logger.error('清空中间结果失败:', error);
         throw error;
     }
 }

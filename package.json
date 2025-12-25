@@ -18,14 +18,16 @@
     "postinstall": "prisma generate",
     "lint": "concurrently -n eslint,tsc \"next lint --dir src\" \"tsc --noEmit\"",
     "start": "next start",
-    "worker": "NODE_ENV=development tsx src/worker/index.ts",
+    "worker": "tsx src/worker/index.ts",
     "start:all": "sh -c 'yarn start & yarn worker'",
     "dev:all": "sh -c 'yarn dev & yarn worker'",
     "queue:ui": "tsx scripts/queue-dashboard.ts",
     "test:docx": "tsx scripts/test-docx-parser.ts",
     "test:segment": "tsx scripts/test-segment.ts",
     "test:terms": "tsx scripts/test-doc-terms.ts",
-    "test:milvus": "tsx scripts/milvus-smoke-test.ts"
+    "test:milvus": "tsx scripts/milvus-smoke-test.ts",
+    "format": "prettier --write \"{app,components,lib,pages,src,styles,utils}/**/*.{js,jsx,ts,tsx,json,css,scss,md,mdx}\"",
+    "format:check": "prettier --check \"{app,components,lib,pages,src,styles,utils}/**/*.{js,jsx,ts,tsx,json,css,scss,md,mdx}\""
   },
   "dependencies": {
     "@ai-sdk/openai": "^2.0.24",

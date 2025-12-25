@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 import { useState } from 'react';
 import { useLogger } from '@/hooks/useLogger';
@@ -15,10 +15,7 @@ type LoggingPanelProps = {
     onClear?: () => void;
 };
 
-export default function LoggingPanel({
-    logs: propLogs,
-    onClear: propOnClear
-}: LoggingPanelProps) {
+export default function LoggingPanel({ logs: propLogs, onClear: propOnClear }: LoggingPanelProps) {
     const t = useTranslations('IDE.logging');
     const [filter, setFilter] = useState<string>('all');
     const { getLogsForUI, clearAllLogs } = useLogger();
@@ -75,18 +72,18 @@ export default function LoggingPanel({
             hour: '2-digit',
             minute: '2-digit',
             second: '2-digit',
-            hour12: false
+            hour12: false,
         });
     };
 
     return (
-        <div className="flex flex-col h-full bg-background text-foreground">
+        <div className="flex h-full flex-col bg-background text-foreground">
             {/* 工具栏 */}
-            <div className="flex items-center px-3 py-1 border-b">
+            <div className="flex items-center border-b px-3 py-1">
                 <select
-                    className="text-xs bg-transparent border border-gray-300 dark:border-gray-700 rounded px-1 py-0.5 mr-2"
+                    className="mr-2 rounded border border-gray-300 bg-transparent px-1 py-0.5 text-xs dark:border-gray-700"
                     value={filter}
-                    onChange={(e) => setFilter(e.target.value)}
+                    onChange={e => setFilter(e.target.value)}
                 >
                     <option value="all">{t('filters.all')}</option>
                     <option value="system">{t('filters.system')}</option>
@@ -96,7 +93,7 @@ export default function LoggingPanel({
                     <option value="info">{t('filters.info')}</option>
                 </select>
                 <button
-                    className="text-xs px-2 py-0.5 bg-muted hover:bg-muted/80 rounded"
+                    className="rounded bg-muted px-2 py-0.5 text-xs hover:bg-muted/80"
                     onClick={handleClearLogs}
                 >
                     {t('clear')}
@@ -111,13 +108,20 @@ export default function LoggingPanel({
                     </div>
                 ) : (
                     filteredLogs.map((log, index) => (
-                        <div key={index} className="py-1 border-b border-muted/20 flex">
-                            <span className="text-gray-400 mr-2">{formatTime(log.timestamp)}</span>
+                        <div key={index} className="flex border-b border-muted/20 py-1">
+                            <span className="mr-2 text-gray-400">{formatTime(log.timestamp)}</span>
                             <span className={`${logTypeStyles[log.type]} mr-2`}>
-                                [{log.type === 'agent' ? t('types.agent') :
-                                    log.type === 'system' ? t('types.system') :
-                                        log.type === 'error' ? t('types.error') :
-                                            log.type === 'warning' ? t('types.warning') : t('types.info')}]
+                                [
+                                {log.type === 'agent'
+                                    ? t('types.agent')
+                                    : log.type === 'system'
+                                      ? t('types.system')
+                                      : log.type === 'error'
+                                        ? t('types.error')
+                                        : log.type === 'warning'
+                                          ? t('types.warning')
+                                          : t('types.info')}
+                                ]
                             </span>
                             <span>{log.message}</span>
                         </div>
@@ -126,4 +130,4 @@ export default function LoggingPanel({
             </div>
         </div>
     );
-} 
+}

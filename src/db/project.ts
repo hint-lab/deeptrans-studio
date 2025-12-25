@@ -1,19 +1,35 @@
-import { prisma } from "@/lib/db";
-import { type Project, type Prisma, type Document } from "@prisma/client";
-import { dbTry } from "./utils";
-
+import { prisma } from '@/lib/db';
+import { createLogger } from '@/lib/logger';
+import { type Document, type Prisma, type Project } from '@prisma/client';
+import { dbTry } from './utils';
+const logger = createLogger({
+    type: 'db:project',
+}, {
+    json: false,// 开启json格式输出
+    pretty: false, // 关闭开发环境美化输出
+    colors: true, // 仅当json：false时启用颜色输出可用
+    includeCaller: false, // 日志不包含调用者
+});
 // 创建新项目
-export const createProjectDB = async (data: Prisma.ProjectCreateInput): Promise<Project & { documents: Document[] } | null> => {
+export const createProjectDB = async (
+    data: Prisma.ProjectCreateInput
+): Promise<(Project & { documents: Document[] }) | null> => {
     return dbTry(() => prisma.project.create({ data, include: { documents: true } }));
 };
 
 // 按用户查找项目列表
-export const findProjectsByUserIdDB = async (userId: string): Promise<(Project & { documents: { id: string; status?: string; processStatus?: string }[] })[] | null> => {
-    return dbTry(() => prisma.project.findMany({
-        where: { userId },
-        orderBy: { date: 'desc' },
-        include: { documents: { orderBy: { uploadedAt: 'desc' }, take: 1 } },
-    }));
+export const findProjectsByUserIdDB = async (
+    userId: string
+): Promise<
+    (Project & { documents: { id: string; status?: string; processStatus?: string }[] })[] | null
+> => {
+    return dbTry(() =>
+        prisma.project.findMany({
+            where: { userId },
+            orderBy: { date: 'desc' },
+            include: { documents: { orderBy: { uploadedAt: 'desc' }, take: 1 } },
+        })
+    );
 };
 
 // 查找所有项目
@@ -22,107 +38,111 @@ export const findAllProjectsDB = async (): Promise<Project[] | null> => {
 };
 
 // 按ID查找单个项目
-export const findProjectByIdDB = async (id: string): Promise<Project & { documents: Document[] } | null> => {
+export const findProjectByIdDB = async (
+    id: string
+): Promise<(Project & { documents: Document[] }) | null> => {
     return dbTry(() => prisma.project.findUnique({ where: { id }, include: { documents: true } }));
 };
 
 // 更新项目
 export const updateProjectByIdDB = async (
     id: string,
-    data: Partial<Omit<Project, "id">>
+    data: Partial<Omit<Project, 'id'>>
 ): Promise<Project | null> => {
     return dbTry(() => prisma.project.update({ where: { id }, data }));
 };
 
 // 删除项目
 export const deleteProjectByIdDB = async (id: string): Promise<Project | null> => {
-    return dbTry(() => prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-        // 1. 获取项目信息及其关联的词典
-        const project = await tx.project.findUnique({
-            where: { id },
-            include: {
-                projectDictionaries: {
-                    include: {
-                        dictionary: {
-                            include: {
-                                projectBindings: true, // 检查是否被其他项目使用
-                                _count: { select: { entries: true } } // 统计条目数
-                            }
-                        }
-                    }
+    return dbTry(() =>
+        prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+            // 1. 获取项目信息及其关联的词典
+            const project = await tx.project.findUnique({
+                where: { id },
+                include: {
+                    projectDictionaries: {
+                        include: {
+                            dictionary: {
+                                include: {
+                                    projectBindings: true, // 检查是否被其他项目使用
+                                    _count: { select: { entries: true } }, // 统计条目数
+                                },
+                            },
+                        },
+                    },
+                    projectMemories: {
+                        include: {
+                            memory: {
+                                include: {
+                                    projectBindings: true,
+                                },
+                            },
+                        },
+                    },
                 },
-                projectMemories: {
-                    include: {
-                        memory: {
-                            include: {
-                                projectBindings: true
-                            }
-                        }
-                    }
+            });
+
+            if (!project) {
+                throw new Error(`项目 ${id} 不存在`);
+            }
+
+            logger.debug(`删除项目: ${project.name} (${id})`);
+
+            // 2. 处理专属词典删除
+            for (const binding of project.projectDictionaries) {
+                const dict = binding.dictionary;
+
+                // 检查词典是否还被其他项目使用
+                const otherBindings = dict.projectBindings.filter(b => b.projectId !== id);
+
+                const isShared = otherBindings.length > 0;
+                const isProjectDictionary = dict.visibility === 'PROJECT';
+                const isAutoGenerated =
+                    dict.name.includes('术语清单') || dict.description?.includes('自动生成');
+
+                // 删除条件：专属词典 + 自动生成 + 未被其他项目使用
+                if (isProjectDictionary && isAutoGenerated && !isShared) {
+                    logger.debug(
+                        `删除专属词典: ${dict.name} (${dict.id}), 条目数: ${dict._count?.entries || 0}`
+                    );
+
+                    await tx.dictionary.delete({
+                        where: { id: dict.id },
+                    });
+                } else if (isShared) {
+                    logger.debug(
+                        `保留共享词典: ${dict.name} (被 ${otherBindings.length} 个项目使用)`
+                    );
+                } else if (!isAutoGenerated) {
+                    logger.debug(`保留用户创建的词典: ${dict.name}`);
+                } else {
+                    logger.debug(`保留词典: ${dict.name} (可见性: ${dict.visibility})`);
                 }
             }
-        });
 
-        if (!project) {
-            throw new Error(`项目 ${id} 不存在`);
-        }
+            // 3. 处理专属记忆库删除（可选，类似逻辑）
+            for (const binding of project.projectMemories) {
+                const memory = binding.memory;
+                const otherBindings = memory.projectBindings.filter(b => b.projectId !== id);
 
-        console.log(`删除项目: ${project.name} (${id})`);
+                const isShared = otherBindings.length > 0;
+                const isAutoGenerated =
+                    memory.name.includes('记忆库') || memory.description?.includes('自动生成');
 
-        // 2. 处理专属词典删除
-        for (const binding of project.projectDictionaries) {
-            const dict = binding.dictionary;
-            
-            // 检查词典是否还被其他项目使用
-            const otherBindings = dict.projectBindings.filter(
-                b => b.projectId !== id
-            );
-            
-            const isShared = otherBindings.length > 0;
-            const isProjectDictionary = dict.visibility === 'PROJECT';
-            const isAutoGenerated = dict.name.includes('术语清单') || 
-                                   dict.description?.includes('自动生成');
-            
-            // 删除条件：专属词典 + 自动生成 + 未被其他项目使用
-            if (isProjectDictionary && isAutoGenerated && !isShared) {
-                console.log(`删除专属词典: ${dict.name} (${dict.id}), 条目数: ${dict._count?.entries || 0}`);
-                
-                await tx.dictionary.delete({
-                    where: { id: dict.id }
-                });
-            } else if (isShared) {
-                console.log(`保留共享词典: ${dict.name} (被 ${otherBindings.length} 个项目使用)`);
-            } else if (!isAutoGenerated) {
-                console.log(`保留用户创建的词典: ${dict.name}`);
-            } else {
-                console.log(`保留词典: ${dict.name} (可见性: ${dict.visibility})`);
+                if (!isShared && isAutoGenerated) {
+                    logger.debug(`删除专属记忆库: ${memory.name} (${memory.id})`);
+                    await tx.translationMemory.delete({
+                        where: { id: memory.id },
+                    });
+                }
             }
-        }
 
-        // 3. 处理专属记忆库删除（可选，类似逻辑）
-        for (const binding of project.projectMemories) {
-            const memory = binding.memory;
-            const otherBindings = memory.projectBindings.filter(
-                b => b.projectId !== id
-            );
-            
-            const isShared = otherBindings.length > 0;
-            const isAutoGenerated = memory.name.includes('记忆库') || 
-                                   memory.description?.includes('自动生成');
-            
-            if (!isShared && isAutoGenerated) {
-                console.log(`删除专属记忆库: ${memory.name} (${memory.id})`);
-                await tx.translationMemory.delete({
-                    where: { id: memory.id }
-                });
-            }
-        }
+            // 4. 删除绑定关系（如果前面没删除词典，这里会删除绑定）
+            await tx.projectDictionary.deleteMany({ where: { projectId: id } });
+            await tx.projectMemory.deleteMany({ where: { projectId: id } });
 
-        // 4. 删除绑定关系（如果前面没删除词典，这里会删除绑定）
-        await tx.projectDictionary.deleteMany({ where: { projectId: id } });
-        await tx.projectMemory.deleteMany({ where: { projectId: id } });
-        
-        // 5. 删除项目本身（会级联删除 documents 和 documentItems）
-        return tx.project.delete({ where: { id } });
-    }));
+            // 5. 删除项目本身（会级联删除 documents 和 documentItems）
+            return tx.project.delete({ where: { id } });
+        })
+    );
 };

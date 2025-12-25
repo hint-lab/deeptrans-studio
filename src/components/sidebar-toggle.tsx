@@ -1,5 +1,5 @@
-import { Button } from "@/components/ui/button";
-import { PanelLeftOpen, PanelLeftClose } from "lucide-react";
+import { Button } from '@/components/ui/button';
+import { PanelLeftOpen, PanelLeftClose } from 'lucide-react';
 
 interface SidebarToggleProps {
     isOpen: boolean;
@@ -17,7 +17,7 @@ export function SidebarToggle({ isOpen, onToggle }: SidebarToggleProps) {
             size="sm"
             onClick={handleClick}
             className="h-8 w-8 p-0 hover:bg-accent"
-            aria-label={isOpen ? "Close sidebar" : "Open sidebar"}
+            aria-label={isOpen ? 'Close sidebar' : 'Open sidebar'}
         >
             {isOpen ? (
                 <PanelLeftClose size="16" className="text-foreground" />

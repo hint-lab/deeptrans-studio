@@ -1,12 +1,12 @@
-import { UserRole } from "@prisma/client";
-import * as z from "zod";
+import { UserRole } from '@prisma/client';
+import * as z from 'zod';
 
 ////////////////////////////////////////////
 
 // Login form
 export const LoginSchema = z.object({
-    phone: z.string().min(11, "号码错误").default(""),
-    code: z.string().length(6, "必须6位数字").default(""),
+    phone: z.string().min(11, '号码错误').default(''),
+    code: z.string().length(6, '必须6位数字').default(''),
 });
 
 //////////////////////////////////////////////
@@ -15,30 +15,26 @@ export const LoginSchema = z.object({
 export const RegisterSchema = z
     .object({
         email: z.string().email({
-            message: "Email is required!",
+            message: 'Email is required!',
         }),
-        password: z
-            .string()
-            .min(8, { message: "Password must be at least 8 characters!" }),
+        password: z.string().min(8, { message: 'Password must be at least 8 characters!' }),
 
-        passwordConfirm: z
-            .string()
-            .min(8, { message: "Password must be at least 8 characters" }),
+        passwordConfirm: z.string().min(8, { message: 'Password must be at least 8 characters' }),
 
         name: z.string().min(1, {
-            message: "Name is required!",
+            message: 'Name is required!',
         }),
     })
-    .refine((data) => data.password === data.passwordConfirm, {
+    .refine(data => data.password === data.passwordConfirm, {
         message: "Password don't match!",
-        path: ["passwordConfirm"],
+        path: ['passwordConfirm'],
     });
 
 ///////////////////////////////////////////////
 
 export const ResetSchema = z.object({
     email: z.string().email({
-        message: "Email is required!",
+        message: 'Email is required!',
     }),
 });
 
@@ -46,17 +42,15 @@ export const ResetSchema = z.object({
 
 export const NewPasswordSchema = z
     .object({
-        password: z
-            .string()
-            .min(8, { message: "Password must be at least 8 characters" }),
+        password: z.string().min(8, { message: 'Password must be at least 8 characters' }),
 
         passwordConfirm: z
             .string()
-            .min(8, { message: "PasswordConfirm must be at least 8 characters" }),
+            .min(8, { message: 'PasswordConfirm must be at least 8 characters' }),
     })
-    .refine((data) => data.password === data.passwordConfirm, {
+    .refine(data => data.password === data.passwordConfirm, {
         message: "Password don't match!",
-        path: ["passwordConfirm"],
+        path: ['passwordConfirm'],
     });
 
 //////////////////////////////////////////////
@@ -71,7 +65,7 @@ export const SettingSchema = z
         newPassword: z.optional(z.string().min(6)),
     })
     .refine(
-        (data) => {
+        data => {
             if (data.password && !data.newPassword) {
                 return false;
             }
@@ -83,7 +77,7 @@ export const SettingSchema = z
             return true;
         },
         {
-            message: "New password is required!",
-            path: ["newPassword"],
+            message: 'New password is required!',
+            path: ['newPassword'],
         }
     );

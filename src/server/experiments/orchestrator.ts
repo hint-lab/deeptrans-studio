@@ -2,13 +2,16 @@ import { runExperimentPipeline } from './pipeline';
 import { ExperimentConfig, ExperimentStatus, ExperimentResult } from '@/server/experiments/types';
 
 // 内存存储实验状态（生产环境建议用Redis或数据库）
-const experimentStore = new Map<string, {
-    status: ExperimentStatus;
-    config: ExperimentConfig;
-    result?: ExperimentResult;
-    startTime: number;
-    endTime?: number;
-}>();
+const experimentStore = new Map<
+    string,
+    {
+        status: ExperimentStatus;
+        config: ExperimentConfig;
+        result?: ExperimentResult;
+        startTime: number;
+        endTime?: number;
+    }
+>();
 
 export async function startExperimentJob(config: ExperimentConfig): Promise<string> {
     const jobId = `exp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -20,10 +23,10 @@ export async function startExperimentJob(config: ExperimentConfig): Promise<stri
             status: 'pending',
             progress: 0,
             currentStage: 'initializing',
-            message: 'Experiment queued'
+            message: 'Experiment queued',
         },
         config,
-        startTime: Date.now()
+        startTime: Date.now(),
     });
 
     // 异步执行实验
@@ -37,7 +40,7 @@ export async function startExperimentJob(config: ExperimentConfig): Promise<stri
                 experiment.status = {
                     ...experiment.status,
                     status: 'failed',
-                    message: error instanceof Error ? error.message : 'Unknown error'
+                    message: error instanceof Error ? error.message : 'Unknown error',
                 };
             }
         }
@@ -58,14 +61,18 @@ export async function getExperimentResult(jobId: string): Promise<ExperimentResu
 
 export async function cancelExperiment(jobId: string): Promise<boolean> {
     const experiment = experimentStore.get(jobId);
-    if (!experiment || experiment.status.status === 'completed' || experiment.status.status === 'failed') {
+    if (
+        !experiment ||
+        experiment.status.status === 'completed' ||
+        experiment.status.status === 'failed'
+    ) {
         return false;
     }
 
     experiment.status = {
         ...experiment.status,
         status: 'cancelled',
-        message: 'Experiment cancelled by user'
+        message: 'Experiment cancelled by user',
     };
 
     return true;
@@ -87,7 +94,7 @@ export function setExperimentResult(jobId: string, result: ExperimentResult): vo
             status: 'completed',
             progress: 100,
             currentStage: 'completed',
-            message: 'Experiment completed successfully'
+            message: 'Experiment completed successfully',
         };
         experiment.endTime = Date.now();
     }

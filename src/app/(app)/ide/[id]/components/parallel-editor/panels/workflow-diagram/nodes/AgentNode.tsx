@@ -55,42 +55,46 @@ export function AgentNode({ data }: any) {
     const isActiveQA = data?.qaPhase && qaStep === data.qaPhase;
     const isActivePE = data?.stage && peStep === data.stage;
     const isCurrentStage = currentStage === data.stage;
-    const isRunning = (isActivePre && isPreRunning) || (isActiveQA && isQARunning) || (isActivePE && isPERunning);
+    const isRunning =
+        (isActivePre && isPreRunning) || (isActiveQA && isQARunning) || (isActivePE && isPERunning);
     return (
-        <div className={cn(
-            "w-40 h-20 p-1.5 rounded-lg flex flex-col gap-1",
-            "bg-gradient-to-br from-white to-gray-50",
-            "dark:from-gray-800 dark:to-gray-900",
-            "shadow-[0_4px_10px_rgb(0,0,0,0.1)]",
-            "border hover:shadow-lg transition-all duration-300",
-            "text-gray-800 dark:text-white rounded-lg",
-            "overflow-hidden", // 防止内容溢出
-            isCurrentStage || isActivePre || isActiveQA || isActivePE
-                ? (isActivePre || isActiveQA || isActivePE)
-                    ? "border-purple-500 dark:border-purple-400 border-2"  // Agent workflows: blue
-                    : "border-purple-500 dark:border-purple-400 border-2"  // Manual review: purple
-                : "border-indigo-100 dark:border-indigo-900/30 border-2"
-        )} onClick={handleClick}>
+        <div
+            className={cn(
+                'flex h-20 w-40 flex-col gap-1 rounded-lg p-1.5',
+                'bg-gradient-to-br from-white to-gray-50',
+                'dark:from-gray-800 dark:to-gray-900',
+                'shadow-[0_4px_10px_rgb(0,0,0,0.1)]',
+                'border transition-all duration-300 hover:shadow-lg',
+                'rounded-lg text-gray-800 dark:text-white',
+                'overflow-hidden', // 防止内容溢出
+                isCurrentStage || isActivePre || isActiveQA || isActivePE
+                    ? isActivePre || isActiveQA || isActivePE
+                        ? 'border-2 border-purple-500 dark:border-purple-400' // Agent workflows: blue
+                        : 'border-2 border-purple-500 dark:border-purple-400' // Manual review: purple
+                    : 'border-2 border-indigo-100 dark:border-indigo-900/30'
+            )}
+            onClick={handleClick}
+        >
             <Handle type="target" position={Position.Left} id="input" />
             <div className="flex items-start gap-1.5 rounded-lg">
-                <div className={cn(
-                    "w-5 h-5 rounded-md flex-shrink-0 flex items-center justify-center text-white shadow-sm",
-                    isRunning
-                        ? "bg-gradient-to-br from-green-500 to-emerald-600 animate-pulse shadow-green-200 dark:shadow-green-900/30"
-                        : (isActivePre || isActiveQA || isActivePE)
-                            ? "bg-gradient-to-br from-blue-500 to-cyan-600 shadow-blue-200 dark:shadow-blue-900/30"  // Agent workflows: blue
-                            : isCurrentStage
-                                ? "bg-gradient-to-br from-purple-500 to-indigo-600 shadow-purple-200 dark:shadow-purple-900/30"  // Manual review: purple
-                                : "bg-gradient-to-br from-indigo-500 to-purple-600 shadow-indigo-200 dark:shadow-indigo-900/30"
-                )}>
-                    <span className="text-xs">
-                        {isRunning ? "⚡" : "🤖"}
-                    </span>
+                <div
+                    className={cn(
+                        'flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md text-white shadow-sm',
+                        isRunning
+                            ? 'animate-pulse bg-gradient-to-br from-green-500 to-emerald-600 shadow-green-200 dark:shadow-green-900/30'
+                            : isActivePre || isActiveQA || isActivePE
+                              ? 'bg-gradient-to-br from-blue-500 to-cyan-600 shadow-blue-200 dark:shadow-blue-900/30' // Agent workflows: blue
+                              : isCurrentStage
+                                ? 'bg-gradient-to-br from-purple-500 to-indigo-600 shadow-purple-200 dark:shadow-purple-900/30' // Manual review: purple
+                                : 'bg-gradient-to-br from-indigo-500 to-purple-600 shadow-indigo-200 dark:shadow-indigo-900/30'
+                    )}
+                >
+                    <span className="text-xs">{isRunning ? '⚡' : '🤖'}</span>
                 </div>
-                <div className="font-medium text-xs leading-tight break-words flex items-center gap-1 flex-1 min-w-0">
+                <div className="flex min-w-0 flex-1 items-center gap-1 break-words text-xs font-medium leading-tight">
                     <span className="truncate">{data.label}</span>
                     {isRunning && (
-                        <Loader className="h-3 w-3 animate-spin text-purple-600 dark:text-purple-400 flex-shrink-0" />
+                        <Loader className="h-3 w-3 flex-shrink-0 animate-spin text-purple-600 dark:text-purple-400" />
                     )}
                 </div>
                 {/* <div className="ml-auto text-emerald-500 dark:text-emerald-400 flex-shrink-0">
@@ -100,10 +104,10 @@ export function AgentNode({ data }: any) {
                     </svg>
                 </div> */}
             </div>
-            <div className="mt-0.5 text-[10px] text-gray-600 dark:text-gray-400 font-normal leading-tight break-words flex-1 overflow-hidden">
+            <div className="mt-0.5 flex-1 overflow-hidden break-words text-[10px] font-normal leading-tight text-gray-600 dark:text-gray-400">
                 <div className="line-clamp-2">{data.description || t('agentNode')}</div>
             </div>
             <Handle type="source" position={Position.Right} id="output" />
         </div>
     );
-} 
+}

@@ -8,24 +8,18 @@ export async function POST(request: NextRequest) {
         const { query, limit, searchConfig } = body;
 
         if (!query || typeof query !== 'string') {
-            return NextResponse.json(
-                { error: '查询参数 query 是必需的' },
-                { status: 400 }
-            );
+            return NextResponse.json({ error: '查询参数 query 是必需的' }, { status: 400 });
         }
 
         const result = await searchMemoryAction(query, {
             limit: limit || 10,
-            searchConfig: searchConfig as Partial<HybridSearchConfig>
+            searchConfig: searchConfig as Partial<HybridSearchConfig>,
         });
 
         return NextResponse.json(result);
     } catch (error) {
         console.error('Hybrid search API error:', error);
-        return NextResponse.json(
-            { error: '检索失败' },
-            { status: 500 }
-        );
+        return NextResponse.json({ error: '检索失败' }, { status: 500 });
     }
 }
 
@@ -39,7 +33,7 @@ export async function GET() {
             defaultConfig: DEFAULT_HYBRID_CONFIG,
             availableModes: ['vector', 'keyword', 'hybrid'],
             fusionMethods: ['weighted_sum', 'rank_fusion', 'reciprocal_rank_fusion'],
-            matchTypes: ['exact', 'phrase', 'fuzzy', 'contains']
-        }
+            matchTypes: ['exact', 'phrase', 'fuzzy', 'contains'],
+        },
     });
 }

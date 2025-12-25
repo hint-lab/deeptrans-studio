@@ -1,68 +1,62 @@
-"use client"
+'use client';
 
-import { useState, useEffect, useMemo } from "react"
-import { useSession } from "next-auth/react"
-import { useRouter, useSearchParams } from "next/navigation"
-import { Separator } from "src/components/ui/separator"
-import {
-    Tabs,
-    TabsContent,
-    TabsList,
-    TabsTrigger,
-} from "src/components/ui/tabs"
-import { Button } from "src/components/ui/button"
-import type { Dictionary as UIDictionary } from "./components/dictionary-artwork"
-import { DictionaryArtwork } from "./components/dictionary-artwork"
-import { CreateDictionaryDialog } from "./components/create-dictionary-dialog"
-import { DictionaryEntriesManager } from "./components/dictionary-entries-manager"
-import { fetchDictionariesAction } from "@/actions/dictionary"
-import { toast } from "sonner"
-import ImportDictionaryDialog from "./components/import-dictionary-dialog"
-import { Skeleton } from "src/components/ui/skeleton"
-import { AddPublicDictionaryDialog } from "./components/add-public-dictionary-dialog"
-import { useTranslations } from "next-intl"
-
-
+import { fetchDictionariesAction } from '@/actions/dictionary';
+import { createLogger } from '@/lib/logger';
+import { useSession } from 'next-auth/react';
+import { useTranslations } from 'next-intl';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useEffect, useMemo, useState } from 'react';
+import { toast } from 'sonner';
+import { Button } from 'src/components/ui/button';
+import { Separator } from 'src/components/ui/separator';
+import { Skeleton } from 'src/components/ui/skeleton';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from 'src/components/ui/tabs';
+import { AddPublicDictionaryDialog } from './components/add-public-dictionary-dialog';
+import { CreateDictionaryDialog } from './components/create-dictionary-dialog';
+import type { Dictionary as UIDictionary } from './components/dictionary-artwork';
+import { DictionaryArtwork } from './components/dictionary-artwork';
+import ImportDictionaryDialog from './components/import-dictionary-dialog';
+const logger = createLogger({
+    type: 'dashboard:dictionaries',
+}, {
+    json: false,// 开启json格式输出
+    pretty: false, // 关闭开发环境美化输出
+    colors: true, // 仅当json：false时启用颜色输出可用
+    includeCaller: false, // 日志不包含调用者
+});
 export default function DictionariesPage() {
     const { data: session, status, update } = useSession();
-    const router = useRouter()
-    const t = useTranslations("Dashboard.Dictionaries")
-    const [publicDictionaries, setPublicDictionaries] = useState<UIDictionary[]>([])
-    const [projectDictionaries, setProjectDictionaries] = useState<UIDictionary[]>([])
-    const [privateDictionaries, setPrivateDictionaries] = useState<UIDictionary[]>([])
-    const [selectedDictionary, setSelectedDictionary] = useState<UIDictionary | null>(null)
-    const [activeTab, setActiveTab] = useState("private")
-    const searchParams = useSearchParams()
-    const [loading, setLoading] = useState(true)
-    const [reloadToken, setReloadToken] = useState(0)
-    useEffect(() => {
-        console.log("客户端Session状态:", status);
-        console.log("客户端Session数据:", session);
-        console.log("客户端过期时间:",  session?.expires 
-  ? new Date(session.expires).toLocaleString() 
-  : "未设置");
-    }, [session, status]);
+    const router = useRouter();
+    const t = useTranslations('Dashboard.Dictionaries');
+    const [publicDictionaries, setPublicDictionaries] = useState<UIDictionary[]>([]);
+    const [projectDictionaries, setProjectDictionaries] = useState<UIDictionary[]>([]);
+    const [privateDictionaries, setPrivateDictionaries] = useState<UIDictionary[]>([]);
+    const [selectedDictionary, setSelectedDictionary] = useState<UIDictionary | null>(null);
+    const [activeTab, setActiveTab] = useState('private');
+    const searchParams = useSearchParams();
+    const [loading, setLoading] = useState(true);
+    const [reloadToken, setReloadToken] = useState(0);
     // 汇总可供导入的词库（全部）
     const allDictionariesLite = useMemo(() => {
-        const all = [...publicDictionaries, ...projectDictionaries, ...privateDictionaries]
+        const all = [...publicDictionaries, ...projectDictionaries, ...privateDictionaries];
         // 去重
-        const map = new Map<string, { id: string; name: string }>()
-        all.forEach(d => map.set(d.id, { id: d.id, name: d.name }))
-        return Array.from(map.values())
-    }, [publicDictionaries, projectDictionaries, privateDictionaries])
+        const map = new Map<string, { id: string; name: string }>();
+        all.forEach(d => map.set(d.id, { id: d.id, name: d.name }));
+        return Array.from(map.values());
+    }, [publicDictionaries, projectDictionaries, privateDictionaries]);
 
     // 加载词典数据
     const loadDictionaries = async () => {
-        setLoading(true)
+        setLoading(true);
         try {
             // 公共词库
             try {
-                const pubRes = await fetchDictionariesAction("public")
+                const pubRes = await fetchDictionariesAction('public');
                 if (pubRes.success && pubRes.data) {
                     const publicDicts: UIDictionary[] = pubRes.data.map((d: any) => ({
                         id: d.id,
                         name: d.name,
-                        description: d.description ?? "",
+                        description: d.description ?? '',
                         domain: d.domain ?? 'general',
                         visibility: 'PUBLIC' as const,
                         createdAt: new Date(d.createdAt as any),
@@ -70,23 +64,23 @@ export default function DictionariesPage() {
                         tenantId: (d as any).tenantId ?? null,
                         projectId: (d as any).projectId ?? null,
                         userId: d.userId ?? null,
-                        cover: getDictionaryCover(d.domain ?? 'general')
-                    }))
-                    setPublicDictionaries(publicDicts)
+                        cover: getDictionaryCover(d.domain ?? 'general'),
+                    }));
+                    setPublicDictionaries(publicDicts);
                 } else {
-                    setPublicDictionaries([])
+                    setPublicDictionaries([]);
                 }
             } catch (e) {
-                console.error(t("loadPublicFailed"), e)
+                logger.error(t('loadPublicFailed'), e);
             }
             // 项目词库
             try {
-                const projectRes = await fetchDictionariesAction("project")
+                const projectRes = await fetchDictionariesAction('project');
                 if (projectRes.success && projectRes.data) {
                     const projDicts: UIDictionary[] = projectRes.data.map((d: any) => ({
                         id: d.id,
                         name: d.name,
-                        description: d.description ?? "",
+                        description: d.description ?? '',
                         domain: d.domain ?? 'general',
                         visibility: 'PROJECT' as const,
                         createdAt: new Date(d.createdAt as any),
@@ -94,24 +88,24 @@ export default function DictionariesPage() {
                         tenantId: (d as any).tenantId ?? null,
                         projectId: (d as any).projectId ?? null,
                         userId: d.userId ?? null,
-                        cover: getDictionaryCover(d.domain ?? 'general')
-                    }))
-                    setProjectDictionaries(projDicts)
+                        cover: getDictionaryCover(d.domain ?? 'general'),
+                    }));
+                    setProjectDictionaries(projDicts);
                 } else {
-                    setProjectDictionaries([])
+                    setProjectDictionaries([]);
                 }
             } catch (e) {
-                console.error(t("loadProjectFailed"), e)
+                logger.error(t('loadProjectFailed'), e);
             }
 
             // 私有词库（需登录）
             if (session?.user?.id) {
-                const privateResult = await fetchDictionariesAction("private", session.user.id)
+                const privateResult = await fetchDictionariesAction('private', session.user.id);
                 if (privateResult.success && privateResult.data) {
                     const privateDicts: UIDictionary[] = privateResult.data.map((dict: any) => ({
                         id: dict.id,
                         name: dict.name,
-                        description: dict.description ?? "",
+                        description: dict.description ?? '',
                         domain: dict.domain,
                         visibility: 'PRIVATE' as const,
                         createdAt: new Date(dict.createdAt as any),
@@ -119,125 +113,137 @@ export default function DictionariesPage() {
                         tenantId: (dict as any).tenantId ?? null,
                         projectId: (dict as any).projectId ?? null,
                         userId: dict.userId ?? null,
-                        cover: getDictionaryCover(dict.domain)
-                    }))
-                    setPrivateDictionaries(privateDicts)
+                        cover: getDictionaryCover(dict.domain),
+                    }));
+                    setPrivateDictionaries(privateDicts);
                 }
             } else {
-                setPrivateDictionaries([])
+                setPrivateDictionaries([]);
             }
         } catch (error) {
-            console.error(t("loadErrorDesc"), error)
-            toast.error(t("loadError"), { description: t("loadErrorDesc") as string })
+            logger.error(t('loadErrorDesc'), error);
+            toast.error(t('loadError'), { description: t('loadErrorDesc') as string });
         } finally {
-            setLoading(false)
+            setLoading(false);
         }
-    }
+    };
 
     // 根据领域获取词典封面
     const getDictionaryCover = (domain: string): string => {
         const coverMap: Record<string, string> = {
-            'general': '/images/dictionaries/common.svg',
-            'technology': '/images/dictionaries/tech.svg',
-            'legal': '/images/dictionaries/legal.svg',
-            'medical': '/images/dictionaries/medical.svg',
-            'finance': '/images/dictionaries/finance.svg',
+            general: '/images/dictionaries/common.svg',
+            technology: '/images/dictionaries/tech.svg',
+            legal: '/images/dictionaries/legal.svg',
+            medical: '/images/dictionaries/medical.svg',
+            finance: '/images/dictionaries/finance.svg',
             'artificial-intelligence': '/images/dictionaries/tech.svg',
-            'marketing': '/images/dictionaries/common.svg',
-            'engineering': '/images/dictionaries/tech.svg',
-            'education': '/images/dictionaries/common.svg',
-            'custom': '/images/dictionaries/default.svg'
-        }
-        return coverMap[domain] ?? '/images/dictionaries/default.svg'
-    }
+            marketing: '/images/dictionaries/common.svg',
+            engineering: '/images/dictionaries/tech.svg',
+            education: '/images/dictionaries/common.svg',
+            custom: '/images/dictionaries/default.svg',
+        };
+        return coverMap[domain] ?? '/images/dictionaries/default.svg';
+    };
 
     useEffect(() => {
-        void loadDictionaries()
-    }, [session?.user?.id])
+        void loadDictionaries();
+    }, [session?.user?.id]);
 
     // 允许通过 URL 指定默认页签，如 /dashboard/dictionaries?tab=private
     useEffect(() => {
         try {
-            const tab = (searchParams?.get('tab') || '').trim()
+            const tab = (searchParams?.get('tab') || '').trim();
             if (tab === 'public' || tab === 'project' || tab === 'private') {
-                setActiveTab(tab)
+                setActiveTab(tab);
             }
         } catch { }
-    }, [searchParams])
+    }, [searchParams]);
 
     // 处理新词典创建
     const handleDictionaryCreated = (newDictionary: UIDictionary) => {
         if (newDictionary.visibility === 'PUBLIC') {
-            setPublicDictionaries(prev => [newDictionary, ...prev])
+            setPublicDictionaries(prev => [newDictionary, ...prev]);
         } else if (newDictionary.visibility === 'PROJECT') {
-            setProjectDictionaries(prev => [newDictionary, ...prev])
+            setProjectDictionaries(prev => [newDictionary, ...prev]);
         } else {
-            setPrivateDictionaries(prev => [newDictionary, ...prev])
+            setPrivateDictionaries(prev => [newDictionary, ...prev]);
         }
-    }
+    };
 
     // 处理项目词典添加
     const handleTeamDictionaryAdded = (newDictionary: UIDictionary) => {
-        setProjectDictionaries(prev => [newDictionary, ...prev])
-        toast.success(t("projectAdded"), { description: t("projectAdded") as string })  
-    }
+        setProjectDictionaries(prev => [newDictionary, ...prev]);
+        toast.success(t('projectAdded'), { description: t('projectAdded') as string });
+    };
 
     // 处理公共词典添加
     const handlePublicDictionaryAdded = (newDictionary: UIDictionary) => {
-        setPublicDictionaries(prev => [newDictionary, ...prev])
-        toast.success(t("publicAdded"), { description: t("publicAdded") as string }) 
-    }
+        setPublicDictionaries(prev => [newDictionary, ...prev]);
+        toast.success(t('publicAdded'), { description: t('publicAdded') as string });
+    };
 
     // 处理词典条目更新
     const handleEntriesUpdated = () => {
         // 重新加载词典数据以更新条目数量
-        void loadDictionaries()
-    }
+        void loadDictionaries();
+    };
 
     // 处理词典删除
     const handleDictionaryDeleted = (dictionaryId: string) => {
         // 从各个列表中移除被删除的词典
-        setPublicDictionaries(prev => prev.filter(dict => dict.id !== dictionaryId))
-        setProjectDictionaries(prev => prev.filter(dict => dict.id !== dictionaryId))
-        setPrivateDictionaries(prev => prev.filter(dict => dict.id !== dictionaryId))
+        setPublicDictionaries(prev => prev.filter(dict => dict.id !== dictionaryId));
+        setProjectDictionaries(prev => prev.filter(dict => dict.id !== dictionaryId));
+        setPrivateDictionaries(prev => prev.filter(dict => dict.id !== dictionaryId));
 
         // 如果删除的是当前选中的词典，清除选择
         if (selectedDictionary?.id === dictionaryId) {
-            setSelectedDictionary(null)
-            setActiveTab("private")
+            setSelectedDictionary(null);
+            setActiveTab('private');
         }
 
-        toast.success(t("deleteSuccess"), { description: t("deleteSuccess") as string }) 
-    }   
+        toast.success(t('deleteSuccess'), { description: t('deleteSuccess') as string });
+    };
 
     // 处理词典编辑
     const handleDictionaryEdited = (dictionaryId: string, updatedData: Partial<UIDictionary>) => {
         // 更新各个列表中的词典信息
         const updateDictionary = (dict: UIDictionary) =>
             dict.id === dictionaryId
-                ? { ...dict, ...updatedData, cover: getDictionaryCover(updatedData.domain ?? dict.domain) }
-                : dict
+                ? {
+                    ...dict,
+                    ...updatedData,
+                    cover: getDictionaryCover(updatedData.domain ?? dict.domain),
+                }
+                : dict;
 
-        setPublicDictionaries(prev => prev.map(updateDictionary))
-        setProjectDictionaries(prev => prev.map(updateDictionary))
-        setPrivateDictionaries(prev => prev.map(updateDictionary))
+        setPublicDictionaries(prev => prev.map(updateDictionary));
+        setProjectDictionaries(prev => prev.map(updateDictionary));
+        setPrivateDictionaries(prev => prev.map(updateDictionary));
 
         // 如果编辑的是当前选中的词典，更新选择状态
         if (selectedDictionary?.id === dictionaryId) {
-            setSelectedDictionary(prev => prev ? { ...prev, ...updatedData, cover: getDictionaryCover(updatedData.domain ?? prev.domain) } : null)
+            setSelectedDictionary(prev =>
+                prev
+                    ? {
+                        ...prev,
+                        ...updatedData,
+                        cover: getDictionaryCover(updatedData.domain ?? prev.domain),
+                    }
+                    : null
+            );
         }
 
-        toast.success(t("editSuccess"), { description: t("editSuccess") as string }) 
-    }
+        toast.success(t('editSuccess'), { description: t('editSuccess') as string });
+    };
 
     // 处理词典选择
     const handleDictionarySelect = (dictionary: UIDictionary) => {
-        router.push(`/dashboard/dictionaries/${dictionary.id}`)
-    }
+        router.push(`/dashboard/dictionaries/${dictionary.id}`);
+    };
 
     if (loading) {
         return (
-            <div className="w-full max-w-7xl mx-auto p-6">
+            <div className="mx-auto w-full max-w-7xl p-6">
                 <div className="space-y-4">
                     <div className="flex items-center justify-between">
                         <div className="space-y-2">
@@ -249,47 +255,44 @@ export default function DictionariesPage() {
                             <Skeleton className="h-9 w-28" />
                         </div>
                     </div>
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+                    <div className="grid grid-cols-2 gap-6 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
                         {Array.from({ length: 10 }).map((_, i) => (
                             <Skeleton key={i} className="h-[280px] w-full" />
                         ))}
                     </div>
                 </div>
             </div>
-        )
+        );
     }
 
     return (
-        <div className="w-full max-w-7xl mx-auto p-6">
+        <div className="mx-auto w-full max-w-7xl p-6">
             <div className="mb-4">
-                <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-1">{t("title")}</h1>
-                <p className="text-sm text-gray-600 dark:text-gray-400">{t("description")}</p>
+                <h1 className="mb-1 text-3xl font-bold text-gray-900 dark:text-white">
+                    {t('title')}
+                </h1>
+                <p className="text-sm text-gray-600 dark:text-gray-400">{t('description')}</p>
             </div>
 
             <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full space-y-6">
                 <div className="space-between flex items-center">
                     <TabsList>
                         <TabsTrigger value="public" className="relative">
-                            {t("publicDictionaries")}
+                            {t('publicDictionaries')}
                         </TabsTrigger>
-                        <TabsTrigger value="private">
-                            {t("privateDictionaries")}
-                        </TabsTrigger>
+                        <TabsTrigger value="private">{t('privateDictionaries')}</TabsTrigger>
                         <TabsTrigger value="project" className="relative">
-                            {t("projectDictionaries")}
+                            {t('projectDictionaries')}
                         </TabsTrigger>
                     </TabsList>
                 </div>
 
                 {/* 公共词库 */}
-                <TabsContent
-                    value="public"
-                    className="border-none p-0 outline-none"
-                >
+                <TabsContent value="public" className="border-none p-0 outline-none">
                     <div className="flex items-center justify-between">
                         <div className="space-y-1">
                             <p className="text-sm text-muted-foreground">
-                                {t("publicDescription")}
+                                {t('publicDescription')}
                             </p>
                         </div>
                         <div className="ml-auto flex items-center gap-2">
@@ -301,11 +304,14 @@ export default function DictionariesPage() {
                     </div>
                     <Separator className="my-4" />
                     {publicDictionaries.length > 0 ? (
-                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
-                            {publicDictionaries.map((dictionary) => (
+                        <div className="grid grid-cols-2 gap-6 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                            {publicDictionaries.map(dictionary => (
                                 <DictionaryArtwork
                                     key={dictionary.id}
-                                    dictionary={{ ...dictionary, description: dictionary.description ?? undefined }}
+                                    dictionary={{
+                                        ...dictionary,
+                                        description: dictionary.description ?? undefined,
+                                    }}
                                     className="w-full cursor-pointer hover:opacity-80"
                                     aspectRatio="portrait"
                                     width={200}
@@ -319,11 +325,11 @@ export default function DictionariesPage() {
                             ))}
                         </div>
                     ) : (
-                        <div className="text-center py-8">
+                        <div className="py-8 text-center">
                             <div className="space-y-4">
                                 <div className="text-muted-foreground">
-                                    <p className="mb-2">{t("publicEmptyTitle")}</p>
-                                    <p className="text-sm">{t("publicEmptyDesc")}</p>
+                                    <p className="mb-2">{t('publicEmptyTitle')}</p>
+                                    <p className="text-sm">{t('publicEmptyDesc')}</p>
                                 </div>
                                 <AddPublicDictionaryDialog
                                     onDictionaryAdded={handlePublicDictionaryAdded}
@@ -343,9 +349,8 @@ export default function DictionariesPage() {
                         <div className="space-y-1">
                             <p className="text-sm text-muted-foreground">
                                 {session?.user?.id
-                                    ? t("privateDescription")
-                                    : t("privateLoginRequired")
-                                }
+                                    ? t('privateDescription')
+                                    : t('privateLoginRequired')}
                             </p>
                         </div>
                         <div className="ml-auto flex items-center gap-2">
@@ -354,31 +359,38 @@ export default function DictionariesPage() {
                                 dictionaries={undefined}
                                 userId={session?.user?.id}
                                 onImported={() => {
-                                    setReloadToken((t) => t + 1)
-                                    void loadDictionaries()
-                                    toast.success(t("importComplete"), { description: t("projectImported") as string }) 
+                                    setReloadToken(t => t + 1);
+                                    void loadDictionaries();
+                                    toast.success(t('importComplete'), {
+                                        description: t('projectImported') as string,
+                                    });
                                 }}
                             />
                             <CreateDictionaryDialog
-                                onDictionaryCreated={(d) => handleDictionaryCreated(d as unknown as UIDictionary)}
+                                onDictionaryCreated={d =>
+                                    handleDictionaryCreated(d as unknown as UIDictionary)
+                                }
                                 userId={session?.user?.id}
                             />
                         </div>
                     </div>
                     <Separator className="my-4" />
                     {!session?.user?.id ? (
-                        <div className="text-center py-8">
-                            <p className="text-muted-foreground mb-4">{t("loginRequired")}</p>
+                        <div className="py-8 text-center">
+                            <p className="mb-4 text-muted-foreground">{t('loginRequired')}</p>
                             <Button asChild>
-                                <a href="/auth/login">{t("goLogin")}</a>
+                                <a href="/auth/login">{t('goLogin')}</a>
                             </Button>
                         </div>
                     ) : privateDictionaries.length > 0 ? (
-                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
-                            {privateDictionaries.map((dictionary) => (
+                        <div className="grid grid-cols-2 gap-6 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                            {privateDictionaries.map(dictionary => (
                                 <DictionaryArtwork
                                     key={dictionary.id}
-                                    dictionary={{ ...dictionary, description: dictionary.description ?? undefined }}
+                                    dictionary={{
+                                        ...dictionary,
+                                        description: dictionary.description ?? undefined,
+                                    }}
                                     className="w-full cursor-pointer hover:opacity-80"
                                     aspectRatio="portrait"
                                     width={200}
@@ -392,19 +404,21 @@ export default function DictionariesPage() {
                             ))}
                         </div>
                     ) : (
-                        <div className="text-center py-8">
+                        <div className="py-8 text-center">
                             <div className="space-y-4">
                                 <div className="text-muted-foreground">
-                                    <p className="mb-2">{t("privateEmptyTitle")}</p>
-                                    <p className="text-sm">{t("privateEmptyDesc")}</p>
+                                    <p className="mb-2">{t('privateEmptyTitle')}</p>
+                                    <p className="text-sm">{t('privateEmptyDesc')}</p>
                                 </div>
                                 <ImportDictionaryDialog
                                     modeContext="private"
                                     dictionaries={undefined}
                                     userId={session?.user?.id}
                                     onImported={() => {
-                                        void loadDictionaries()
-                                        toast.success(t("importComplete"), { description: t("privateImported") as string }) 
+                                        void loadDictionaries();
+                                        toast.success(t('importComplete'), {
+                                            description: t('privateImported') as string,
+                                        });
                                     }}
                                 />
                             </div>
@@ -413,14 +427,11 @@ export default function DictionariesPage() {
                 </TabsContent>
 
                 {/* 项目词库 */}
-                <TabsContent
-                    value="project"
-                    className="border-none p-0 outline-none"
-                >
+                <TabsContent value="project" className="border-none p-0 outline-none">
                     <div className="flex items-center justify-between">
                         <div className="space-y-1">
                             <p className="text-sm text-muted-foreground">
-                                {t("projectDescription")}
+                                {t('projectDescription')}
                             </p>
                         </div>
                         <div className="ml-auto flex items-center gap-2">
@@ -429,32 +440,41 @@ export default function DictionariesPage() {
                                 dictionaries={undefined}
                                 userId={session?.user?.id}
                                 onImported={() => {
-                                    setReloadToken((t) => t + 1)
-                                    void loadDictionaries()
-                                    toast.success(t("importComplete"), { description: t("projectImported") as string }) 
+                                    setReloadToken(t => t + 1);
+                                    void loadDictionaries();
+                                    toast.success(t('importComplete'), {
+                                        description: t('projectImported') as string,
+                                    });
                                 }}
                             />
 
                             <CreateDictionaryDialog
-                                onDictionaryCreated={(d) => handleDictionaryCreated(d as unknown as UIDictionary)}
+                                onDictionaryCreated={d =>
+                                    handleDictionaryCreated(d as unknown as UIDictionary)
+                                }
                                 userId={session?.user?.id}
                             />
                         </div>
                     </div>
                     <Separator className="my-4" />
                     {!session?.user?.id ? (
-                        <div className="text-center py-8">
-                            <p className="text-muted-foreground mb-4">{t("projectLoginRequired")}</p>
+                        <div className="py-8 text-center">
+                            <p className="mb-4 text-muted-foreground">
+                                {t('projectLoginRequired')}
+                            </p>
                             <Button asChild>
-                                <a href="/auth/login">{t("goLogin")}</a>
+                                <a href="/auth/login">{t('goLogin')}</a>
                             </Button>
                         </div>
                     ) : projectDictionaries.length > 0 ? (
-                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
-                            {projectDictionaries.map((dictionary) => (
+                        <div className="grid grid-cols-2 gap-6 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                            {projectDictionaries.map(dictionary => (
                                 <DictionaryArtwork
                                     key={dictionary.id}
-                                    dictionary={{ ...dictionary, description: dictionary.description ?? undefined }}
+                                    dictionary={{
+                                        ...dictionary,
+                                        description: dictionary.description ?? undefined,
+                                    }}
                                     className="w-full cursor-pointer hover:opacity-80"
                                     aspectRatio="portrait"
                                     width={200}
@@ -468,11 +488,11 @@ export default function DictionariesPage() {
                             ))}
                         </div>
                     ) : (
-                        <div className="text-center py-8">
+                        <div className="py-8 text-center">
                             <div className="space-y-4">
                                 <div className="text-muted-foreground">
-                                    <p className="mb-2">{t("projectEmptyTitle")}</p>
-                                    <p className="text-sm">{t("projectEmptyDesc")}</p>
+                                    <p className="mb-2">{t('projectEmptyTitle')}</p>
+                                    <p className="text-sm">{t('projectEmptyDesc')}</p>
                                 </div>
                                 <div className="flex justify-center gap-2">
                                     <ImportDictionaryDialog
@@ -480,8 +500,10 @@ export default function DictionariesPage() {
                                         dictionaries={undefined}
                                         userId={session?.user?.id}
                                         onImported={() => {
-                                            void loadDictionaries()
-                                            toast.success(t("importComplete"), { description: t("projectImported") as string }) 
+                                            void loadDictionaries();
+                                            toast.success(t('importComplete'), {
+                                                description: t('projectImported') as string,
+                                            });
                                         }}
                                     />
                                 </div>
@@ -491,5 +513,5 @@ export default function DictionariesPage() {
                 </TabsContent>
             </Tabs>
         </div>
-    )
+    );
 }

@@ -6,7 +6,7 @@ import { LogEntry } from '@/types/logEntry';
 
 export const useLogger = () => {
     const dispatch = useAppDispatch();
-    const logs = useAppSelector((state) => (state.log as { logs: LogEntry[] })?.logs ?? []);
+    const logs = useAppSelector(state => (state.log as { logs: LogEntry[] })?.logs ?? []);
 
     const logInfo = (message: string) => {
         dispatch(addLog({ message, type: 'info' }));
@@ -44,7 +44,7 @@ export const useLogger = () => {
     const getLogsForUI = () => {
         return logs.map(log => ({
             ...log,
-            timestamp: new Date(log.timestamp)
+            timestamp: new Date(log.timestamp),
         }));
     };
 
@@ -58,6 +58,6 @@ export const useLogger = () => {
         clearAllLogs,
         getRecentLogs,
         getLogsByType,
-        getLogsForUI
+        getLogsForUI,
     };
-}; 
+};

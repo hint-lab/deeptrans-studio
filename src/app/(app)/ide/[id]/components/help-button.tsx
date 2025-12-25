@@ -1,6 +1,6 @@
-import { Button } from "@/components/ui/button";
-import { HelpCircle } from "lucide-react";
-import { useRightPanel } from "@/hooks/useRightPanel";
+import { Button } from '@/components/ui/button';
+import { HelpCircle } from 'lucide-react';
+import { useRightPanel } from '@/hooks/useRightPanel';
 import { useTranslations } from 'next-intl';
 
 export function HelpButton() {
@@ -20,5 +20,3 @@ export function HelpButton() {
 }
 
 export default HelpButton;
-
-

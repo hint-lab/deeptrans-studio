@@ -1,15 +1,19 @@
-"use client";
+'use client';
 import { useCallback } from 'react';
 import { useState, useEffect } from 'react';
-import { useTheme } from "next-themes";
+import { useTheme } from 'next-themes';
 import { ReactFlowProvider } from '@xyflow/react';
 import { useParams, useRouter } from 'next/navigation';
 import {
-    ReactFlow, addEdge, Background, Controls,
-    Edge, BackgroundVariant,
+    ReactFlow,
+    addEdge,
+    Background,
+    Controls,
+    Edge,
+    BackgroundVariant,
     useNodesState,
     useEdgesState,
-    MarkerType
+    MarkerType,
 } from '@xyflow/react';
 // 导入自定义组件
 import { nodeTypes } from './nodes';
@@ -17,7 +21,6 @@ import { edgeTypes } from './edges';
 import { useWorkflowData, type WorkflowKey } from './data/workflows';
 import { useTranslationState } from '@/hooks/useTranslation';
 import '@xyflow/react/dist/style.css';
-
 
 export interface AgentNodeData {
     label: string;
@@ -38,9 +41,9 @@ export default function WorkflowDiagramPanel() {
     const onConnect = useCallback(
         (connection: any) => {
             const edge = { ...connection, type: 'custom-edge' };
-            setEdges((eds) => addEdge(edge, eds));
+            setEdges(eds => addEdge(edge, eds));
         },
-        [setEdges],
+        [setEdges]
     );
     // if (!mounted) {
     //     return <div className="h-[600px] w-full bg-gradient-to-br from-slate-50 to-gray-100 dark:from-gray-900 dark:to-slate-900 p-4">加载中...</div>;
@@ -78,17 +81,19 @@ export default function WorkflowDiagramPanel() {
 
     // 完全跳过服务器渲染
     if (!mounted) {
-        return <div className="h-72 w-full p-2">
-            <div className="h-full w-full space-y-2">
-                <div className="h-5 w-40 bg-slate-200 dark:bg-slate-800 animate-pulse rounded" />
-                <div className="h-[calc(100%-1.25rem)] w-full bg-slate-200 dark:bg-slate-800 animate-pulse rounded" />
+        return (
+            <div className="h-72 w-full p-2">
+                <div className="h-full w-full space-y-2">
+                    <div className="h-5 w-40 animate-pulse rounded bg-slate-200 dark:bg-slate-800" />
+                    <div className="h-[calc(100%-1.25rem)] w-full animate-pulse rounded bg-slate-200 dark:bg-slate-800" />
+                </div>
             </div>
-        </div>;
+        );
     }
 
     return (
         <ReactFlowProvider>
-            <div className="h-72 w-full overflow-hidden relative">
+            <div className="relative h-72 w-full overflow-hidden">
                 <ReactFlow
                     nodes={nodes}
                     edges={edges}
@@ -104,13 +109,13 @@ export default function WorkflowDiagramPanel() {
                     defaultViewport={{ x: 0, y: 0, zoom: 0.4 }}
                     nodesDraggable={false}
                     nodesConnectable={false}
-                    className="node-sm w-full h-full"
+                    className="node-sm h-full w-full"
                 >
                     <Background
                         color={theme === 'dark' ? '#334155' : '#94a3b8'}
                         gap={12}
                         size={0.8}
-                        variant={"dots" as BackgroundVariant}
+                        variant={'dots' as BackgroundVariant}
                     />
                     {/* <Controls
                         className="shadow-xl bg-white dark:bg-gray-800 dark:text-slate-600 rounded-lg p-1"

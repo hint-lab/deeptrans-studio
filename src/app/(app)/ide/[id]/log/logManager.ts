@@ -43,7 +43,7 @@ class LogManager {
         const logEntry: LogEntry = {
             timestamp: new Date().toISOString(),
             content,
-            type
+            type,
         };
         this.logs.push(logEntry);
         this.saveLogs();

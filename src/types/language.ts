@@ -3,4 +3,4 @@ export interface Language {
     key: string;
     label: string;
     // 其他必要属性
-} 
+}

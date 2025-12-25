@@ -1,9 +1,9 @@
-"use client"
+'use client';
 
-import Image from "next/image"
-import { PlusIcon, Trash2, Edit3 } from "lucide-react"
-import { useState } from "react"
-import { Button } from "src/components/ui/button"
+import { Edit3, PlusIcon, Trash2 } from 'lucide-react';
+import Image from 'next/image';
+import { useState } from 'react';
+import { Button } from 'src/components/ui/button';
 import {
     Dialog,
     DialogContent,
@@ -11,19 +11,19 @@ import {
     DialogFooter,
     DialogHeader,
     DialogTitle,
-} from "src/components/ui/dialog"
-import { Input } from "src/components/ui/input"
-import { Label } from "src/components/ui/label"
-import { Textarea } from "src/components/ui/textarea"
+} from 'src/components/ui/dialog';
+import { Input } from 'src/components/ui/input';
+import { Label } from 'src/components/ui/label';
 import {
     Select,
     SelectContent,
     SelectItem,
     SelectTrigger,
     SelectValue,
-} from "src/components/ui/select"
+} from 'src/components/ui/select';
+import { Textarea } from 'src/components/ui/textarea';
 
-import { cn } from "src/lib/utils"
+import { deleteDictionaryAction, updateDictionaryAction } from '@/actions/dictionary';
 import {
     ContextMenu,
     ContextMenuContent,
@@ -33,9 +33,10 @@ import {
     ContextMenuSubContent,
     ContextMenuSubTrigger,
     ContextMenuTrigger,
-} from "@/components/ui/context-menu"
-import { updateDictionaryAction, deleteDictionaryAction} from "@/actions/dictionary"
-import { toast } from "sonner"
+} from '@/components/ui/context-menu';
+import { createLogger } from '@/lib/logger';
+import { toast } from 'sonner';
+import { cn } from 'src/lib/utils';
 
 // 定义Dictionary接口
 interface Dictionary {
@@ -49,25 +50,32 @@ interface Dictionary {
     entryCount?: number;
     // 其他可选属性
 }
-
+const logger = createLogger({
+    type: 'dictionary:dictionary-artwork',
+}, {
+    json: false,// 开启json格式输出
+    pretty: false, // 关闭开发环境美化输出
+    colors: true, // 仅当json：false时启用颜色输出可用
+    includeCaller: false, // 日志不包含调用者
+});
 // 导出Dictionary类型供其他文件使用
-export type { Dictionary }
+export type { Dictionary };
 
 interface DictionaryArtworkProps extends React.HTMLAttributes<HTMLDivElement> {
-    dictionary: Dictionary
-    aspectRatio?: "portrait" | "square"
-    width?: number
-    height?: number
-    onClick?: () => void
-    onDelete?: (dictionaryId: string) => void
-    onEdit?: (dictionaryId: string, updatedData: Partial<Dictionary>) => void
-    showDeleteButton?: boolean
-    showEditButton?: boolean
+    dictionary: Dictionary;
+    aspectRatio?: 'portrait' | 'square';
+    width?: number;
+    height?: number;
+    onClick?: () => void;
+    onDelete?: (dictionaryId: string) => void;
+    onEdit?: (dictionaryId: string, updatedData: Partial<Dictionary>) => void;
+    showDeleteButton?: boolean;
+    showEditButton?: boolean;
 }
 
 export function DictionaryArtwork({
     dictionary,
-    aspectRatio = "portrait",
+    aspectRatio = 'portrait',
     width,
     height,
     className,
@@ -78,112 +86,117 @@ export function DictionaryArtwork({
     showEditButton = false,
     ...props
 }: DictionaryArtworkProps) {
-    const [showDeleteDialog, setShowDeleteDialog] = useState(false)
-    const [showEditDialog, setShowEditDialog] = useState(false)
+    const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+    const [showEditDialog, setShowEditDialog] = useState(false);
     const [editForm, setEditForm] = useState({
         name: dictionary.name,
-        description: dictionary.description ?? "",
-        domain: dictionary.domain
-    })
-    const [loading, setLoading] = useState(false) 
+        description: dictionary.description ?? '',
+        domain: dictionary.domain,
+    });
+    const [loading, setLoading] = useState(false);
 
     const handleDelete = () => {
-        setShowDeleteDialog(true)
-    }
+        setShowDeleteDialog(true);
+    };
 
     const handleEdit = () => {
         setEditForm({
             name: dictionary.name,
-            description: dictionary.description ?? "",
-            domain: dictionary.domain
-        })
-        setShowEditDialog(true)
-    }
+            description: dictionary.description ?? '',
+            domain: dictionary.domain,
+        });
+        setShowEditDialog(true);
+    };
 
     const confirmDelete = async () => {
-        setLoading(true)
+        setLoading(true);
         try {
             // 先调用API删除词典
-            const result = await deleteDictionaryAction(dictionary.id)
-            
+            const result = await deleteDictionaryAction(dictionary.id);
+
             if (result.success) {
                 // 删除成功后，调用父组件的回调函数更新UI状态
                 if (onDelete) {
-                    onDelete(dictionary.id)
+                    onDelete(dictionary.id);
                 }
-                
-                toast.success("词典删除成功！")
+                logger.info('词典删除成功！')
+                toast.success('词典删除成功！');
             } else {
-                toast.error(result.error ?? "删除词典失败")
+                toast.error(result.error ?? '删除词典失败');
             }
         } catch (error) {
-            console.error("删除词典失败:", error)
-            toast.error("删除词典时发生错误")
+            logger.error('删除词典失败:', error);
+            toast.error('删除词典时发生错误');
         } finally {
-            setLoading(false)
-            setShowDeleteDialog(false)
+            setLoading(false);
+            setShowDeleteDialog(false);
         }
-    }
+    };
 
     const confirmEdit = async () => {
         if (!editForm.name.trim()) {
-            toast.error("词库名称不能为空")
-            return
+            logger.warn('词典删除成功！')
+            toast.error('词库名称不能为空');
+            return;
         }
 
-        setLoading(true)
+        setLoading(true);
         try {
             const result = await updateDictionaryAction(dictionary.id, {
                 name: editForm.name.trim(),
                 description: editForm.description.trim() || undefined,
-                domain: editForm.domain
-            })
+                domain: editForm.domain,
+            });
 
             if (result.success && result.data) {
-                toast.success("词典信息更新成功！")
-                
+                logger.info('词典信息更新成功！')
+                toast.success('词典信息更新成功！');
+
                 // 调用父组件的回调函数
                 if (onEdit) {
                     onEdit(dictionary.id, {
                         name: editForm.name.trim(),
                         description: editForm.description.trim() || undefined,
-                        domain: editForm.domain
-                    })
+                        domain: editForm.domain,
+                    });
                 }
-                
-                setShowEditDialog(false)
+
+                setShowEditDialog(false);
             } else {
-                toast.error(result.error ?? "更新词典失败")
+                logger.error('更新词典失败:', result.error);
+                toast.error(result.error ?? '更新词典失败');
             }
         } catch (error) {
-            console.error("更新词典失败:", error)
-            toast.error("更新词典时发生错误")
+            logger.error('更新词典失败:', error);
+            toast.error('更新词典时发生错误');
         } finally {
-            setLoading(false)
+            setLoading(false);
         }
-    }
+    };
 
     const handleInputChange = (field: string, value: string) => {
         setEditForm(prev => ({
             ...prev,
-            [field]: value
-        }))
-    }
+            [field]: value,
+        }));
+    };
 
     return (
         <>
-            <div className={cn("space-y-3", className)} {...props}>
+            <div className={cn('space-y-3', className)} {...props}>
                 <ContextMenu>
                     <ContextMenuTrigger>
-                        <div className="relative group">
-                            <div 
-                                className="overflow-hidden rounded-lg cursor-pointer transition-all duration-200 hover:scale-105 hover:shadow-lg"
+                        <div className="group relative">
+                            <div
+                                className="cursor-pointer overflow-hidden rounded-lg transition-all duration-200 hover:scale-105 hover:shadow-lg"
                                 onClick={onClick}
                             >
                                 <div
                                     className={cn(
-                                        "bg-gradient-to-br from-slate-50 to-slate-100 border border-slate-200 flex items-center justify-center relative",
-                                        aspectRatio === "portrait" ? "aspect-[3/4]" : "aspect-square"
+                                        'relative flex items-center justify-center border border-slate-200 bg-gradient-to-br from-slate-50 to-slate-100',
+                                        aspectRatio === 'portrait'
+                                            ? 'aspect-[3/4]'
+                                            : 'aspect-square'
                                     )}
                                 >
                                     {dictionary.cover ? (
@@ -195,55 +208,59 @@ export function DictionaryArtwork({
                                             sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw, (max-width: 1280px) 25vw, 20vw"
                                         />
                                     ) : (
-                                        <div className="text-center p-4">
-                                            <div className="w-16 h-16 mx-auto mb-3 bg-slate-200 rounded-full flex items-center justify-center">
+                                        <div className="p-4 text-center">
+                                            <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-slate-200">
                                                 <span className="text-2xl text-slate-500">📚</span>
                                             </div>
-                                            <h4 className="font-semibold text-slate-700 text-sm mb-1 line-clamp-2">{dictionary.name}</h4>
-                                            <p className="text-slate-500 text-xs">{dictionary.domain}</p>
+                                            <h4 className="mb-1 line-clamp-2 text-sm font-semibold text-slate-700">
+                                                {dictionary.name}
+                                            </h4>
+                                            <p className="text-xs text-slate-500">
+                                                {dictionary.domain}
+                                            </p>
                                         </div>
                                     )}
-                                    
+
                                     {/* 条目数量徽章 */}
                                     {dictionary.entryCount !== undefined && (
-                                        <div className="absolute top-2 left-2 bg-blue-500 text-white text-xs px-2 py-1 rounded-full font-medium">
+                                        <div className="absolute left-2 top-2 rounded-full bg-blue-500 px-2 py-1 text-xs font-medium text-white">
                                             {dictionary.entryCount}
                                         </div>
                                     )}
-                                    
+
                                     {/* 领域标签 */}
-                                    <div className="absolute bottom-2 left-2 bg-white/90 backdrop-blur-sm text-slate-700 text-xs px-2 py-1 rounded-md font-medium">
+                                    <div className="absolute bottom-2 left-2 rounded-md bg-white/90 px-2 py-1 text-xs font-medium text-slate-700 backdrop-blur-sm">
                                         {dictionary.domain}
                                     </div>
                                 </div>
                             </div>
-                            
+
                             {/* 操作按钮组 */}
-                            <div className="absolute top-2 right-2 flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                            <div className="absolute right-2 top-2 flex space-x-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
                                 {/* 编辑按钮 */}
                                 {showEditButton && onEdit && (
                                     <Button
                                         variant="secondary"
                                         size="sm"
-                                        className="h-7 w-7 p-0 rounded-full shadow-lg hover:bg-slate-200"
-                                        onClick={(e) => {
-                                            e.stopPropagation()
-                                            handleEdit()
+                                        className="h-7 w-7 rounded-full p-0 shadow-lg hover:bg-slate-200"
+                                        onClick={e => {
+                                            e.stopPropagation();
+                                            handleEdit();
                                         }}
                                     >
                                         <Edit3 className="h-3 w-3" />
                                     </Button>
                                 )}
-                                
+
                                 {/* 删除按钮 */}
                                 {showDeleteButton && onDelete && (
                                     <Button
                                         variant="destructive"
                                         size="sm"
-                                        className="h-7 w-7 p-0 rounded-full shadow-lg hover:bg-red-700"
-                                        onClick={(e) => {
-                                            e.stopPropagation()
-                                            handleDelete()
+                                        className="h-7 w-7 rounded-full p-0 shadow-lg hover:bg-red-700"
+                                        onClick={e => {
+                                            e.stopPropagation();
+                                            handleDelete();
                                         }}
                                     >
                                         <Trash2 className="h-3 w-3" />
@@ -283,7 +300,7 @@ export function DictionaryArtwork({
                         {showDeleteButton && onDelete && (
                             <>
                                 <ContextMenuSeparator />
-                                <ContextMenuItem 
+                                <ContextMenuItem
                                     onClick={handleDelete}
                                     className="text-red-600 focus:text-red-600"
                                 >
@@ -295,8 +312,10 @@ export function DictionaryArtwork({
                     </ContextMenuContent>
                 </ContextMenu>
                 <div className="space-y-1 text-sm">
-                    <h3 className="font-medium leading-none line-clamp-2">{dictionary.name}</h3>
-                    <p className="text-xs text-muted-foreground line-clamp-1">{dictionary.description ?? dictionary.domain}</p>
+                    <h3 className="line-clamp-2 font-medium leading-none">{dictionary.name}</h3>
+                    <p className="line-clamp-1 text-xs text-muted-foreground">
+                        {dictionary.description ?? dictionary.domain}
+                    </p>
                 </div>
             </div>
 
@@ -306,15 +325,20 @@ export function DictionaryArtwork({
                     <DialogHeader>
                         <DialogTitle>确认删除</DialogTitle>
                         <DialogDescription>
-                            您确定要删除词库 &ldquo;{dictionary.name}&rdquo; 吗？此操作将同时删除该词库中的所有词条，且无法撤销。
+                            您确定要删除词库 &ldquo;{dictionary.name}&rdquo;
+                            吗？此操作将同时删除该词库中的所有词条，且无法撤销。
                         </DialogDescription>
                     </DialogHeader>
                     <DialogFooter>
-                        <Button variant="outline" onClick={() => setShowDeleteDialog(false)} disabled={loading}>
+                        <Button
+                            variant="outline"
+                            onClick={() => setShowDeleteDialog(false)}
+                            disabled={loading}
+                        >
                             取消
                         </Button>
                         <Button variant="destructive" onClick={confirmDelete} disabled={loading}>
-                            {loading ? "删除中..." : "删除"}
+                            {loading ? '删除中...' : '删除'}
                         </Button>
                     </DialogFooter>
                 </DialogContent>
@@ -337,7 +361,7 @@ export function DictionaryArtwork({
                             <Input
                                 id="name"
                                 value={editForm.name}
-                                onChange={(e) => handleInputChange("name", e.target.value)}
+                                onChange={e => handleInputChange('name', e.target.value)}
                                 className="col-span-3"
                                 placeholder="输入词库名称"
                             />
@@ -349,7 +373,7 @@ export function DictionaryArtwork({
                             <Textarea
                                 id="description"
                                 value={editForm.description}
-                                onChange={(e) => handleInputChange("description", e.target.value)}
+                                onChange={e => handleInputChange('description', e.target.value)}
                                 className="col-span-3"
                                 placeholder="输入词库介绍"
                                 rows={3}
@@ -359,7 +383,10 @@ export function DictionaryArtwork({
                             <Label htmlFor="domain" className="text-right">
                                 领域
                             </Label>
-                            <Select value={editForm.domain} onValueChange={(value) => handleInputChange("domain", value)}>
+                            <Select
+                                value={editForm.domain}
+                                onValueChange={value => handleInputChange('domain', value)}
+                            >
                                 <SelectTrigger className="col-span-3">
                                     <SelectValue placeholder="选择领域" />
                                 </SelectTrigger>
@@ -369,7 +396,9 @@ export function DictionaryArtwork({
                                     <SelectItem value="legal">法律</SelectItem>
                                     <SelectItem value="medical">医疗</SelectItem>
                                     <SelectItem value="finance">金融</SelectItem>
-                                    <SelectItem value="artificial-intelligence">人工智能</SelectItem>
+                                    <SelectItem value="artificial-intelligence">
+                                        人工智能
+                                    </SelectItem>
                                     <SelectItem value="marketing">营销</SelectItem>
                                     <SelectItem value="engineering">工程</SelectItem>
                                     <SelectItem value="education">教育</SelectItem>
@@ -383,11 +412,11 @@ export function DictionaryArtwork({
                             取消
                         </Button>
                         <Button onClick={confirmEdit} disabled={loading || !editForm.name.trim()}>
-                            {loading ? "保存中..." : "保存"}
+                            {loading ? '保存中...' : '保存'}
                         </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
         </>
-    )
-} 
+    );
+}

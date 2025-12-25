@@ -10,7 +10,7 @@ import {
     setSourceContent,
     setTargetContent,
     selectEditorOpen,
-    setEditorOpen as setEditorOpenAction
+    setEditorOpen as setEditorOpenAction,
 } from '@/store/features/editorSlice';
 import { Editor } from '@tiptap/react';
 
@@ -56,16 +56,10 @@ export const getTargetEditorInstance = () => targetEditorInstance;
 
 export const useEditorContent = (type: 'source' | 'target') => {
     const dispatch = useAppDispatch();
-    const content = useAppSelector(
-        type === 'source' ? selectSourceContent : selectTargetContent
-    );
+    const content = useAppSelector(type === 'source' ? selectSourceContent : selectTargetContent);
 
     const setContent = (newContent: string) => {
-        dispatch(
-            type === 'source'
-                ? setSourceContent(newContent)
-                : setTargetContent(newContent)
-        );
+        dispatch(type === 'source' ? setSourceContent(newContent) : setTargetContent(newContent));
     };
 
     return { content, setContent };

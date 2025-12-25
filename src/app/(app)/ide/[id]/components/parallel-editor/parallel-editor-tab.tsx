@@ -1,5 +1,4 @@
-
-import Image from "next/image"
+import Image from 'next/image';
 
 interface ParallelEditorTabProps {
     icon: string;
@@ -7,16 +6,15 @@ interface ParallelEditorTabProps {
     onClick?: () => void;
 }
 
-export const ParallelEditorTab: React.FC<ParallelEditorTabProps> = ({ icon, filename, onClick }) => {
+export const ParallelEditorTab: React.FC<ParallelEditorTabProps> = ({
+    icon,
+    filename,
+    onClick,
+}) => {
     return (
-        <div
-            className="px-1 flex items-center text-sm cursor-pointer"
-            onClick={onClick}
-        >
+        <div className="flex cursor-pointer items-center px-1 text-sm" onClick={onClick}>
             <Image src={icon} alt={filename} height={18} width={18} />
-            <p className="text-foreground dark:text-foreground-dark">{filename}</p>
-
+            <p className="dark:text-foreground-dark text-foreground">{filename}</p>
         </div>
-
     );
-}
+};

@@ -1,7 +1,10 @@
 import { ExperimentConfig, ExperimentResult } from '@/server/experiments/types';
 import { updateExperimentStatus, setExperimentResult } from './orchestrator';
 
-export async function runExperimentPipeline(jobId: string, config: ExperimentConfig): Promise<void> {
+export async function runExperimentPipeline(
+    jobId: string,
+    config: ExperimentConfig
+): Promise<void> {
     const startTime = Date.now();
 
     try {
@@ -10,7 +13,7 @@ export async function runExperimentPipeline(jobId: string, config: ExperimentCon
             status: 'running',
             progress: 10,
             currentStage: 'initializing',
-            message: 'Initializing experiment pipeline'
+            message: 'Initializing experiment pipeline',
         });
 
         const result: ExperimentResult = {
@@ -18,7 +21,7 @@ export async function runExperimentPipeline(jobId: string, config: ExperimentCon
             success: false,
             trace: {},
             final: '',
-            duration: 0
+            duration: 0,
         };
 
         // Round 1: Terminology Accuracy Control
@@ -26,7 +29,7 @@ export async function runExperimentPipeline(jobId: string, config: ExperimentCon
             updateExperimentStatus(jobId, {
                 progress: 30,
                 currentStage: 'round1_terminology',
-                message: 'Running Round 1: Terminology extraction and validation'
+                message: 'Running Round 1: Terminology extraction and validation',
             });
 
             const r1Result = await runTerminologyWorkflow(config);
@@ -38,10 +41,13 @@ export async function runExperimentPipeline(jobId: string, config: ExperimentCon
             updateExperimentStatus(jobId, {
                 progress: 60,
                 currentStage: 'round2_syntax',
-                message: 'Running Round 2: Syntactic pattern analysis and correction'
+                message: 'Running Round 2: Syntactic pattern analysis and correction',
             });
 
-            const r2Result = await runSyntacticWorkflow(config, result.trace.r1?.output || config.source);
+            const r2Result = await runSyntacticWorkflow(
+                config,
+                result.trace.r1?.output || config.source
+            );
             result.trace.r2 = r2Result;
         }
 
@@ -50,15 +56,22 @@ export async function runExperimentPipeline(jobId: string, config: ExperimentCon
             updateExperimentStatus(jobId, {
                 progress: 80,
                 currentStage: 'round3_discourse',
-                message: 'Running Round 3: Discourse-level refinement'
+                message: 'Running Round 3: Discourse-level refinement',
             });
 
-            const r3Result = await runDiscourseWorkflow(config, result.trace.r2?.output || result.trace.r1?.output || config.source);
+            const r3Result = await runDiscourseWorkflow(
+                config,
+                result.trace.r2?.output || result.trace.r1?.output || config.source
+            );
             result.trace.r3 = r3Result;
         }
 
         // 确定最终输出
-        result.final = result.trace.r3?.output || result.trace.r2?.output || result.trace.r1?.output || config.source;
+        result.final =
+            result.trace.r3?.output ||
+            result.trace.r2?.output ||
+            result.trace.r1?.output ||
+            config.source;
         result.success = true;
 
         // 完成翻译工作流
@@ -66,12 +79,11 @@ export async function runExperimentPipeline(jobId: string, config: ExperimentCon
 
         // 完成实验
         setExperimentResult(jobId, result);
-
     } catch (error) {
         console.error(`Experiment ${jobId} failed:`, error);
         updateExperimentStatus(jobId, {
             status: 'failed',
-            message: error instanceof Error ? error.message : 'Unknown error'
+            message: error instanceof Error ? error.message : 'Unknown error',
         });
     }
 }
@@ -86,9 +98,9 @@ async function runTerminologyWorkflow(config: ExperimentConfig) {
     return {
         termTable: [
             { source: '合同', target: 'contract', confidence: 0.95 },
-            { source: '违约', target: 'breach', confidence: 0.92 }
+            { source: '违约', target: 'breach', confidence: 0.92 },
         ],
-        output: config.source // 临时返回原文
+        output: config.source, // 临时返回原文
     };
 }
 
@@ -101,11 +113,11 @@ async function runSyntacticWorkflow(config: ExperimentConfig, input: string) {
 
     return {
         syntaxMap: {
-            'shall': '必须',
-            'may': '可以',
-            'shall not': '不得'
+            shall: '必须',
+            may: '可以',
+            'shall not': '不得',
         },
-        output: input // 临时返回输入
+        output: input, // 临时返回输入
     };
 }
 
@@ -117,9 +129,7 @@ async function runDiscourseWorkflow(config: ExperimentConfig, input: string) {
     // 4. 生成最终输出
 
     return {
-        tmRefs: [
-            { source: '相关条款', target: 'relevant provisions', similarity: 0.88 }
-        ],
-        output: input // 临时返回输入
+        tmRefs: [{ source: '相关条款', target: 'relevant provisions', similarity: 0.88 }],
+        output: input, // 临时返回输入
     };
 }

@@ -1,23 +1,27 @@
-"use client";
+'use client';
 
-import { useEditor, EditorContent } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
-import EditorToolbar from "./toolbar/editor-toolbar";
-import { useEffect, useState } from "react";
-import LineNumber from "./extensions/line-number";  // 需要创建此扩展
-import { useSourceEditor, useTargetEditor, useEditorContent } from "@/hooks/useEditor";
-import { useTranslationContent } from "@/hooks/useTranslation";
-import { updateTranslationAction, getContentByIdAction, updateOriginalTextAction } from "@/actions/document-item";
-import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import { Pencil } from "lucide-react";
-import { useTranslations } from "next-intl";
+import { useEditor, EditorContent } from '@tiptap/react';
+import StarterKit from '@tiptap/starter-kit';
+import EditorToolbar from './toolbar/editor-toolbar';
+import { useEffect, useState } from 'react';
+import LineNumber from './extensions/line-number'; // 需要创建此扩展
+import { useSourceEditor, useTargetEditor, useEditorContent } from '@/hooks/useEditor';
+import { useTranslationContent } from '@/hooks/useTranslation';
+import {
+    updateTranslationAction,
+    getContentByIdAction,
+    updateOriginalTextAction,
+} from '@/actions/document-item';
+import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
+import { Pencil } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 // 修改编辑器组件接口
 interface EditorProps {
     editorId: string;
     initialContent: string;
     placeholder?: string;
-    job: "rawtext" | "translation";
+    job: 'rawtext' | 'translation';
     readOnly?: boolean;
     onUpdate?: (editor: any) => void;
 }
@@ -46,7 +50,7 @@ const RichTextEditor = ({
         ],
         editorProps: {
             attributes: {
-                class: "prose prose-sm sm:prose lg:prose-lg xl:prose-2xl mx-auto focus:outline-none line-numbers overflow-auto size-full",
+                class: 'prose prose-sm sm:prose lg:prose-lg xl:prose-2xl mx-auto focus:outline-none line-numbers overflow-auto size-full',
             },
         },
         content: initialContent || content || '',
@@ -55,7 +59,7 @@ const RichTextEditor = ({
             const newContent = editor.getHTML();
             setContent(newContent);
         },
-        immediatelyRender: false
+        immediatelyRender: false,
     });
 
     // 切换编辑模式时同步 TipTap 的 editable 状态
@@ -63,7 +67,9 @@ const RichTextEditor = ({
         if (editor) {
             editor.setEditable(effectiveEditable);
             if (effectiveEditable) {
-                try { editor.chain().focus().run(); } catch { }
+                try {
+                    editor.chain().focus().run();
+                } catch {}
             }
         }
     }, [editor, effectiveEditable]);
@@ -79,16 +85,16 @@ const RichTextEditor = ({
     // 设置编辑器实例
     useEffect(() => {
         if (editor) {
-            if (job === "rawtext") {
+            if (job === 'rawtext') {
                 setSourceEditor(editor);
-            } else if (job === "translation") {
+            } else if (job === 'translation') {
                 setTargetEditor(editor);
             }
         }
         return () => {
-            if (job === "rawtext") {
+            if (job === 'rawtext') {
                 setSourceEditor(null);
-            } else if (job === "translation") {
+            } else if (job === 'translation') {
                 setTargetEditor(null);
             }
         };
@@ -103,10 +109,14 @@ const RichTextEditor = ({
                     const fresh = await getContentByIdAction(editorId);
                     const next = fresh?.sourceText ?? content;
                     setSourceTranslationText(next);
-                    try { editor?.commands.setContent(next); } catch { }
+                    try {
+                        editor?.commands.setContent(next);
+                    } catch {}
                 } catch {
                     // 回退到本地内容
-                    try { setSourceTranslationText(content); } catch { }
+                    try {
+                        setSourceTranslationText(content);
+                    } catch {}
                 }
             } else if (job === 'translation') {
                 await updateTranslationAction(editorId, content);
@@ -115,10 +125,14 @@ const RichTextEditor = ({
                     const fresh = await getContentByIdAction(editorId);
                     const next = fresh?.targetText ?? content;
                     setTargetTranslationText(next);
-                    try { editor?.commands.setContent(next); } catch { }
+                    try {
+                        editor?.commands.setContent(next);
+                    } catch {}
                 } catch {
                     // 回退到本地内容
-                    try { setTargetTranslationText(content); } catch { }
+                    try {
+                        setTargetTranslationText(content);
+                    } catch {}
                 }
             }
             setIsEditMode(false);
@@ -130,21 +144,21 @@ const RichTextEditor = ({
     if (!editor) return null;
 
     return (
-        <div className="size-full rounded-b-md relative">
+        <div className="relative size-full rounded-b-md">
             {isEditMode && <EditorToolbar editor={editor} onSave={handleSave} />}
             {!isEditMode && !readOnly && (
-                <div className="absolute top-1 right-1 z-20">
+                <div className="absolute right-1 top-1 z-20">
                     <Button
                         variant="secondary"
                         size="sm"
-                        className="h-7 px-2 text-foreground bg-background/80 backdrop-blur-sm border border-border/60 shadow-sm"
+                        className="h-7 border border-border/60 bg-background/80 px-2 text-foreground shadow-sm backdrop-blur-sm"
                         onClick={() => setIsEditMode(true)}
                     >
-                        <Pencil className="h-4 w-4 mr-1" /> {t('edit')}
+                        <Pencil className="mr-1 h-4 w-4" /> {t('edit')}
                     </Button>
                 </div>
             )}
-            <div className="relative h-full editor-container p-2">
+            <div className="editor-container relative h-full p-2">
                 <EditorContent className="prose overflow-auto bg-card" editor={editor} />
             </div>
         </div>

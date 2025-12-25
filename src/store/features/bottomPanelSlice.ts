@@ -12,7 +12,7 @@ export const bottomPanelSlice = createSlice({
     name: 'bottomPanel',
     initialState,
     reducers: {
-        toggle: (state) => {
+        toggle: state => {
             state.isOpen = !state.isOpen;
         },
     },
