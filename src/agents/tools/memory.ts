@@ -1,6 +1,14 @@
 // Memory Tool - 记忆库查询工具
+import { createLogger } from '@/lib/logger';
 import { type HybridSearchConfig } from '@/types/hybrid-search';
-
+const logger = createLogger({
+    type: 'agents:memory',
+}, {
+    json: false,// 开启json格式输出
+    pretty: false, // 关闭开发环境美化输出
+    colors: true, // 仅当json：false时启用颜色输出可用
+    includeCaller: false, // 日志不包含调用者
+});
 export interface MemoryHit {
     id: string;
     source: string;
@@ -61,7 +69,7 @@ export class MemoryTool {
             });
 
             if (!response.ok) {
-                console.warn('Memory hybrid search failed:', response.statusText);
+                logger.warn('Memory hybrid search failed:', response.statusText);
                 return [];
             }
 
@@ -78,7 +86,7 @@ export class MemoryTool {
                 searchMode: item.searchMode,
             }));
         } catch (error) {
-            console.warn('Memory search failed:', error);
+            logger.error('Memory search failed:', error);
             return [];
         }
     }

@@ -1,32 +1,38 @@
 'use server';
-
-import { revalidatePath } from 'next/cache';
-import * as XLSX from 'xlsx';
-import { XMLParser } from 'fast-xml-parser';
 import {
     createDictionaryDB,
-    findDictionaryByIdDB,
+    deleteDictionaryByIdDB,
     findAllDictionariesDB,
     findAllDictionariesWithEntriesDB,
-    updateDictionaryByIdDB,
-    deleteDictionaryByIdDB,
-    findOrCreateDictionaryDB,
     findDictionariesGivenVisibilityDB,
+    findDictionaryByIdDB,
     findDictionaryByProjectIdDB,
+    findOrCreateDictionaryDB,
+    updateDictionaryByIdDB,
 } from '@/db/dictionary';
 import {
-    createDictionaryEntryDB,
-    updateDictionaryEntryByIdDB,
-    deleteDictionaryEntryByIdDB,
-    findDictionaryEntriesDB,
     countDictionaryEntriesDB,
     createDictionaryEntriesBulkDB,
+    createDictionaryEntryDB,
     deleteDictionaryEntriesByDictionaryIdDB,
-    findExistingDictionaryEntriesMapDB,
+    deleteDictionaryEntryByIdDB,
     findCandidateTranslationsForSourcesDB,
-    findBlankDictionaryEntriesBySourcesDB,
+    findDictionaryEntriesDB,
+    findExistingDictionaryEntriesMapDB,
+    updateDictionaryEntryByIdDB
 } from '@/db/dictionaryEntry';
-
+import { createLogger } from '@/lib/logger';
+import { XMLParser } from 'fast-xml-parser';
+import { revalidatePath } from 'next/cache';
+import * as XLSX from 'xlsx';
+const logger = createLogger({
+    type: 'actions:dictionary',
+}, {
+    json: false,// 开启json格式输出
+    pretty: false, // 关闭开发环境美化输出
+    colors: true, // 仅当json：false时启用颜色输出可用
+    includeCaller: false, // 日志不包含调用者
+});
 // 创建词典
 export async function createDictionaryAction(data: {
     name: string;
@@ -49,7 +55,7 @@ export async function createDictionaryAction(data: {
         revalidatePath('/dashboard/dictionaries');
         return { success: true, data: dictionary };
     } catch (error) {
-        console.error('创建词典失败:', error);
+        logger.error('创建词典失败:', error);
         return { success: false, error: '创建词典失败' };
     }
 }
@@ -60,7 +66,7 @@ export async function getAllDictionariesAction() {
         const dictionaries = await findAllDictionariesDB();
         return { success: true, data: dictionaries };
     } catch (error) {
-        console.error('获取词典失败:', error);
+        logger.error('获取词典失败:', error);
         return { success: false, error: '获取词典失败' };
     }
 }
@@ -71,7 +77,7 @@ export async function getAllDictionariesLiteAction() {
         const dictionaries = await findAllDictionariesWithEntriesDB();
         return { success: true, data: dictionaries };
     } catch (error) {
-        console.error('获取词典列表失败:', error);
+        logger.error('获取词典列表失败:', error);
         return { success: false, error: '获取词典列表失败' };
     }
 }
@@ -90,10 +96,10 @@ export async function fetchDictionariesAction(
         } else {
             dictionaries = await findDictionariesGivenVisibilityDB('PUBLIC');
         }
-        console.log('获取词典列表:', dictionaries);
+        logger.debug('获取词典列表:', dictionaries);
         return { success: true, data: dictionaries };
     } catch (error) {
-        console.error('获取公共词典失败:', error);
+        logger.error('获取公共词典失败:', error);
         return { success: false, error: '获取公共词典失败' };
     }
 }
@@ -105,7 +111,7 @@ export async function fetchDictionaryByIdAction(id: string) {
 
         return { success: true, data: dictionary };
     } catch (error) {
-        console.error('获取词典详情失败:', error);
+        logger.error('获取词典详情失败:', error);
         return { success: false, error: '获取词典详情失败' };
     }
 }
@@ -116,7 +122,7 @@ export async function fetchDictionaryMetaByIdAction(dictionaryId: string) {
         const dictionary = await findDictionaryByIdDB(dictionaryId);
         return { success: true, data: dictionary };
     } catch (error) {
-        console.error('获取词典元信息失败:', error);
+        logger.error('获取词典元信息失败:', error);
         return { success: false, error: '获取词典元信息失败' };
     }
 }
@@ -126,7 +132,7 @@ export async function fetchDictionaryMetaByProjectIdAction(projectId: string) {
         const dictionary = await findDictionaryByProjectIdDB(projectId);
         return { success: true, data: dictionary };
     } catch (error) {
-        console.error('获取词典元信息失败:', error);
+        logger.error('获取词典元信息失败:', error);
         return { success: false, error: '获取词典元信息失败' };
     }
 }
@@ -146,7 +152,7 @@ export async function updateDictionaryAction(
         revalidatePath('/dashboard/dictionaries');
         return { success: true, data: dictionary };
     } catch (error) {
-        console.error('更新词典失败:', error);
+        logger.error('更新词典失败:', error);
         return { success: false, error: '更新词典失败' };
     }
 }
@@ -158,7 +164,7 @@ export async function deleteDictionaryAction(id: string) {
         revalidatePath('/dashboard/dictionaries');
         return { success: true };
     } catch (error) {
-        console.error('删除词典失败:', error);
+        logger.error('删除词典失败:', error);
         return { success: false, error: '删除词典失败' };
     }
 }
@@ -186,7 +192,7 @@ export async function createDictionaryEntryAction(data: {
         revalidatePath('/dashboard/dictionaries');
         return { success: true, data: entry };
     } catch (error) {
-        console.error('创建词典条目失败:', error);
+        logger.error('创建词典条目失败:', error);
         return { success: false, error: '创建词典条目失败' };
     }
 }
@@ -214,7 +220,7 @@ export async function updateDictionaryEntryAction(
         revalidatePath('/dashboard/dictionaries');
         return { success: true, data: entry };
     } catch (error) {
-        console.error('更新词典条目失败:', error);
+        logger.error('更新词典条目失败:', error);
         return { success: false, error: '更新词典条目失败' };
     }
 }
@@ -227,7 +233,7 @@ export async function deleteDictionaryEntryAction(id: string) {
         revalidatePath('/dashboard/dictionaries');
         return { success: true };
     } catch (error) {
-        console.error('删除词典条目失败:', error);
+        logger.error('删除词典条目失败:', error);
         return { success: false, error: '删除词典条目失败' };
     }
 }
@@ -239,7 +245,7 @@ export async function fetchDictionaryEntriesAction(dictionaryId: string, limit: 
 
         return { success: true, data: entries };
     } catch (error) {
-        console.error('获取词典条目失败:', error);
+        logger.error('获取词典条目失败:', error);
         return { success: false, error: '获取词典条目失败' };
     }
 }
@@ -275,7 +281,7 @@ export async function fetchDictionaryEntriesPagedAction(
 
         return { success: true, data: entries, total, page, pageSize };
     } catch (error) {
-        console.error('分页获取词典条目失败:', error);
+        logger.error('分页获取词典条目失败:', error);
         return { success: false, error: '分页获取词典条目失败' };
     }
 }
@@ -295,7 +301,7 @@ export async function searchDictionaryEntriesAction(dictionaryId: string, search
 
         return { success: true, data: entries };
     } catch (error) {
-        console.error('搜索词典条目失败:', error);
+        logger.error('搜索词典条目失败:', error);
         return { success: false, error: '搜索词典条目失败' };
     }
 }
@@ -349,7 +355,7 @@ export async function importDictionaryFromXlsxAction(
         revalidatePath('/dashboard/dictionaries');
         return { success: true, count: entries.length };
     } catch (e) {
-        console.error('Excel 导入失败:', e);
+        logger.error('Excel 导入失败:', e);
         return { success: false, error: 'Excel 导入失败' };
     }
 }
@@ -391,7 +397,7 @@ export async function importDictionaryFromTbxAction(dictionaryId: string, xmlTex
         revalidatePath('/dashboard/dictionaries');
         return { success: true, count: entries.length };
     } catch (e) {
-        console.error('TBX 导入失败:', e);
+        logger.error('TBX 导入失败:', e);
         return { success: false, error: 'TBX 导入失败' };
     }
 }
@@ -418,7 +424,7 @@ export async function bulkImportDictionaryEntriesAction(
         revalidatePath('/dashboard/dictionaries');
         return { success: true, count: entries.length };
     } catch (e) {
-        console.error('批量导入失败:', e);
+        logger.error('批量导入失败:', e);
         return { success: false, error: '批量导入失败' };
     }
 }
@@ -750,10 +756,10 @@ export async function findDictionaryByProjectUserAction(projectId: string, userI
         const res = await findOrCreateDictionaryDB(projectId, { scope: 'PRIVATE', userId });
         try {
             revalidatePath('/dashboard/dictionaries');
-        } catch {}
+        } catch { }
         return { success: true, data: { id: res.id, created: res.created } as const };
     } catch (e) {
-        console.error('查找/创建项目私有词典失败:', e);
+        logger.error('查找/创建项目私有词典失败:', e);
         return { success: false, error: '查找/创建项目私有词典失败' };
     }
 }
@@ -764,10 +770,10 @@ export async function findProjectDictionaryAction(projectId: string) {
         const res = await findOrCreateDictionaryDB(projectId, { scope: 'PROJECT' });
         try {
             revalidatePath('/dashboard/dictionaries');
-        } catch {}
+        } catch { }
         return { success: true, data: { id: res.id, created: res.created } as const };
     } catch (e) {
-        console.error('查找/创建项目词典失败:', e);
+        logger.error('查找/创建项目词典失败:', e);
         return { success: false, error: '查找/创建项目词典失败' };
     }
 }
@@ -869,7 +875,7 @@ export async function bulkUpsertEntriesAction(input: {
         }
         return { success: true, data: { inserted, updated, skipped } };
     } catch (e: unknown) {
-        console.error('批量应用术语失败:', e);
+        logger.error('批量应用术语失败:', e);
         return { success: false, error: '批量应用术语失败' };
     }
 }

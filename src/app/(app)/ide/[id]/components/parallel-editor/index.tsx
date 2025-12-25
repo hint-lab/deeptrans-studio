@@ -1,60 +1,66 @@
 'use client';
-import { useEffect, useState } from 'react';
-import RichTextEditor from './rich-text/editor';
-import React from 'react';
-import { X, ChevronLeft, ChevronRight, PanelBottomOpen, PanelBottomClose } from 'lucide-react';
-import Hello from './hello-page';
-import { cn } from '@/lib/utils';
-import { getContentByIdAction, updateDocItemStatusAction } from 'src/actions/document-item'; // 假设已创建数据获取方法
-import { Separator } from '@/components/ui/separator';
-import { Skeleton } from '@/components/ui/skeleton';
-import { useActiveDocumentItem } from '@/hooks/useActiveDocumentItem';
 import {
-    useTranslationContent,
-    useTranslationState,
-    useTranslationLanguage,
-} from '@/hooks/useTranslation';
-import MarkdownPreview from '@uiw/react-markdown-preview';
-import StageBadgeBar from './stage-badge';
-import { useExplorerTabs } from '@/hooks/useExplorerTabs';
-import { useRunningState } from '@/hooks/useRunning';
-import {
-    extractMonolingualTermsAction,
-    lookupDictionaryAction,
-    embedAndTranslateAction,
-    baselineTranslateAction,
-} from '@/actions/pre-translate';
-import {
-    evaluateSyntaxAction,
-    extractBilingualSyntaxMarkersAction,
-    embedSyntaxAdviceAction,
-} from '@/actions/quality-assure';
-import {
-    queryDiscourseAction,
-    evaluateDiscourseAction,
-    embedDiscourseAction,
-    runPostEditAction,
-} from '@/actions/postedit';
-import { getLanguageByCode, getLanguageLabelByCode } from '@/utils/translate';
-import { useAgentWorkflowSteps } from '@/hooks/useAgentWorkflowSteps';
-import { useLogger } from '@/hooks/useLogger';
-import { toast } from 'sonner';
-import {
+    getDocumentItemIntermediateResultsAction,
+    savePostEditResultsAction,
     savePreTranslateResultsAction,
     saveQualityAssureResultsAction,
-    savePostEditResultsAction,
 } from '@/actions/intermediate-results';
-import { TranslationProcessPanel } from './translation-process-panel';
-import { useParams } from 'next/navigation';
-import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
-import { useBottomPanel } from '@/hooks/useBottomPanel';
+import {
+    embedDiscourseAction,
+    evaluateDiscourseAction,
+    queryDiscourseAction
+} from '@/actions/postedit';
+import {
+    baselineTranslateAction,
+    embedAndTranslateAction,
+    extractMonolingualTermsAction,
+    lookupDictionaryAction,
+} from '@/actions/pre-translate';
+import {
+    embedSyntaxAdviceAction,
+    evaluateSyntaxAction,
+    extractBilingualSyntaxMarkersAction,
+} from '@/actions/quality-assure';
 import {
     recordGoToNextTranslationProcessEventAction,
     recordGoToPreviousTranslationStageAction,
 } from '@/actions/translation-process-event';
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
+import { Separator } from '@/components/ui/separator';
+import { Skeleton } from '@/components/ui/skeleton';
+import { useActiveDocumentItem } from '@/hooks/useActiveDocumentItem';
+import { useAgentWorkflowSteps } from '@/hooks/useAgentWorkflowSteps';
+import { useBottomPanel } from '@/hooks/useBottomPanel';
+import { useExplorerTabs } from '@/hooks/useExplorerTabs';
+import { useLogger } from '@/hooks/useLogger';
+import { useRunningState } from '@/hooks/useRunning';
+import {
+    useTranslationContent,
+    useTranslationLanguage,
+    useTranslationState,
+} from '@/hooks/useTranslation';
+import { createLogger } from '@/lib/logger';
+import { cn } from '@/lib/utils';
+import MarkdownPreview from '@uiw/react-markdown-preview';
+import { ChevronLeft, ChevronRight, PanelBottomClose, PanelBottomOpen } from 'lucide-react';
 import { useSession } from 'next-auth/react';
 import { useTranslations } from 'next-intl';
-import { getDocumentItemIntermediateResultsAction } from '@/actions/intermediate-results';
+import { useParams } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
+import { getContentByIdAction } from 'src/actions/document-item'; // 假设已创建数据获取方法
+import Hello from './hello-page';
+import RichTextEditor from './rich-text/editor';
+import StageBadgeBar from './stage-badge';
+import { TranslationProcessPanel } from './translation-process-panel';
+const logger = createLogger({
+    type: 'ide:parallel-editor',
+}, {
+    json: false,// 开启json格式输出
+    pretty: false, // 关闭开发环境美化输出
+    colors: true, // 仅当json：false时启用颜色输出可用
+    includeCaller: false, // 日志不包含调用者
+});
 export default function ParallelEditor({ className }: { className?: string }) {
     const t = useTranslations('IDE.parallelEditor');
     const { sourceText, targetText, setSourceTranslationText, setTargetTranslationText } =
@@ -116,7 +122,7 @@ export default function ParallelEditor({ className }: { className?: string }) {
             const termStrings = Array.isArray(terms)
                 ? terms.map((t: any) => t.term).filter(Boolean)
                 : [];
-            console.log('提取的术语:', termStrings);
+            logger.debug('提取的术语:', termStrings);
             // 可按需使用已启用术语映射：preTermEnabled
             const termCandidates = termStrings.slice(0, 50).map(t => ({ term: t, score: 1.0 }));
             const dict = await lookupDictionaryAction(termCandidates, {
@@ -133,7 +139,7 @@ export default function ParallelEditor({ className }: { className?: string }) {
                 targetLanguage || 'auto',
                 dict
             );
-            console.log('翻译结果:', translation);
+            logger.debug('翻译结果:', translation);
             setTargetTranslationText(translation || '');
 
             // 更新 useAgentWorkflowSteps 状态
@@ -153,7 +159,7 @@ export default function ParallelEditor({ className }: { className?: string }) {
                 });
                 logInfo('预翻译结果已保存到数据库');
             } catch (error) {
-                console.error(`保存预翻译结果失败: ${error}`);
+                logger.error(`保存预翻译结果失败: ${error}`);
             }
             logInfo('单例翻译完成');
 
@@ -165,7 +171,7 @@ export default function ParallelEditor({ className }: { className?: string }) {
                 'SUCCESS'
             );
         } catch (error) {
-            console.error(`单例翻译失败: ${error}`);
+            logger.error(`单例翻译失败: ${error}`);
 
             // 记录 MT 阶段失败
             await recordGoToNextTranslationProcessEventAction(
@@ -201,11 +207,11 @@ export default function ParallelEditor({ className }: { className?: string }) {
                 });
                 logInfo('单例翻译结果已撤销');
             } catch (error) {
-                console.error(`撤销单例翻译结果失败: ${error}`);
+                logger.error(`撤销单例翻译结果失败: ${error}`);
             }
             logInfo('单例翻译结果已撤销');
         } catch (error) {
-            console.error(`撤销单例翻译失败: ${error}`);
+            logger.error(`撤销单例翻译失败: ${error}`);
         } finally {
         }
     };
@@ -220,7 +226,7 @@ export default function ParallelEditor({ className }: { className?: string }) {
         try {
             logAgent('QA');
             setQARunning(true);
-            console.log('QA开始时的文本:', {
+            logger.debug('QA开始时的文本:', {
                 sourceLength: sourceText?.length || 0,
                 targetLength: targetText?.length || 0,
             });
@@ -243,7 +249,7 @@ export default function ParallelEditor({ className }: { className?: string }) {
             setQAOutputs({ biTerm });
             try {
                 await saveQualityAssureResultsAction(activeDocumentItem.id, { biTerm });
-            } catch {}
+            } catch { }
 
             // 2) 句法特征评估
             setQAStep('syntax-eval');
@@ -254,7 +260,7 @@ export default function ParallelEditor({ className }: { className?: string }) {
             setQAOutputs({ syntax });
             try {
                 await saveQualityAssureResultsAction(activeDocumentItem.id, { syntax });
-            } catch {}
+            } catch { }
 
             // 3) 句法建议嵌入（可选：此处默认使用全部 issues；若有选择逻辑，请替换为勾选的集合）
             setQAStep('syntex-embed-trans');
@@ -270,8 +276,8 @@ export default function ParallelEditor({ className }: { className?: string }) {
                     await saveQualityAssureResultsAction(activeDocumentItem.id, {
                         syntaxEmbedded: embedded,
                     });
-                } catch {}
-            } catch {}
+                } catch { }
+            } catch { }
 
             logInfo('单例质检完成');
 
@@ -283,7 +289,7 @@ export default function ParallelEditor({ className }: { className?: string }) {
                 'SUCCESS'
             );
         } catch (e) {
-            console.error(`单例质检失败: ${e}`);
+            logger.error(`单例质检失败: ${e}`);
 
             // 记录 QA 阶段失败
             await recordGoToNextTranslationProcessEventAction(
@@ -318,11 +324,11 @@ export default function ParallelEditor({ className }: { className?: string }) {
                 });
                 logInfo('单例质检结果已撤销');
             } catch (error) {
-                console.error(`撤销单例质检结果失败: ${error}`);
+                logger.error(`撤销单例质检结果失败: ${error}`);
             }
             logInfo('单例质检结果已撤销');
         } catch (error) {
-            console.error(`撤销单例质检失败: ${error}`);
+            logger.error(`撤销单例质检失败: ${error}`);
         }
     };
 
@@ -388,7 +394,7 @@ export default function ParallelEditor({ className }: { className?: string }) {
                 });
                 logInfo('译后编辑结果已保存到数据库');
             } catch (error) {
-                console.error(`保存译后编辑结果失败: ${error}`);
+                logger.error(`保存译后编辑结果失败: ${error}`);
             }
 
             // 可选：自动应用改写结果到目标文本
@@ -407,7 +413,7 @@ export default function ParallelEditor({ className }: { className?: string }) {
                 'SUCCESS'
             );
         } catch (e) {
-            console.error(`译后编辑失败: ${e}`);
+            logger.error(`译后编辑失败: ${e}`);
             toast.error(t('postEditFailed'));
 
             // 记录 POST_EDIT 阶段失败
@@ -443,10 +449,10 @@ export default function ParallelEditor({ className }: { className?: string }) {
                 });
                 logInfo('译后编辑结果已撤销');
             } catch (error) {
-                console.error(`撤销译后编辑结果失败: ${error}`);
+                logger.error(`撤销译后编辑结果失败: ${error}`);
             }
         } catch (error) {
-            console.error(`撤销译后编辑失败: ${error}`);
+            logger.error(`撤销译后编辑失败: ${error}`);
         } finally {
             setPeStep('idle');
         }
@@ -458,7 +464,7 @@ export default function ParallelEditor({ className }: { className?: string }) {
         try {
             setSourceLoading(true);
             const documentItem = await getContentByIdAction(id);
-            console.log('documentItem', documentItem);
+            logger.debug('documentItem', documentItem);
             if (documentItem) {
                 setSourceTranslationText(documentItem.sourceText);
                 setTargetTranslationText(documentItem.targetText || '');
@@ -474,7 +480,7 @@ export default function ParallelEditor({ className }: { className?: string }) {
                 ) {
                     try {
                         logInfo('自动生成基线翻译...');
-                        console.log('自动基线翻译参数:', { sourceLanguage, targetLanguage });
+                        logger.debug('自动基线翻译参数:', { sourceLanguage, targetLanguage });
                         const baselineText = await baselineTranslateAction(
                             documentItem.sourceText,
                             sourceLanguage || 'auto',
@@ -486,7 +492,7 @@ export default function ParallelEditor({ className }: { className?: string }) {
                             logInfo('基线翻译生成完成');
                         }
                     } catch (error) {
-                        console.error('自动基线翻译失败:', error);
+                        logger.error('自动基线翻译失败:', error);
                         logInfo('自动基线翻译失败，可手动重新生成');
                     }
                 }
@@ -511,7 +517,7 @@ export default function ParallelEditor({ className }: { className?: string }) {
             }
         } catch (err) {
             setError(t('cannotLoadDocument'));
-            console.error('获取文档内容失败:', err);
+            logger.error('获取文档内容失败:', err);
         } finally {
             setSourceLoading(false);
         }
@@ -532,7 +538,7 @@ export default function ParallelEditor({ className }: { className?: string }) {
             const next = allItems[nextIdx];
             if (!next || next.id === currentId) return;
             await initContentByID(next.id);
-        } catch {}
+        } catch { }
     };
 
     useEffect(() => {
@@ -550,7 +556,7 @@ export default function ParallelEditor({ className }: { className?: string }) {
         }
     }, [activeDocumentItem.id]); // 添加contentID依赖
 
-    useEffect(() => {}, [sourceText, targetText]);
+    useEffect(() => { }, [sourceText, targetText]);
 
     // 当currentStage变化时自动打开面板
     useEffect(() => {
@@ -566,8 +572,8 @@ export default function ParallelEditor({ className }: { className?: string }) {
     return (
         <div className={cn('flex size-full flex-col', className)}>
             {activeDocumentItem.id === null ||
-            activeDocumentItem.id === undefined ||
-            activeDocumentItem.id === '' ? (
+                activeDocumentItem.id === undefined ||
+                activeDocumentItem.id === '' ? (
                 <Hello />
             ) : (
                 <ResizablePanelGroup direction="vertical" className="size-full">
@@ -605,177 +611,177 @@ export default function ParallelEditor({ className }: { className?: string }) {
                                         <div className="min-h-0 flex-1">
                                             {singlePreview
                                                 ? (() => {
-                                                      const previewText =
-                                                          targetText && String(targetText).trim()
-                                                              ? targetText
-                                                              : sourceText || '';
-                                                      const isHtml = /<\w+[^>]*>/.test(
-                                                          previewText || ''
-                                                      );
-                                                      return (
-                                                          <div className="h-full w-full overflow-auto rounded border pb-1">
-                                                              <div className="flex items-center justify-between border-b bg-muted/40 px-2 py-1 text-[11px] text-foreground/70">
-                                                                  <span className="font-medium">
-                                                                      {t('preview')}:{' '}
-                                                                      {targetText &&
-                                                                      String(targetText).trim()
-                                                                          ? t('targetText')
-                                                                          : t('sourceText')}
-                                                                  </span>
-                                                                  <span className="uppercase tracking-wider">
-                                                                      {targetText &&
-                                                                      String(targetText).trim()
-                                                                          ? targetLanguage
-                                                                          : sourceLanguage}
-                                                                  </span>
-                                                              </div>
-                                                              {isHtml ? (
-                                                                  <div
-                                                                      className="prose p-2"
-                                                                      dangerouslySetInnerHTML={{
-                                                                          __html: previewText,
-                                                                      }}
-                                                                  />
-                                                              ) : (
-                                                                  <MarkdownPreview
-                                                                      source={previewText}
-                                                                      className="bg-transparent"
-                                                                      style={{
-                                                                          backgroundColor:
-                                                                              'transparent',
-                                                                      }}
-                                                                  />
-                                                              )}
-                                                          </div>
-                                                      );
-                                                  })()
+                                                    const previewText =
+                                                        targetText && String(targetText).trim()
+                                                            ? targetText
+                                                            : sourceText || '';
+                                                    const isHtml = /<\w+[^>]*>/.test(
+                                                        previewText || ''
+                                                    );
+                                                    return (
+                                                        <div className="h-full w-full overflow-auto rounded border pb-1">
+                                                            <div className="flex items-center justify-between border-b bg-muted/40 px-2 py-1 text-[11px] text-foreground/70">
+                                                                <span className="font-medium">
+                                                                    {t('preview')}:{' '}
+                                                                    {targetText &&
+                                                                        String(targetText).trim()
+                                                                        ? t('targetText')
+                                                                        : t('sourceText')}
+                                                                </span>
+                                                                <span className="uppercase tracking-wider">
+                                                                    {targetText &&
+                                                                        String(targetText).trim()
+                                                                        ? targetLanguage
+                                                                        : sourceLanguage}
+                                                                </span>
+                                                            </div>
+                                                            {isHtml ? (
+                                                                <div
+                                                                    className="prose p-2"
+                                                                    dangerouslySetInnerHTML={{
+                                                                        __html: previewText,
+                                                                    }}
+                                                                />
+                                                            ) : (
+                                                                <MarkdownPreview
+                                                                    source={previewText}
+                                                                    className="bg-transparent"
+                                                                    style={{
+                                                                        backgroundColor:
+                                                                            'transparent',
+                                                                    }}
+                                                                />
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })()
                                                 : (() => {
-                                                      const isVertical = stackLayout === 'vertical';
-                                                      return (
-                                                          <div
-                                                              className={`flex w-full ${isVertical ? 'flex-col' : 'flex-row'} size-full items-stretch overflow-hidden border`}
-                                                          >
-                                                              <div
-                                                                  className={`${isVertical ? 'w-full' : 'w-1/2'} flex-1 overflow-auto`}
-                                                              >
-                                                                  <div className="flex items-center justify-between border-b bg-muted/40 px-2 py-1 text-[11px] text-foreground/70">
-                                                                      <span className="font-medium">
-                                                                          {t('sourceText')}
-                                                                      </span>
-                                                                      <span className="uppercase tracking-wider">
-                                                                          {sourceLanguage}
-                                                                      </span>
-                                                                  </div>
-                                                                  {sourceLoading ||
-                                                                  !sourceText ||
-                                                                  String(sourceText).trim() ===
-                                                                      '' ? (
-                                                                      <div className="space-y-3 p-4">
-                                                                          <div className="space-y-2">
-                                                                              <Skeleton className="h-4 w-full" />
-                                                                              <Skeleton className="h-4 w-3/4" />
-                                                                          </div>
-                                                                          <div className="pt-2 text-center">
-                                                                              <div className="text-sm text-muted-foreground">
-                                                                                  {t(
-                                                                                      'loadingSource'
-                                                                                  )}
-                                                                              </div>
-                                                                          </div>
-                                                                      </div>
-                                                                  ) : (
-                                                                      <RichTextEditor
-                                                                          key={`source-${activeDocumentItem.id}-${sourceText?.length || 0}`}
-                                                                          job="rawtext"
-                                                                          editorId={
-                                                                              activeDocumentItem.id
-                                                                          }
-                                                                          placeholder={t(
-                                                                              'editSourceHere'
-                                                                          )}
-                                                                          initialContent={
-                                                                              sourceText
-                                                                          }
-                                                                          readOnly={
-                                                                              !(
-                                                                                  currentStage ===
-                                                                                  'NOT_STARTED'
-                                                                              )
-                                                                          }
-                                                                      />
-                                                                  )}
-                                                              </div>
-                                                              <Separator
-                                                                  orientation={
-                                                                      isVertical
-                                                                          ? 'horizontal'
-                                                                          : 'vertical'
-                                                                  }
-                                                                  className={`${isVertical ? 'h-1 w-full' : 'h-full w-1'} z-100`}
-                                                              />
-                                                              <div
-                                                                  className={`${isVertical ? 'w-full' : 'w-1/2'} flex-1 overflow-auto`}
-                                                              >
-                                                                  <div className="flex items-center justify-between border-b bg-muted/40 px-2 py-1 text-[11px] text-foreground/70">
-                                                                      <span className="font-medium">
-                                                                          {t('targetText')}
-                                                                      </span>
-                                                                      <span className="uppercase tracking-wider">
-                                                                          {targetLanguage}
-                                                                      </span>
-                                                                  </div>
-                                                                  <div className="relative">
-                                                                      {isRunning && (
-                                                                          <span className="absolute left-0 right-0 top-0 h-0.5 animate-progress bg-indigo-500" />
-                                                                      )}
-                                                                      {/* 骨架屏：在准备/预译阶段且译文为空时显示 */}
-                                                                      {(!targetText ||
-                                                                          String(
-                                                                              targetText
-                                                                          ).trim() === '') &&
-                                                                      currentStage ===
-                                                                          'NOT_STARTED' ? (
-                                                                          <div className="space-y-3 p-4">
-                                                                              <div className="space-y-2">
-                                                                                  <Skeleton className="h-4 w-full" />
-                                                                                  <Skeleton className="h-4 w-3/4" />
-                                                                              </div>
-                                                                              <div className="pt-4 text-center">
-                                                                                  <div className="text-sm text-muted-foreground">
-                                                                                      {t(
-                                                                                          'clickToStartTranslation'
-                                                                                      )}
-                                                                                  </div>
-                                                                              </div>
-                                                                          </div>
-                                                                      ) : (
-                                                                          <div className="h-full">
-                                                                              <RichTextEditor
-                                                                                  key={`target-${activeDocumentItem.id}-${targetText?.length || 0}`}
-                                                                                  job="translation"
-                                                                                  editorId={
-                                                                                      activeDocumentItem.id
-                                                                                  }
-                                                                                  placeholder={t(
-                                                                                      'editTargetHere'
-                                                                                  )}
-                                                                                  initialContent={
-                                                                                      targetText
-                                                                                  }
-                                                                                  readOnly={
-                                                                                      !(
-                                                                                          (currentStage as any) ===
-                                                                                          'POST_EDIT'
-                                                                                      )
-                                                                                  }
-                                                                              />
-                                                                          </div>
-                                                                      )}
-                                                                  </div>
-                                                              </div>
-                                                          </div>
-                                                      );
-                                                  })()}
+                                                    const isVertical = stackLayout === 'vertical';
+                                                    return (
+                                                        <div
+                                                            className={`flex w-full ${isVertical ? 'flex-col' : 'flex-row'} size-full items-stretch overflow-hidden border`}
+                                                        >
+                                                            <div
+                                                                className={`${isVertical ? 'w-full' : 'w-1/2'} flex-1 overflow-auto`}
+                                                            >
+                                                                <div className="flex items-center justify-between border-b bg-muted/40 px-2 py-1 text-[11px] text-foreground/70">
+                                                                    <span className="font-medium">
+                                                                        {t('sourceText')}
+                                                                    </span>
+                                                                    <span className="uppercase tracking-wider">
+                                                                        {sourceLanguage}
+                                                                    </span>
+                                                                </div>
+                                                                {sourceLoading ||
+                                                                    !sourceText ||
+                                                                    String(sourceText).trim() ===
+                                                                    '' ? (
+                                                                    <div className="space-y-3 p-4">
+                                                                        <div className="space-y-2">
+                                                                            <Skeleton className="h-4 w-full" />
+                                                                            <Skeleton className="h-4 w-3/4" />
+                                                                        </div>
+                                                                        <div className="pt-2 text-center">
+                                                                            <div className="text-sm text-muted-foreground">
+                                                                                {t(
+                                                                                    'loadingSource'
+                                                                                )}
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                ) : (
+                                                                    <RichTextEditor
+                                                                        key={`source-${activeDocumentItem.id}-${sourceText?.length || 0}`}
+                                                                        job="rawtext"
+                                                                        editorId={
+                                                                            activeDocumentItem.id
+                                                                        }
+                                                                        placeholder={t(
+                                                                            'editSourceHere'
+                                                                        )}
+                                                                        initialContent={
+                                                                            sourceText
+                                                                        }
+                                                                        readOnly={
+                                                                            !(
+                                                                                currentStage ===
+                                                                                'NOT_STARTED'
+                                                                            )
+                                                                        }
+                                                                    />
+                                                                )}
+                                                            </div>
+                                                            <Separator
+                                                                orientation={
+                                                                    isVertical
+                                                                        ? 'horizontal'
+                                                                        : 'vertical'
+                                                                }
+                                                                className={`${isVertical ? 'h-1 w-full' : 'h-full w-1'} z-100`}
+                                                            />
+                                                            <div
+                                                                className={`${isVertical ? 'w-full' : 'w-1/2'} flex-1 overflow-auto`}
+                                                            >
+                                                                <div className="flex items-center justify-between border-b bg-muted/40 px-2 py-1 text-[11px] text-foreground/70">
+                                                                    <span className="font-medium">
+                                                                        {t('targetText')}
+                                                                    </span>
+                                                                    <span className="uppercase tracking-wider">
+                                                                        {targetLanguage}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="relative">
+                                                                    {isRunning && (
+                                                                        <span className="absolute left-0 right-0 top-0 h-0.5 animate-progress bg-indigo-500" />
+                                                                    )}
+                                                                    {/* 骨架屏：在准备/预译阶段且译文为空时显示 */}
+                                                                    {(!targetText ||
+                                                                        String(
+                                                                            targetText
+                                                                        ).trim() === '') &&
+                                                                        currentStage ===
+                                                                        'NOT_STARTED' ? (
+                                                                        <div className="space-y-3 p-4">
+                                                                            <div className="space-y-2">
+                                                                                <Skeleton className="h-4 w-full" />
+                                                                                <Skeleton className="h-4 w-3/4" />
+                                                                            </div>
+                                                                            <div className="pt-4 text-center">
+                                                                                <div className="text-sm text-muted-foreground">
+                                                                                    {t(
+                                                                                        'clickToStartTranslation'
+                                                                                    )}
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                    ) : (
+                                                                        <div className="h-full">
+                                                                            <RichTextEditor
+                                                                                key={`target-${activeDocumentItem.id}-${targetText?.length || 0}`}
+                                                                                job="translation"
+                                                                                editorId={
+                                                                                    activeDocumentItem.id
+                                                                                }
+                                                                                placeholder={t(
+                                                                                    'editTargetHere'
+                                                                                )}
+                                                                                initialContent={
+                                                                                    targetText
+                                                                                }
+                                                                                readOnly={
+                                                                                    !(
+                                                                                        (currentStage as any) ===
+                                                                                        'POST_EDIT'
+                                                                                    )
+                                                                                }
+                                                                            />
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })()}
                                         </div>
                                         {/* 右下角：上一条 / 下一条 / 面板切换 */}
                                         <div className="pointer-events-auto absolute bottom-2 right-2 z-20 flex items-center gap-2">

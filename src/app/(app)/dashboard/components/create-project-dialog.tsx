@@ -1,5 +1,6 @@
 'use client';
-import { cn } from 'src/lib/utils';
+import { createNewProjectAction } from '@/actions/project';
+import { FileUpload } from '@/components/file-upload';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -9,9 +10,14 @@ import {
     DialogHeader,
     DialogTitle,
     DialogTrigger,
+    Dialog as UiDialog,
+    DialogContent as UiDialogContent,
+    DialogHeader as UiDialogHeader,
+    DialogTitle as UiDialogTitle,
 } from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Progress } from '@/components/ui/progress';
 import {
     Select,
     SelectContent,
@@ -19,26 +25,25 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { getDomainOptions } from '@/constants/domains';
+import { getTranslatedLanguages } from '@/constants/languages';
+import { useSidebar } from '@/hooks/useSidebar';
+import { createLogger } from '@/lib/logger';
 import { PlusIcon } from 'lucide-react';
-import { FileUpload } from '@/components/file-upload';
-import { useEffect, useRef, useState } from 'react';
-import { createNewProjectAction } from '@/actions/project';
+import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
+import { useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
 // Avoid importing Prisma types in client components
 type CreatedProject = { id: string } & Record<string, any>;
-import { toast } from 'sonner';
-import {
-    Dialog as UiDialog,
-    DialogContent as UiDialogContent,
-    DialogHeader as UiDialogHeader,
-    DialogTitle as UiDialogTitle,
-} from '@/components/ui/dialog';
-import { Progress } from '@/components/ui/progress';
-import { useSidebar } from '@/hooks/useSidebar';
-import { LANGUAGES, getTranslatedLanguages } from '@/constants/languages';
-import { DOMAINS, getDomainOptions } from '@/constants/domains';
-import { useTranslations } from 'next-intl';
-import { logger } from '@/lib/logger';
+const logger = createLogger({
+    type: 'dashboard:create-project-dialog',
+}, {
+    json: false,// 开启json格式输出
+    pretty: false, // 关闭开发环境美化输出
+    colors: true, // 仅当json：false时启用颜色输出可用
+    includeCaller: false, // 日志不包含调用者
+});
 export function CreateProjectDialog({
     onCreated,
     triggerVariant = 'default',
@@ -154,7 +159,7 @@ export function CreateProjectDialog({
                                 router.push(`/ide/${currentProjectIdRef.current}`);
                         }, 600);
                     }
-                } catch {}
+                } catch { }
             }, 3600);
         } catch (e: any) {
             toast.error((e as Error)?.message || t('initFailed'));
@@ -193,7 +198,7 @@ export function CreateProjectDialog({
             if (project && onCreated) onCreated(project as CreatedProject);
             handleClose();
         } catch (error) {
-            console.error('创建项目失败:', error);
+            logger.error('创建项目失败:', error);
             toast.error(error instanceof Error ? error.message : t('createFailed'));
         } finally {
             setIsSubmitting(false);

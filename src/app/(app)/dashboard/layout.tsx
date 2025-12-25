@@ -1,27 +1,42 @@
 'use client';
-import React from 'react';
-import { type PropsWithChildren } from 'react';
+import { useSidebar } from '@/hooks/useSidebar';
+import { createLogger } from '@/lib/logger';
+import { useSession } from 'next-auth/react';
+import { useEffect, type PropsWithChildren } from 'react';
 import Header from './components/header';
 import Sidebar from './components/sidebar';
-import { useSidebar } from '@/hooks/useSidebar';
-import { useSession } from 'next-auth/react';
-import { useState, useEffect, useMemo } from 'react';
 export default function DashboardLayout({ children }: PropsWithChildren) {
     const { data: session, status, update } = useSession();
     const { isSidebarOpen } = useSidebar();
-    const interval = 15;
+    const logger = createLogger({
+        type: 'client:dashboard-layout',
+    }, {
+        json: false,// 开启json格式输出
+        pretty: false, // 关闭开发环境美化输出
+        colors: true, // 仅当json：false时启用颜色输出可用
+        includeCaller: false, // 日志不包含调用者
+    });
     useEffect(() => {
-        console.log('客户端Layout Session状态:', status);
-        //console.log("客户端Layout Session数据:", session);
-        //console.log("客户端Layout 过期时间:",  session?.expires ? new Date(session.expires).toLocaleString() : "未设置");
+        logger.debug('Client session 状态:', status, "Client session 当前时间:", new Date().toLocaleString(), "Client session 过期时间:", session?.expires ? new Date(session.expires).toLocaleString() : "未设置");
     }, [session, status]);
     useEffect(() => {
-        const timer = setInterval(() => {
-            update(); // 手动更新 session
-        }, interval * 1000);
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+                // 页面变为可见，检查session
+                if (status !== "authenticated") {
+                    update();
+                    logger.debug('Client session update状态:', status, "Client session update过期时间:", session);
+                }
 
-        return () => clearInterval(timer);
-    }, [interval, update]);
+            }
+        };
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
+    }, [update]);
     return (
         <div className="fixed relative inset-0 overflow-hidden bg-gradient-to-br from-[#0f1020] via-[#11122a] to-[#0b0c1a]">
             {/* 背景装饰 - 渐变光晕 */}

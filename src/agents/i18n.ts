@@ -1,9 +1,17 @@
+import { createLogger } from '@/lib/logger';
 import enMessages from '../i18n/en.json';
 import zhMessages from '../i18n/zh.json';
-
 /**
  * Agent国际化工具类
  */
+const logger = createLogger({
+    type: 'lib:agents:i18n',
+}, {
+    json: false,// 开启json格式输出
+    pretty: false, // 关闭开发环境美化输出
+    colors: true, // 仅当json：false时启用颜色输出可用
+    includeCaller: false, // 日志不包含调用者
+});
 export class AgentI18n {
     private messages: any;
 
@@ -22,12 +30,12 @@ export class AgentI18n {
      */
     private getValue(path: string): string {
         const keys = path.split('.');
-        console.log('获取翻译路径:', path);
+        logger.debug('获取翻译路径:', path);
         let value = this.messages;
         for (const key of keys) {
             value = value?.[key];
             if (value === undefined) {
-                console.warn(`Missing translation key: Agents.${path} for locale ${this.locale}`);
+                logger.warn(`Missing translation key: Agents.${path} for locale ${this.locale}`);
                 return `[Missing: ${path}]`;
             }
         }

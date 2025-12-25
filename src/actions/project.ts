@@ -1,16 +1,24 @@
 'use server';
-import {
-    findProjectsByUserIdDB,
-    createProjectDB,
-    updateProjectByIdDB,
-    deleteProjectByIdDB,
-    findProjectByIdDB,
-} from '@/db/project';
-import { auth } from '@/auth';
-import { unstable_noStore as noStore } from 'next/cache';
 import { findProjectDictionaryAction } from '@/actions/dictionary';
 import { updateProjectDictionaryBindingsAction } from '@/actions/project-bindings';
-
+import { auth } from '@/auth';
+import {
+    createProjectDB,
+    deleteProjectByIdDB,
+    findProjectByIdDB,
+    findProjectsByUserIdDB,
+    updateProjectByIdDB,
+} from '@/db/project';
+import { createLogger } from '@/lib/logger';
+import { unstable_noStore as noStore } from 'next/cache';
+const logger = createLogger({
+    type: 'actions:project',
+}, {
+    json: false,// 开启json格式输出
+    pretty: false, // 关闭开发环境美化输出
+    colors: true, // 仅当json：false时启用颜色输出可用
+    includeCaller: false, // 日志不包含调用者
+});
 export interface CreateProjectData {
     name: string;
     domain: string;
@@ -38,7 +46,7 @@ export async function createNewProjectAction(data: CreateProjectData) {
     // 允许未登录创建（不绑定用户）；若已登录则绑定创建者
     const userId = session?.user?.id || undefined;
 
-    console.log('创建项目:', data);
+    logger.debug('创建项目:', data);
 
     const project = await createProjectDB({
         name: data.name,
@@ -68,11 +76,11 @@ export async function createNewProjectAction(data: CreateProjectData) {
             if (dictResult.success && dictResult.data) {
                 // 自动绑定项目词典到项目
                 await updateProjectDictionaryBindingsAction(projectId, [dictResult.data.id]);
-                console.log('项目词典已自动创建并绑定:', dictResult.data.id);
+                logger.debug('项目词典已自动创建并绑定:', dictResult.data.id);
             }
         }
     } catch (error) {
-        console.error('自动创建项目词典失败:', error);
+        logger.error('自动创建项目词典失败:', error);
         // 不抛出错误，项目创建仍然成功
     }
 

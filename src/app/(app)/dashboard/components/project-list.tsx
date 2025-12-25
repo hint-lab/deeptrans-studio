@@ -19,8 +19,17 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { createLogger } from '@/lib/logger';
 import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
+const logger = createLogger({
+    type: 'dashboard:project-list',
+}, {
+    json: false,// 开启json格式输出
+    pretty: false, // 关闭开发环境美化输出
+    colors: true, // 仅当json：false时启用颜色输出可用
+    includeCaller: false, // 日志不包含调用者
+});
 // Avoid importing Prisma types in client components
 type Project = {
     id: string;
@@ -84,7 +93,7 @@ export default function ProjectList({
                 await router.push(`/ide/${project.id}`);
             }
         } catch (error) {
-            console.error('Navigation error:', error);
+            logger.error('Navigation error:', error);
             setLoadingProjectId(null);
             setShowLoadingOverlay(false);
         }
@@ -96,11 +105,11 @@ export default function ProjectList({
             // 获取项目关联的词典
             const response = await fetch(`/api/projects/${project.id}/dictionaries`);
             const dicts = await response.json();
-            console.log('API 响应数据:', dicts); // 添加调试日志
-            console.log('过滤前词典数量:', dicts.length);
+            logger.info('API 响应数据:', dicts); // 添加调试日志
+            logger.info('过滤前词典数量:', dicts.length);
 
             const filteredDicts = dicts.filter((d: any) => {
-                console.log(
+                logger.info(
                     '检查词典:',
                     d.name,
                     'visibility:',
@@ -111,7 +120,7 @@ export default function ProjectList({
                 return d.visibility === 'PROJECT' && d.name.includes('术语清单');
             });
 
-            console.log('过滤后词典数量:', filteredDicts.length);
+            logger.info('过滤后词典数量:', filteredDicts.length);
 
             setDeleteTarget({
                 id: project.id,
@@ -122,7 +131,7 @@ export default function ProjectList({
             });
             setDeleteWithDictionary(true); // 默认选中
         } catch (error) {
-            console.error('获取词典信息失败:', error);
+            logger.error('获取词典信息失败:', error);
             // 回退到简单模式
             setDeleteTarget({ id: project.id, name: project.name ?? '' });
         }

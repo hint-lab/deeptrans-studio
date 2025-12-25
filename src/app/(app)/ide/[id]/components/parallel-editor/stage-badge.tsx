@@ -1,23 +1,28 @@
 'use client';
 
-import React, { useEffect } from 'react';
-import type { TranslationStage } from '@/store/features/translationSlice';
+import { updateDocItemStatusAction } from '@/actions/document-item';
+import { Button } from '@/components/ui/button';
 import {
     TRANSLATION_STAGES_SEQUENCE,
     getTranslationStageLabel,
 } from '@/constants/translationStages';
-import { ChevronRight } from 'lucide-react';
-import { Loader2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Check, Undo2, RotateCcw, SkipForward } from 'lucide-react';
 import { useActiveDocumentItem } from '@/hooks/useActiveDocumentItem';
+import { useExplorerTabs } from '@/hooks/useExplorerTabs';
 import { useRunningState } from '@/hooks/useRunning';
 import { useTranslationState } from '@/hooks/useTranslation';
-import { updateDocumentStatusByIdAction } from '@/actions/document';
-import { updateDocItemStatusAction } from '@/actions/document-item';
-import { useExplorerTabs } from '@/hooks/useExplorerTabs';
+import { createLogger } from '@/lib/logger';
+import type { TranslationStage } from '@/store/features/translationSlice';
+import { Check, ChevronRight, Loader2, RotateCcw, SkipForward, Undo2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-
+import React, { useEffect } from 'react';
+const logger = createLogger({
+    type: 'ide:stage-badge',
+}, {
+    json: false,// 开启json格式输出
+    pretty: false, // 关闭开发环境美化输出
+    colors: true, // 仅当json：false时启用颜色输出可用
+    includeCaller: false, // 日志不包含调用者
+});
 export type StageBadgeBarProps = {
     runTranslate: () => Promise<void>;
     undoTranslate: () => Promise<void>;
@@ -73,7 +78,7 @@ const StageBadgeBar: React.FC<StageBadgeBarProps> = ({
                 setActiveDocumentItem({ ...activeDocumentItem, status });
             }
         } catch (error) {
-            console.error('Status sync failed:', error);
+            logger.error('Status sync failed:', error);
             throw error;
         }
     };
@@ -129,7 +134,7 @@ const StageBadgeBar: React.FC<StageBadgeBarProps> = ({
                 setIsRunning(false);
             }, 360);
         } catch (error) {
-            console.error('Rollback operation failed:', error);
+            logger.error('Rollback operation failed:', error);
             setIsRunning(false);
         }
     }
@@ -209,7 +214,7 @@ const StageBadgeBar: React.FC<StageBadgeBarProps> = ({
 
             setIsRunning(false);
         } catch (error) {
-            console.error('阶段接受失败:', error);
+            logger.error('当前阶段无法执行接受操作:', error);
             setIsRunning(false);
         }
     };
@@ -222,7 +227,7 @@ const StageBadgeBar: React.FC<StageBadgeBarProps> = ({
     };
 
     useEffect(() => {
-        console.log(currentStage);
+        logger.info(`当前处理步骤:${currentStage}`);
         // 只在activeDocumentItem.id变化时才设置状态，避免覆盖正在进行的状态变化
         if (activeDocumentItem.id && !isRunning) {
             setCurrentStage(activeDocumentItem.status as TranslationStage);
@@ -286,17 +291,17 @@ const StageBadgeBar: React.FC<StageBadgeBarProps> = ({
                     {(currentStage === 'MT_REVIEW' ||
                         currentStage === 'QA_REVIEW' ||
                         currentStage === 'POST_EDIT') && (
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-6 gap-1 rounded-none"
-                            onClick={() => onRedo(currentStage)}
-                            disabled={shouldDisableButtons()}
-                        >
-                            <RotateCcw className="h-3 w-3" />
-                            <span className="hidden sm:inline">{redoText}</span>
-                        </Button>
-                    )}
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-6 gap-1 rounded-none"
+                                onClick={() => onRedo(currentStage)}
+                                disabled={shouldDisableButtons()}
+                            >
+                                <RotateCcw className="h-3 w-3" />
+                                <span className="hidden sm:inline">{redoText}</span>
+                            </Button>
+                        )}
                     {currentStage !== 'NOT_STARTED' && currentStage !== 'COMPLETED' && (
                         <Button
                             variant="outline"

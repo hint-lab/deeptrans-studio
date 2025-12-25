@@ -1,25 +1,32 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useTranslationContent, useTranslationLanguage } from '@/hooks/useTranslation';
-import { toast } from 'sonner';
-import { useAgentWorkflowSteps } from '@/hooks/useAgentWorkflowSteps';
-import { useActiveDocumentItem } from '@/hooks/useActiveDocumentItem';
 import {
     getDocumentItemIntermediateResultsAction,
-    saveQualityAssureResultsAction,
     savePreTranslateResultsAction,
+    saveQualityAssureResultsAction,
 } from '@/actions/intermediate-results';
-import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
-import { cn } from '@/lib/utils';
-import { Check, Loader2, ThumbsDown } from 'lucide-react';
-import { wordDiff } from '@/lib/text-diff';
+import { embedSyntaxAdviceAction } from '@/actions/quality-assure';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { embedSyntaxAdviceAction } from '@/actions/quality-assure';
-import { getLanguageByCode } from '@/utils/translate';
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
+import { useActiveDocumentItem } from '@/hooks/useActiveDocumentItem';
+import { useAgentWorkflowSteps } from '@/hooks/useAgentWorkflowSteps';
+import { useTranslationContent, useTranslationLanguage } from '@/hooks/useTranslation';
+import { createLogger } from '@/lib/logger';
+import { wordDiff } from '@/lib/text-diff';
+import { cn } from '@/lib/utils';
+import { Check, Loader2, ThumbsDown } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-
+import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
+const logger = createLogger({
+    type: 'parallel-editor:qa-review',
+}, {
+    json: false,// 开启json格式输出
+    pretty: false, // 关闭开发环境美化输出
+    colors: true, // 仅当json：false时启用颜色输出可用
+    includeCaller: false, // 日志不包含调用者
+});
 export default function QAPanel({ projectId }: { projectId?: string }) {
     const t = useTranslations('IDE.qaPanel');
     const tCommon = useTranslations('Common');
@@ -54,7 +61,7 @@ export default function QAPanel({ projectId }: { projectId?: string }) {
 
     // 调试：监听QA状态变化
     useEffect(() => {
-        console.log('QA面板: 状态变化', {
+        logger.log('QA面板: 状态变化', {
             qaBiTerm: !!qaBiTerm,
             qaSyntax: !!qaSyntax,
             qaEmbeddedText: !!qaEmbeddedText,
@@ -96,7 +103,7 @@ export default function QAPanel({ projectId }: { projectId?: string }) {
                     setQAOutputs(undefined);
                 }
             } catch (error) {
-                console.error('Failed to load QA results:', error);
+                logger.error('Failed to load QA results:', error);
                 setDbResults(null);
                 setQAOutputs(undefined);
             }
@@ -126,7 +133,7 @@ export default function QAPanel({ projectId }: { projectId?: string }) {
             if (docId) {
                 try {
                     await savePreTranslateResultsAction(docId, { targetText: content });
-                } catch {}
+                } catch { }
             }
             toast.success(t('applied'));
         } catch {
@@ -174,7 +181,7 @@ export default function QAPanel({ projectId }: { projectId?: string }) {
             if (docId) {
                 try {
                     await saveQualityAssureResultsAction(docId, { syntaxEmbedded: text });
-                } catch {}
+                } catch { }
             }
         } catch (e: any) {
             toast.error(String(e?.message || t('generateFailed')));
@@ -228,26 +235,26 @@ export default function QAPanel({ projectId }: { projectId?: string }) {
         const candidates: any = Array.isArray(val)
             ? val
             : Array.isArray((val as any)?.pairs)
-              ? (val as any).pairs
-              : Array.isArray((val as any)?.data)
-                ? (val as any).data
-                : Array.isArray((val as any)?.items)
-                  ? (val as any).items
-                  : Array.isArray((val as any)?.syntaxPairs)
-                    ? (val as any).syntaxPairs
-                    : undefined;
+                ? (val as any).pairs
+                : Array.isArray((val as any)?.data)
+                    ? (val as any).data
+                    : Array.isArray((val as any)?.items)
+                        ? (val as any).items
+                        : Array.isArray((val as any)?.syntaxPairs)
+                            ? (val as any).syntaxPairs
+                            : undefined;
         if (Array.isArray(candidates)) {
             for (const it of candidates) {
                 if (it && typeof it === 'object') {
                     push(
                         (it as any).source ??
-                            (it as any).src ??
-                            (it as any).term ??
-                            (it as any).sourceMarker,
+                        (it as any).src ??
+                        (it as any).term ??
+                        (it as any).sourceMarker,
                         (it as any).target ??
-                            (it as any).tgt ??
-                            (it as any).translation ??
-                            (it as any).targetMarker,
+                        (it as any).tgt ??
+                        (it as any).translation ??
+                        (it as any).targetMarker,
                         (it as any).score ?? (it as any).alignment
                     );
                 } else if (typeof it === 'string') {
@@ -317,7 +324,7 @@ export default function QAPanel({ projectId }: { projectId?: string }) {
                 onLayout={(sizes: number[]) => {
                     try {
                         document.cookie = `react-resizable-panels:qa-review-layout=${JSON.stringify(sizes)}`;
-                    } catch {}
+                    } catch { }
                 }}
             >
                 {/* 双语句法评估 */}
@@ -403,7 +410,7 @@ export default function QAPanel({ projectId }: { projectId?: string }) {
                                                                 docId,
                                                                 { dislikedPairs: next }
                                                             );
-                                                        } catch {}
+                                                        } catch { }
                                                     }
                                                 };
                                                 const onToggle = () => toggleNote(p.source);
@@ -534,9 +541,9 @@ export default function QAPanel({ projectId }: { projectId?: string }) {
                                         await saveQualityAssureResultsAction(docId, {
                                             syntax: nextSyn,
                                         });
-                                    } catch {}
+                                    } catch { }
                                 }
-                            } catch {}
+                            } catch { }
                         };
                         if (!syn)
                             return (

@@ -1,58 +1,58 @@
 // 动作部分：包含预翻译、质量评估、译后编辑等
-import { useTranslationState, useTranslationContent } from '@/hooks/useTranslation';
-import { useSourceEditor, useTargetEditor } from '@/hooks/useEditor';
-import { toast } from 'sonner';
-import { TranslateMenu } from './components/translate-menu';
-import { QualityMenu } from './components/quality-menu';
-import { PostEditMenu } from './components/post-edit-menu';
-import { SignoffMenu } from './components/signoff-menu';
-import { ReviewMenu } from './components/review-menu';
-import { RunMenu } from './components/run-menu';
 import {
+    embedAndTranslateAction,
     extractMonolingualTermsAction,
     lookupDictionaryAction,
-    embedAndTranslateAction,
     runPreTranslateAction,
 } from '@/actions/pre-translate';
+import { useTargetEditor } from '@/hooks/useEditor';
+import { useTranslationContent, useTranslationState } from '@/hooks/useTranslation';
+import { toast } from 'sonner';
+import { PostEditMenu } from './components/post-edit-menu';
+import { QualityMenu } from './components/quality-menu';
+import { RunMenu } from './components/run-menu';
+import { SignoffMenu } from './components/signoff-menu';
+import { TranslateMenu } from './components/translate-menu';
 // 改为通过 API 路由调用，避免前端解析服务端依赖
 import {
-    extractBilingualSyntaxMarkersAction,
-    evaluateSyntaxAction,
-    embedSyntaxAdviceAction,
-    runQualityAssureAction,
+    runQualityAssureAction
 } from '@/actions/quality-assure';
 // 改为通过 API 路由调用，避免前端解析服务端依赖
 import {
     savePreTranslateResultsAction,
     saveQualityAssureResultsAction,
 } from '@/actions/intermediate-results';
-import { useTranslationLanguage } from '@/hooks/useTranslation';
 import { useChatbarContent, useChatbarStream, useRightPanel } from '@/hooks/useRightPanel';
+import { useTranslationLanguage } from '@/hooks/useTranslation';
 
-import { useLogger } from '@/hooks/useLogger';
-import { useAgentWorkflowSteps } from '@/hooks/useAgentWorkflowSteps';
-import { Message } from '@/types/chat';
-import { useEffect, useRef, useState } from 'react';
-import { getLanguageByCode, getLanguageLabelByCode } from '@/utils/translate';
-import { useExplorerTabs } from '@/hooks/useExplorerTabs';
-import type { DocumentItemTab } from '@/types/explorerTabs';
 import {
-    getContentByIdAction,
-    updateTranslationAction,
-    updateDocItemStatusAction,
+    updateDocItemStatusAction
 } from '@/actions/document-item';
 import { recordGoToNextTranslationProcessEventAction } from '@/actions/translation-process-event';
+import { useAgentWorkflowSteps } from '@/hooks/useAgentWorkflowSteps';
+import { useExplorerTabs } from '@/hooks/useExplorerTabs';
+import { useLogger } from '@/hooks/useLogger';
+import type { DocumentItemTab } from '@/types/explorerTabs';
+import { useEffect, useRef, useState } from 'react';
 
 import { useActiveDocumentItem } from '@/hooks/useActiveDocumentItem';
 import { useRunningState } from '@/hooks/useRunning';
 import { useUserSettings } from '@/hooks/useUserSettings';
+import { createLogger } from '@/lib/logger';
 import { useSession } from 'next-auth/react';
 import { useLocale } from 'next-intl';
-import BatchProgressDialog from './components/batch-progress-dialog';
 import { useState as useReactState } from 'react';
 import { KeyboardShortcutsDialog, type ShortcutItem } from '../keyboard-shortcuts-dialog';
 import { PreferencesDialog } from '../preferences-dialog';
-
+import BatchProgressDialog from './components/batch-progress-dialog';
+const logger = createLogger({
+    type: 'action:action-section',
+}, {
+    json: false,// 开启json格式输出
+    pretty: false, // 关闭开发环境美化输出
+    colors: true, // 仅当json：false时启用颜色输出可用
+    includeCaller: false, // 日志不包含调用者
+});
 export function ActionSection() {
     // 在组件顶层获取所有需要的状态
     const {
@@ -146,7 +146,7 @@ export function ActionSection() {
                 }));
                 return changed ? { ...prev, documentTabs: nextTabs } : prev;
             });
-        } catch {}
+        } catch { }
     };
 
     const handleAutoRun = async (_currentStage: string) => {
@@ -196,7 +196,7 @@ export function ActionSection() {
                             ).then(r => r.json());
                             setBatchProgress(p.percent);
                             if (p.percent >= 100) break;
-                        } catch {}
+                        } catch { }
                         await new Promise(res => setTimeout(res, 1000));
                     }
                     try {
@@ -205,7 +205,7 @@ export function ActionSection() {
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ batchId }),
                         });
-                    } catch {}
+                    } catch { }
                 }
                 setBatchOpen(false);
             }
@@ -242,7 +242,7 @@ export function ActionSection() {
                             ).then(r => r.json());
                             setBatchProgress(p.percent);
                             if (p.percent >= 100) break;
-                        } catch {}
+                        } catch { }
                         await new Promise(res => setTimeout(res, 1000));
                     }
                     try {
@@ -251,7 +251,7 @@ export function ActionSection() {
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ batchId: qaId }),
                         });
-                    } catch {}
+                    } catch { }
                 }
                 setBatchOpen(false);
             }
@@ -267,7 +267,7 @@ export function ActionSection() {
                 if (it.status !== 'POST_EDIT' && it.status !== 'SIGN_OFF') {
                     try {
                         await updateDocItemStatusAction(it.id, 'POST_EDIT');
-                    } catch {}
+                    } catch { }
                 }
                 donePE += 1;
                 setBatchProgress(Math.round((donePE / totalPE) * 100));
@@ -275,7 +275,7 @@ export function ActionSection() {
             try {
                 if ((activeDocumentItem as any)?.id)
                     await updateDocItemStatusAction((activeDocumentItem as any)?.id, 'POST_EDIT');
-            } catch {}
+            } catch { }
 
             // 4) 签发（标记 SIGN_OFF）}
             setProgressTitle('批量签发中');
@@ -288,7 +288,7 @@ export function ActionSection() {
                 if (it.status !== 'SIGN_OFF') {
                     try {
                         await updateDocItemStatusAction(it.id, 'SIGN_OFF');
-                    } catch {}
+                    } catch { }
                 }
                 doneSG += 1;
                 setBatchProgress(Math.round((doneSG / totalSG) * 100));
@@ -296,14 +296,14 @@ export function ActionSection() {
             try {
                 if ((activeDocumentItem as any)?.id)
                     await updateDocItemStatusAction((activeDocumentItem as any)?.id, 'SIGN_OFF');
-            } catch {}
+            } catch { }
             // 刷新左侧视图
             try {
                 const tabsRes = await fetch(
                     `/api/explorer-tabs?projectId=${encodeURIComponent((explorerTabs as any)?.projectId || '')}`
                 ).then(r => r.json());
                 setExplorerTabs(tabsRes);
-            } catch {}
+            } catch { }
             setCurrentStage('SIGN_OFF' as any);
             // 5) 完成（标记 COMPLETED）
             setProgressTitle('批量完成中');
@@ -322,7 +322,7 @@ export function ActionSection() {
                             'HUMAN',
                             'SUCCESS'
                         );
-                    } catch {}
+                    } catch { }
                 }
                 doneSG1 += 1;
                 setBatchProgress(Math.round((doneSG1 / totalSG1) * 100));
@@ -337,7 +337,7 @@ export function ActionSection() {
                         'SUCCESS'
                     );
                 }
-            } catch {}
+            } catch { }
 
             // 刷新左侧视图
             try {
@@ -345,7 +345,7 @@ export function ActionSection() {
                     `/api/explorer-tabs?projectId=$    {encodeURIComponent((explorerTabs as any)?.projectId || '')}`
                 ).then(r => r.json());
                 setExplorerTabs(tabsRes);
-            } catch {}
+            } catch { }
             setCurrentStage('COMPLETED' as any);
         } finally {
             setBatchOpen(false);
@@ -355,7 +355,7 @@ export function ActionSection() {
     };
 
     useEffect(() => {
-        // console.log(sourceLanguage, targetLanguage);
+        // logger.debug(sourceLanguage, targetLanguage);
     }, [sourceLanguage, targetLanguage]);
 
     const setPreRunning = useAgentWorkflowSteps((s: any) => s.setPreRunning);
@@ -461,7 +461,7 @@ export function ActionSection() {
             // 无论编辑器是否存在都写入状态并同步本地视图
             try {
                 await updateDocItemStatusAction((activeDocumentItem as any)?.id, 'MT');
-            } catch {}
+            } catch { }
             syncLocalStatusById((activeDocumentItem as any)?.id, 'MT');
 
             // 更新目标编辑器与提示
@@ -471,7 +471,7 @@ export function ActionSection() {
                 logAgent('翻译完成');
             }
         } catch (error) {
-            console.error('翻译失败:', error);
+            logger.error('翻译失败:', error);
             toast.error('翻译失败：请检查网络连接或稍后再试');
             logError(`翻译失败: ${error}`);
         } finally {
@@ -546,7 +546,7 @@ export function ActionSection() {
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ batchId }),
                             });
-                        } catch {}
+                        } catch { }
 
                         setIsRunning(false);
                         setCurrentStage('MT' as any);
@@ -567,10 +567,10 @@ export function ActionSection() {
                                 `/api/explorer-tabs?projectId=${encodeURIComponent((explorerTabs as any)?.projectId || '')}`
                             ).then(r => r.json());
                             setExplorerTabs(tabs);
-                        } catch {}
+                        } catch { }
                         setBatchJobId(undefined);
                     }
-                } catch {}
+                } catch { }
                 if (tries > 600) {
                     clearInterval(timer);
                     setBatchOpen(false);
@@ -581,7 +581,7 @@ export function ActionSection() {
                 }
             }, 1000);
         } catch (e) {
-            console.error('批量翻译启动或轮询失败:', e);
+            logger.error('批量翻译启动或轮询失败:', e);
             setIsRunning(false);
             setCurrentOperation('idle');
             setBatchOpen(false);
@@ -706,7 +706,7 @@ export function ActionSection() {
                 toast.success('质检完成：翻译质检已完成');
             }
         } catch (error: any) {
-            console.error('质检失败:', error);
+            logger.error('质检失败:', error);
 
             // 提供更详细的错误信息
             let errorMessage = '质检失败：请检查网络连接或稍后再试';
@@ -820,10 +820,10 @@ export function ActionSection() {
                                         'SUCCESS'
                                     );
                                 } catch (e) {
-                                    console.error(`更新分段 ${item.id} 状态失败:`, e);
+                                    logger.error(`更新分段 ${item.id} 状态失败:`, e);
                                 }
                             }
-                        } catch {}
+                        } catch { }
 
                         setIsRunning(false);
                         setCurrentStage('QA_REVIEW' as any);
@@ -844,10 +844,10 @@ export function ActionSection() {
                                 `/api/explorer-tabs?projectId=${encodeURIComponent((explorerTabs as any)?.projectId || '')}`
                             ).then(r => r.json());
                             setExplorerTabs(tabs);
-                        } catch {}
+                        } catch { }
                         setBatchJobId(undefined);
                     }
-                } catch {}
+                } catch { }
                 if (tries > 600) {
                     // 最长 10 分钟
                     clearInterval(timer);
@@ -904,7 +904,7 @@ export function ActionSection() {
                         'SUCCESS'
                     );
                 } catch (e) {
-                    console.error(`签发分段 ${it.id} 失败:`, e);
+                    logger.error(`签发分段 ${it.id} 失败:`, e);
                 }
                 done += 1;
                 setBatchProgress(Math.round((done / totalToSignoff) * 100));
@@ -920,7 +920,7 @@ export function ActionSection() {
                         setCurrentStage('SIGN_OFF' as any);
                     }
                 }
-            } catch {}
+            } catch { }
 
             // 本地同步（只更新处理过的分段）
             setExplorerTabs((prev: any) => {
@@ -1017,7 +1017,7 @@ export function ActionSection() {
                                     )
                                 );
                                 if (p.percent >= 100) break;
-                            } catch {}
+                            } catch { }
                             await new Promise(res => setTimeout(res, 1000));
                         }
                         try {
@@ -1026,10 +1026,10 @@ export function ActionSection() {
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ batchId }),
                             });
-                        } catch {}
+                        } catch { }
                     }
                 } catch (error) {
-                    console.error('批量预译失败:', error);
+                    logger.error('批量预译失败:', error);
                 }
             }
 
@@ -1072,11 +1072,11 @@ export function ActionSection() {
                                     Math.round(
                                         ((preTranslateProgress + currentQaProgress) /
                                             totalToProcess) *
-                                            100
+                                        100
                                     )
                                 );
                                 if (p.percent >= 100) break;
-                            } catch {}
+                            } catch { }
                             await new Promise(res => setTimeout(res, 1000));
                         }
                         try {
@@ -1085,10 +1085,10 @@ export function ActionSection() {
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ batchId }),
                             });
-                        } catch {}
+                        } catch { }
                     }
                 } catch (error) {
-                    console.error('批量评估失败:', error);
+                    logger.error('批量评估失败:', error);
                 }
             }
 
@@ -1203,7 +1203,7 @@ export function ActionSection() {
                         'SUCCESS'
                     );
                 } catch (error) {
-                    console.error(`处理分段 ${it.id} 失败:`, error);
+                    logger.error(`处理分段 ${it.id} 失败:`, error);
                 }
                 done += 1;
                 setBatchProgress(Math.round((done / totalToProcess) * 100));
@@ -1228,7 +1228,7 @@ export function ActionSection() {
                         );
                     }
                 }
-            } catch {}
+            } catch { }
 
             // 本地同步（仅当前页签）
             setExplorerTabs((prev: any) => {
@@ -1281,7 +1281,7 @@ export function ActionSection() {
         try {
             await updateDocItemStatusAction(id, m.to);
             if (m.prev) setCurrentStage(m.prev as any);
-        } catch {}
+        } catch { }
     };
 
     const advanceCurrent = async () => {
@@ -1297,7 +1297,7 @@ export function ActionSection() {
         try {
             await updateDocItemStatusAction(id, m.to);
             if (m.next) setCurrentStage(m.next as any);
-        } catch {}
+        } catch { }
     };
 
     // 全局快捷键：⌘B 批量预译；⌘E 批量评估；⌘⇧S 批量签发
@@ -1323,7 +1323,7 @@ export function ActionSection() {
                 e.preventDefault();
                 // 调用批量译后编辑
                 // TODO: 需要实现批量译后编辑功能
-                console.log('批量译后编辑快捷键触发');
+                logger.debug('批量译后编辑快捷键触发');
                 return;
             }
             // ⌘⇧S
@@ -1361,7 +1361,7 @@ export function ActionSection() {
                         .then(() => {
                             if (m.prev) setCurrentStage(m.prev as any);
                         })
-                        .catch(() => {});
+                        .catch(() => { });
                 }
                 return;
             }
@@ -1382,7 +1382,7 @@ export function ActionSection() {
                         .then(() => {
                             if (m.next) setCurrentStage(m.next as any);
                         })
-                        .catch(() => {});
+                        .catch(() => { });
                 }
                 return;
             }
@@ -1397,7 +1397,7 @@ export function ActionSection() {
     };
 
     const postEditCurrentContent = async () => {
-        console.log('译后编辑');
+        logger.debug('译后编辑');
         setCurrentOperation('post_edit');
         setIsRunning(true);
         // try { await
@@ -1450,7 +1450,7 @@ export function ActionSection() {
                             ).then(r => r.json());
                             setBatchProgress(p.percent);
                             if (p.percent >= 100) break;
-                        } catch {}
+                        } catch { }
                         await new Promise(res => setTimeout(res, 1000));
                     }
                     try {
@@ -1459,9 +1459,9 @@ export function ActionSection() {
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ batchId }),
                         });
-                    } catch {}
+                    } catch { }
                 }
-            } catch {}
+            } catch { }
 
             // 2) 批量评估
             setCurrentOperation('evaluate_batch');
@@ -1484,7 +1484,7 @@ export function ActionSection() {
                             ).then(r => r.json());
                             setBatchProgress(p.percent);
                             if (p.percent >= 100) break;
-                        } catch {}
+                        } catch { }
                         await new Promise(res => setTimeout(res, 1000));
                     }
                     try {
@@ -1493,9 +1493,9 @@ export function ActionSection() {
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ batchId }),
                         });
-                    } catch {}
+                    } catch { }
                 }
-            } catch {}
+            } catch { }
 
             // 3) 标记译后→签发（当前页签）
             setProgressTitle('批量签发中');
@@ -1505,17 +1505,17 @@ export function ActionSection() {
             for (const it of items) {
                 try {
                     await updateDocItemStatusAction(it.id, 'POST_EDIT');
-                } catch {}
+                } catch { }
                 try {
                     await updateDocItemStatusAction(it.id, 'SIGN_OFF');
-                } catch {}
+                } catch { }
                 done += 1;
                 setBatchProgress(Math.round((done / total) * 100));
             }
             try {
                 if ((activeDocumentItem as any)?.id)
                     await updateDocItemStatusAction((activeDocumentItem as any)?.id, 'SIGN_OFF');
-            } catch {}
+            } catch { }
             // 本地同步（仅当前页签）
             setExplorerTabs((prev: any) => {
                 if (!prev?.documentTabs) return prev;
@@ -1690,7 +1690,7 @@ export function ActionSection() {
                                         'SUCCESS'
                                     );
                                 } catch (e) {
-                                    console.error(`更新分段 ${it.id} 状态失败:`, e);
+                                    logger.error(`更新分段 ${it.id} 状态失败:`, e);
                                 }
                                 done += 1;
                                 setBatchProgress(Math.round((done / total) * 100));
@@ -1707,7 +1707,7 @@ export function ActionSection() {
                                         setCurrentStage('POST_EDIT' as any);
                                     }
                                 }
-                            } catch {}
+                            } catch { }
 
                             // 刷新左侧视图
                             try {
@@ -1715,7 +1715,7 @@ export function ActionSection() {
                                     `/api/explorer-tabs?projectId=${encodeURIComponent((explorerTabs as any)?.projectId || '')}`
                                 ).then(r => r.json());
                                 setExplorerTabs(tabsRes);
-                            } catch {}
+                            } catch { }
 
                             setBatchOpen(false);
                             toast.success(`批量译后编辑完成：共处理 ${total} 个分段`);
@@ -1749,7 +1749,7 @@ export function ActionSection() {
                                     'HUMAN',
                                     'SUCCESS'
                                 );
-                            } catch {}
+                            } catch { }
                             setExplorerTabs((prev: any) => {
                                 if (!prev?.documentTabs) return prev;
                                 return {
@@ -1812,7 +1812,7 @@ export function ActionSection() {
                                         'SUCCESS'
                                     );
                                 } catch (e) {
-                                    console.error(`签发分段 ${it.id} 失败:`, e);
+                                    logger.error(`签发分段 ${it.id} 失败:`, e);
                                 }
                                 done += 1;
                                 setBatchProgress(Math.round((done / totalToSignoff) * 100));
@@ -1828,7 +1828,7 @@ export function ActionSection() {
                                         setCurrentStage('SIGN_OFF' as any);
                                     }
                                 }
-                            } catch {}
+                            } catch { }
 
                             // 本地同步（只更新处理过的分段）
                             setExplorerTabs((prev: any) => {
@@ -1889,7 +1889,7 @@ export function ActionSection() {
                                 await cancelJobAction(id);
                             }
                         }
-                    } catch {}
+                    } catch { }
                 }}
                 title={progressTitle || '批量处理中'}
             />

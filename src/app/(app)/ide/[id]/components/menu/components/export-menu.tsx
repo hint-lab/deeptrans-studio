@@ -1,23 +1,29 @@
 'use client';
 import {
-    MenubarMenu,
-    MenubarTrigger,
     MenubarContent,
     MenubarItem,
+    MenubarMenu,
+    MenubarRadioGroup,
+    MenubarRadioItem,
     MenubarSeparator,
     MenubarSub,
     MenubarSubContent,
     MenubarSubTrigger,
-    MenubarRadioGroup,
-    MenubarRadioItem,
+    MenubarTrigger,
 } from '@/components/ui/menubar';
-import { useExplorerTabs } from '@/hooks/useExplorerTabs';
 import { useActiveDocumentItem } from '@/hooks/useActiveDocumentItem';
-import { cn } from '@/lib/utils';
-import { FileDown } from 'lucide-react';
-import { useState } from 'react';
+import { useExplorerTabs } from '@/hooks/useExplorerTabs';
+import { createLogger } from '@/lib/logger';
 import { useTranslations } from 'next-intl';
-
+import { useState } from 'react';
+const logger = createLogger({
+    type: 'ide:export-menu',
+}, {
+    json: false,// 开启json格式输出
+    pretty: false, // 关闭开发环境美化输出
+    colors: true, // 仅当json：false时启用颜色输出可用
+    includeCaller: false, // 日志不包含调用者
+});
 export function ExportMenu() {
     const t = useTranslations('IDE.menus.export');
     const { explorerTabs } = useExplorerTabs();
@@ -28,9 +34,8 @@ export function ExportMenu() {
     const currentTab = tabs.find((t: any) => (t.items ?? []).some((it: any) => it.id === aid));
     const items: any[] = (currentTab?.items ?? []) as any[];
     const canExport = items.length > 0 && items.every((it: any) => it.status === 'COMPLETED');
-    console.log('canExport:' + canExport + ',' + items.length);
     const docId = (currentTab as any)?.id || '';
-    console.log('docId:' + docId);
+    logger.debug('canExport:' + canExport + ',段落个数:' + items.length, 'docId:' + docId);
     return (
         <MenubarMenu>
             <MenubarTrigger>

@@ -1,14 +1,22 @@
 'use client';
 
-import { useEffect, useState, use as usePromise } from 'react';
-import { useRouter } from 'next/navigation';
+import { fetchDictionaryMetaByProjectIdAction } from '@/actions/dictionary';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { DictionaryEntriesManager } from '../../components/dictionary-entries-manager';
+import { createLogger } from '@/lib/logger';
 import { type DictionaryVisibility } from '@prisma/client';
-import { fetchDictionaryMetaByProjectIdAction } from '@/actions/dictionary';
+import { useRouter } from 'next/navigation';
+import { useEffect, use as usePromise, useState } from 'react';
 import { toast } from 'sonner';
-
+import { DictionaryEntriesManager } from '../../components/dictionary-entries-manager';
+const logger = createLogger({
+    type: 'dictionaries:page',
+}, {
+    json: false,// 开启json格式输出
+    pretty: false, // 关闭开发环境美化输出
+    colors: true, // 仅当json：false时启用颜色输出可用
+    includeCaller: false, // 日志不包含调用者
+});
 export default function DictionaryDetailPage({
     params,
 }: {
@@ -26,9 +34,10 @@ export default function DictionaryDetailPage({
             try {
                 const res = await fetchDictionaryMetaByProjectIdAction(projectId);
                 const d = (res as any)?.data;
-                console.log('Fetched dictionary data: ', JSON.stringify(res));
+                logger.info('Fetched dictionary data: ', JSON.stringify(res));
                 if (!res?.success || !d) {
                     toast('加载失败：未找到该词库', { description: '请检查词库ID是否正确' });
+                    logger.info('加载失败：未找到该词库 ', { description: '请检查词库ID是否正确' });
                     router.push('/dashboard/dictionaries');
                     return;
                 }

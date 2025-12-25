@@ -1,15 +1,15 @@
+import { auth } from '@/auth';
+import { Toaster } from '@/components/ui/sonner';
+import '@/styles/globals.css';
 import { GeistSans } from 'geist/font/sans';
 import { type Metadata } from 'next';
 import { SessionProvider } from 'next-auth/react';
-import { auth } from '@/auth';
-import '@/styles/globals.css';
-import { ThemeProvider as NextThemeProvider } from 'next-themes';
-import { Toaster } from '@/components/ui/sonner';
 import { NextIntlClientProvider } from 'next-intl';
 import { getLocale, getMessages } from 'next-intl/server';
+import { ThemeProvider as NextThemeProvider } from 'next-themes';
 // 导入TooltipProvider
 import { TooltipProvider } from '@/components/ui/tooltip';
-
+import { createLogger } from '@/lib/logger';
 // 设置页面元数据
 export const metadata: Metadata = {
     title: 'DeepTrans Studio App',
@@ -26,9 +26,17 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     const session = await auth();
     const locale = await getLocale();
     const messages = await getMessages();
-    //console.log("服务端Session数据:", session);
-    console.log(
-        '服务端过期时间:',
+    // --- 1. 日志记录设置 ---
+    const logger = createLogger({
+        type: 'layout:root',
+    }, {
+        json: false,// 开启json格式输出
+        pretty: false, // 关闭开发环境美化输出
+        colors: true, // 仅当json：false时启用颜色输出可用
+        includeCaller: false, // 日志不包含调用者
+    });
+    logger.debug(
+        'Server Page session过期时间:',
         session?.expires ? new Date(session.expires).toLocaleString() : '未设置'
     );
     return (

@@ -1,45 +1,43 @@
 // middleware.ts
-import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
-import { createRequestLogger } from '@/lib/logger';
 import { auth } from '@/auth';
+import { createLogger } from '@/lib/logger';
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 
 export async function middleware(request: NextRequest) {
     const url = request.nextUrl;
-    const searchParams = url.searchParams;
-    const rscParam = searchParams.get('_rsc');
-
     // --- 1. 日志记录设置 ---
-    const requestId =
-        request.headers.get('x-request-id') ||
-        rscParam ||
-        'nonce-' + Math.random().toString(36).substring(2, 15);
-
-    const logger = createRequestLogger(requestId, {
+    const logger = createLogger({
+        type: 'middleware:auth',
         method: request.method,
         path: request.nextUrl.pathname,
         ip: request.headers.get('x-forwarded-for') ?? undefined,
         userAgent: request.headers.get('user-agent') ?? undefined,
         referer: request.headers.get('referer') ?? undefined,
+    }, {
+        json: false,// 开启json格式输出
+        pretty: false, // 关闭开发环境美化输出
+        colors: true, // 仅当json：false时启用颜色输出可用
+        includeCaller: false, // 日志不包含调用者
     });
-
     // 记录 Action Body (保持不变)
     if (request.method === 'POST' && request.headers.get('next-action')) {
         const cloned = request.clone();
+        const body = await cloned.text();
         try {
-            const body = await cloned.text();
             const parsed = JSON.parse(body);
-            logger.info('解析后的Action Body参数:', parsed);
+            logger.debug(`解析后的Action Body参数:${parsed}`,);
         } catch (e) {
             // 可能是 FormData 或其他非 JSON body，仅记录错误
-            logger.error({ message: 'Action Body解析失败', error: e });
+            const b = body as any;
+            logger.debug('解析后的Action Body参数:', b);
+            logger.debug({ message: 'Action Body解析失败', error: e });
         }
     }
 
-    logger.info('Request started');
-
     // --- 2. 认证检查 ---
     const session = await auth();
+    logger.debug("中间件拦截的session:", session, "当前时间:", new Date().toLocaleString());
     const { pathname } = request.nextUrl;
 
     // 公共路径（无需认证，用于精确匹配）
@@ -91,13 +89,11 @@ export async function middleware(request: NextRequest) {
         }
 
         // 5. 有效会话，通过
-        logger.info(`会话有效，用户: ${session.user.email ?? 'N/A'}`);
+        logger.debug(`会话有效，用户: ${session.user.email ?? 'N/A'}`);
         return NextResponse.next();
     } catch (error) {
         logger.error({ message: 'Middleware error', error });
         return NextResponse.redirect(new URL('/auth/login', request.url));
-    } finally {
-        logger.info('Request ended');
     }
 }
 

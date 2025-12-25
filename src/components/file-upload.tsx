@@ -1,10 +1,18 @@
 import { getUploadUrlAction, uploadFileAction } from '@/actions/upload';
 import { Button } from '@/components/ui/button';
+import { createLogger } from '@/lib/logger';
 import { useTranslations } from 'next-intl';
 import { useCallback, useState } from 'react';
 import { FileRejection, useDropzone } from 'react-dropzone';
 import { toast } from 'sonner';
-
+const logger = createLogger({
+    type: 'components:file-upload',
+}, {
+    json: false,// 开启json格式输出
+    pretty: false, // 关闭开发环境美化输出
+    colors: true, // 仅当json：false时启用颜色输出可用
+    includeCaller: false, // 日志不包含调用者
+});
 interface FileUploadProps {
     onUploadComplete: (fileInfo: {
         fileName: string;
@@ -58,11 +66,11 @@ export function FileUpload({
     const uploadFile = useCallback(
         async (file: File) => {
             if (!file) {
-                console.error(t('noFileSelected'));
+                logger.error(t('noFileSelected'));
                 return;
             }
 
-            console.log(t('uploadStarted'), {
+            logger.debug(t('uploadStarted'), {
                 name: file.name,
                 type: file.type,
                 size: file.size,
@@ -85,7 +93,7 @@ export function FileUpload({
             try {
                 // 1. 获取预签名上传 URL
                 const result = await getUploadUrlAction(file.name, file.type, projectName.trim());
-                console.log(t('getUrlResult'), result);
+                logger.debug(t('getUrlResult'), result);
 
                 if (!result.success || !result.data) {
                     throw new Error(result.error || t('getUrlFailed'));
@@ -94,7 +102,7 @@ export function FileUpload({
                 const { data } = result;
 
                 // 2. 先尝试直接上传（浏览器直传）
-                console.log(t('uploadingToStorage'), data.uploadUrl);
+                logger.debug(t('uploadingToStorage'), data.uploadUrl);
                 let directOk = false;
                 try {
                     const uploadResponse = await fetch(data.uploadUrl, {
@@ -107,14 +115,14 @@ export function FileUpload({
                     });
                     directOk = uploadResponse.ok;
                     if (!uploadResponse.ok) {
-                        console.warn(
+                        logger.warn(
                             t('directUploadWarning'),
                             uploadResponse.status,
                             uploadResponse.statusText
                         );
                     }
                 } catch (err) {
-                    console.warn(t('directUploadFailed'), err);
+                    logger.warn(t('directUploadFailed'), err);
                 }
 
                 // 3. 回退：Server Action 直传（优先于 /api 代理）
@@ -146,7 +154,7 @@ export function FileUpload({
                     return;
                 }
 
-                console.log(t('uploadSuccess'));
+                logger.debug(t('uploadSuccess'));
                 const fileInfo = {
                     fileName: data.fileName,
                     originalName: data.originalName,
@@ -159,7 +167,7 @@ export function FileUpload({
 
                 toast.success(t('uploadSuccess'));
             } catch (error) {
-                console.error(t('uploadFailed'), error);
+                logger.error(t('uploadFailed'), error);
                 toast.error(error instanceof Error ? error.message : t('uploadFailed'));
             } finally {
                 setIsUploading(false);
@@ -170,7 +178,7 @@ export function FileUpload({
 
     const onDrop = useCallback(
         (acceptedFiles: File[]) => {
-            console.log(t('fileDrop'), acceptedFiles);
+            logger.debug(t('fileDrop'), acceptedFiles);
             if (acceptedFiles.length === 0) return;
 
             // 重置上传状态

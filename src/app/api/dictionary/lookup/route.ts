@@ -1,5 +1,13 @@
+import { createLogger } from '@/lib/logger';
 import { NextResponse } from 'next/server';
-
+const logger = createLogger({
+    type: 'request:dictionary',
+}, {
+    json: false,// 开启json格式输出
+    pretty: false, // 关闭开发环境美化输出
+    colors: true, // 仅当json：false时启用颜色输出可用
+    includeCaller: false, // 日志不包含调用者
+});
 export async function GET(request: Request) {
     try {
         const { searchParams } = new URL(request.url);
@@ -9,10 +17,10 @@ export async function GET(request: Request) {
         const limitParam = searchParams.get('limit');
         const limit = Math.max(1, Math.min(200, Number(limitParam || 50) || 50));
 
-        console.log('Dictionary API lookup called:', { q, tenantId, userId, limit });
+        logger.debug('Dictionary API lookup called:', { q, tenantId, userId, limit });
 
         if (!q) {
-            console.log('Dictionary API: No query term provided');
+            logger.debug('Dictionary API: No query term provided');
             return NextResponse.json({ data: [] });
         }
 
@@ -23,12 +31,12 @@ export async function GET(request: Request) {
         else orScopes.push({ visibility: 'PROJECT' as any });
         if (userId) orScopes.push({ visibility: 'PRIVATE' as any, userId });
 
-        console.log('Dictionary API: Query scopes:', orScopes);
+        logger.debug('Dictionary API: Query scopes:', orScopes);
 
         const { findExactByScopeDB } = await import('@/db/dictionaryEntry');
         const rows = await findExactByScopeDB(q, orScopes, limit);
 
-        console.log('Dictionary API: Query result:', {
+        logger.debug('Dictionary API: Query result:', {
             rowsCount: rows?.length,
             rows: rows?.slice(0, 3),
         });
@@ -45,14 +53,14 @@ export async function GET(request: Request) {
                 : undefined,
         }));
 
-        console.log('Dictionary API: Final response:', {
+        logger.debug('Dictionary API: Final response:', {
             dataCount: data?.length,
             data: data?.slice(0, 3),
         });
 
         return NextResponse.json({ data });
     } catch (e: any) {
-        console.error('[API] dictionary/lookup error:', e);
+        logger.error('[API] dictionary/lookup error:', e);
         return NextResponse.json({ error: e?.message || 'lookup failed' }, { status: 500 });
     }
 }

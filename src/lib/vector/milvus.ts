@@ -1,12 +1,20 @@
-import { MilvusClient as MilvusClientCtor, DataType, IndexType } from '@zilliz/milvus2-sdk-node';
+import { createLogger } from '@/lib/logger';
 import {
+    BM25Result,
+    DEFAULT_HYBRID_CONFIG,
     HybridSearchConfig,
     SearchResult,
-    BM25Result,
     VectorResult,
-    DEFAULT_HYBRID_CONFIG,
 } from '@/types/hybrid-search';
-
+import { DataType, IndexType, MilvusClient as MilvusClientCtor } from '@zilliz/milvus2-sdk-node';
+const logger = createLogger({
+    type: 'lib:milvus',
+}, {
+    json: false,// 开启json格式输出
+    pretty: false, // 关闭开发环境美化输出
+    colors: true, // 仅当json：false时启用颜色输出可用
+    includeCaller: false, // 日志不包含调用者
+});
 type MilvusClient = InstanceType<typeof MilvusClientCtor>;
 
 type MilvusStatsEntry = { key?: string; value?: string | number | null };
@@ -48,7 +56,7 @@ export async function ensureCollection(params: {
     const metric = params.metric || 'COSINE';
     const exists = await c.hasCollection({ collection_name: params.collection });
     if (!exists.value) {
-        console.log(`[MILVUS] Creating collection: ${params.collection} with dim: ${params.dim}`);
+        logger.info(`[MILVUS] Creating collection: ${params.collection} with dim: ${params.dim}`);
         await c.createCollection({
             collection_name: params.collection,
             fields: [
@@ -63,7 +71,7 @@ export async function ensureCollection(params: {
             ],
             consistency_level: 'Session',
         });
-        console.log(`[MILVUS] Collection created successfully`);
+        logger.info(`[MILVUS] Collection created successfully`);
     } else {
         // 校验既有集合的字段与维度是否兼容；不兼容则删除重建（仅用于 smoke/开发环境）
         try {
@@ -94,7 +102,7 @@ export async function ensureCollection(params: {
             ) {
                 try {
                     await c.releaseCollection({ collection_name: params.collection });
-                } catch {}
+                } catch { }
                 await c.dropCollection({ collection_name: params.collection });
                 await c.createCollection({
                     collection_name: params.collection,
@@ -116,11 +124,11 @@ export async function ensureCollection(params: {
                     consistency_level: 'Session',
                 });
             }
-        } catch {}
+        } catch { }
     }
     // 建索引
     try {
-        console.log(`[MILVUS] Creating index for collection: ${params.collection}`);
+        logger.info(`[MILVUS] Creating index for collection: ${params.collection}`);
         await c.createIndex({
             collection_name: params.collection,
             field_name: 'vector',
@@ -129,14 +137,14 @@ export async function ensureCollection(params: {
             metric_type: metric as any,
             params: { M: 16, efConstruction: 200 },
         });
-        console.log(`[MILVUS] Index created successfully`);
+        logger.info(`[MILVUS] Index created successfully`);
     } catch (e) {
-        console.log(`[MILVUS] Index creation warning:`, e);
+        logger.info(`[MILVUS] Index creation warning:`, e);
     }
 
-    console.log(`[MILVUS] Loading collection: ${params.collection}`);
+    logger.info(`[MILVUS] Loading collection: ${params.collection}`);
     await c.loadCollectionSync({ collection_name: params.collection });
-    console.log(`[MILVUS] Collection loaded successfully`);
+    logger.info(`[MILVUS] Collection loaded successfully`);
 }
 
 export async function upsertVectors(params: {
@@ -145,7 +153,7 @@ export async function upsertVectors(params: {
 }) {
     try {
         const c = milvus();
-        console.log(
+        logger.info(
             `[MILVUS] Upserting ${params.points.length} points to collection: ${params.collection}`
         );
         await ensureCollection({
@@ -153,7 +161,7 @@ export async function upsertVectors(params: {
             dim: params.points[0]?.vector?.length || 1536,
         });
     } catch (initError: any) {
-        console.error(`[MILVUS] Initialization failed:`, initError);
+        logger.error(`[MILVUS] Initialization failed:`, initError);
         throw new Error(`Milvus 初始化失败: ${initError.message}`);
     }
 
@@ -165,12 +173,12 @@ export async function upsertVectors(params: {
             collection_name: params.collection,
         });
         const fields = desc?.schema?.fields || desc?.data?.schema?.fields || [];
-        console.log(
+        logger.info(
             `[MILVUS] Collection ${params.collection} fields:`,
             fields.map((f: any) => ({ name: f.name, type: f.data_type }))
         );
     } catch (e) {
-        console.log(`[MILVUS] Could not describe collection:`, e);
+        logger.info(`[MILVUS] Could not describe collection:`, e);
     }
 
     const entities = params.points.map(p => {
@@ -189,7 +197,7 @@ export async function upsertVectors(params: {
         return { id, text, vector, meta };
     });
 
-    console.log(`[MILVUS] Inserting sample entity:`, {
+    logger.info(`[MILVUS] Inserting sample entity:`, {
         id: entities[0]?.id,
         idLength: entities[0]?.id?.length,
         textLength: entities[0]?.text?.length,
@@ -211,7 +219,7 @@ export async function upsertVectors(params: {
     );
 
     if (invalidEntities.length > 0) {
-        console.error(
+        logger.error(
             `[MILVUS] Found ${invalidEntities.length} invalid entities:`,
             invalidEntities.slice(0, 3)
         );
@@ -220,7 +228,7 @@ export async function upsertVectors(params: {
 
     try {
         const insertRes = await c.insert({ collection_name: params.collection, data: entities });
-        console.log(`[MILVUS] Insert result:`, {
+        logger.info(`[MILVUS] Insert result:`, {
             succ_index: insertRes?.succ_index?.length || 0,
             err_index: insertRes?.err_index?.length || 0,
             insert_cnt: insertRes?.insert_cnt,
@@ -229,16 +237,16 @@ export async function upsertVectors(params: {
 
         // 检查插入是否成功
         if (insertRes?.err_index?.length > 0) {
-            console.error(`[MILVUS] Insert errors:`, insertRes);
+            logger.error(`[MILVUS] Insert errors:`, insertRes);
             throw new Error(
                 `插入失败: ${insertRes.err_index.length} 条记录出错，详细信息请查看日志`
             );
         }
 
         // 强制刷新并等待完成
-        console.log(`[MILVUS] Flushing collection...`);
+        logger.info(`[MILVUS] Flushing collection...`);
         const flushRes = await c.flush({ collection_names: [params.collection] });
-        console.log(`[MILVUS] Flush result status:`, flushRes?.status?.error_code);
+        logger.info(`[MILVUS] Flush result status:`, flushRes?.status?.error_code);
 
         // 等待数据真正持久化 - 使用更长的等待时间和更频繁的检查
         let retries = 20;
@@ -252,23 +260,23 @@ export async function upsertVectors(params: {
                     collection_name: params.collection,
                 });
                 const rowCount = getRowCountFromStats(stats);
-                console.log(
+                logger.info(
                     `[MILVUS] Collection stats check ${21 - retries}: row_count = ${rowCount}, target = ${entities.length}`
                 );
 
                 if (rowCount >= entities.length) {
-                    console.log(`[MILVUS] ✅ Data confirmed persisted, row_count: ${rowCount}`);
+                    logger.info(`[MILVUS] ✅ Data confirmed persisted, row_count: ${rowCount}`);
                     break;
                 }
 
                 // 如果行数有增长，说明在进展中
                 if (rowCount > lastRowCount) {
-                    console.log(`[MILVUS] Progress detected: ${lastRowCount} -> ${rowCount}`);
+                    logger.info(`[MILVUS] Progress detected: ${lastRowCount} -> ${rowCount}`);
                     lastRowCount = rowCount;
                     retries = Math.max(retries, 5); // 重置等待时间
                 }
             } catch (statsError) {
-                console.log(`[MILVUS] Stats check failed:`, statsError);
+                logger.info(`[MILVUS] Stats check failed:`, statsError);
             }
 
             retries--;
@@ -277,22 +285,22 @@ export async function upsertVectors(params: {
         // 最终检查
         const finalStats = await c.getCollectionStatistics({ collection_name: params.collection });
         const finalRowCount = getRowCountFromStats(finalStats);
-        console.log(`[MILVUS] Final row count: ${finalRowCount}/${entities.length}`);
+        logger.info(`[MILVUS] Final row count: ${finalRowCount}/${entities.length}`);
 
         if (finalRowCount === 0) {
-            console.warn(
+            logger.warn(
                 `[MILVUS] ⚠️  Warning: No data persisted to collection after insert and flush`
             );
         }
 
-        console.log(`[MILVUS] Insert and flush completed`);
+        logger.info(`[MILVUS] Insert and flush completed`);
     } catch (e: any) {
-        console.log(`[MILVUS] Insert failed, error:`, e?.message);
+        logger.info(`[MILVUS] Insert failed, error:`, e?.message);
         const msg = String(e?.message || e || '').toLowerCase();
         if (msg.includes('field') || msg.includes('dim') || msg.includes('schema')) {
             // 回退：删除并重建集合后重试一次（仅 smoke/dev）
             try {
-                console.log(`[MILVUS] Rebuilding collection due to field/schema error...`);
+                logger.info(`[MILVUS] Rebuilding collection due to field/schema error...`);
                 await c.dropCollection({ collection_name: params.collection });
                 await ensureCollection({
                     collection: params.collection,
@@ -300,9 +308,9 @@ export async function upsertVectors(params: {
                 });
                 await c.insert({ collection_name: params.collection, data: entities });
                 await c.flush({ collection_names: [params.collection] });
-                console.log(`[MILVUS] Insert successful after rebuild`);
+                logger.info(`[MILVUS] Insert successful after rebuild`);
             } catch (e2) {
-                console.log(`[MILVUS] Insert failed even after rebuild:`, e2);
+                logger.info(`[MILVUS] Insert failed even after rebuild:`, e2);
                 throw e2;
             }
         } else {
@@ -322,14 +330,14 @@ export async function searchVectors(params: {
     const c = milvus();
     const k = Math.max(1, Math.min(200, params.k || 10));
 
-    console.log(
+    logger.info(
         `[MILVUS] Searching in collection: ${params.collection}, k: ${k}, vector dim: ${params.vector.length}`
     );
 
     // 只确保集合存在，不重建 - 避免搜索时意外删除数据
     const exists = await c.hasCollection({ collection_name: params.collection });
     if (!exists.value) {
-        console.log(`[MILVUS] Collection ${params.collection} does not exist for search`);
+        logger.info(`[MILVUS] Collection ${params.collection} does not exist for search`);
         return [];
     }
 
@@ -337,15 +345,15 @@ export async function searchVectors(params: {
     try {
         await c.loadCollectionSync({ collection_name: params.collection });
         const stats = await c.getCollectionStatistics({ collection_name: params.collection });
-        console.log(`[MILVUS] Collection stats before search:`, stats);
+        logger.info(`[MILVUS] Collection stats before search:`, stats);
 
         const rowCount = getRowCountFromStats(stats);
         if (rowCount === 0) {
-            console.log(`[MILVUS] Collection is empty, skipping search`);
+            logger.info(`[MILVUS] Collection is empty, skipping search`);
             return [];
         }
     } catch (e) {
-        console.log(`[MILVUS] Load collection warning:`, e);
+        logger.info(`[MILVUS] Load collection warning:`, e);
     }
 
     // 等待一小段时间确保索引完成
@@ -364,7 +372,7 @@ export async function searchVectors(params: {
         expr: params.filter,
     } as any);
 
-    console.log(`[MILVUS] Search response:`, {
+    logger.info(`[MILVUS] Search response:`, {
         status: res?.status,
         resultsLength: res?.results?.length,
         firstResult: res?.results?.[0],
@@ -401,14 +409,14 @@ export async function searchKeywords(params: {
     const matchType = params.matchType || 'contains';
     const boostFactor = params.boostFactor || 1.0;
 
-    console.log(
+    logger.info(
         `[MILVUS] BM25 searching in collection: ${params.collection}, query: "${params.query}", k: ${k}`
     );
 
     // 检查集合是否存在
     const exists = await c.hasCollection({ collection_name: params.collection });
     if (!exists.value) {
-        console.log(`[MILVUS] Collection ${params.collection} does not exist for BM25 search`);
+        logger.info(`[MILVUS] Collection ${params.collection} does not exist for BM25 search`);
         return [];
     }
 
@@ -416,7 +424,7 @@ export async function searchKeywords(params: {
     try {
         await c.loadCollectionSync({ collection_name: params.collection });
     } catch (e) {
-        console.log(`[MILVUS] Load collection warning:`, e);
+        logger.info(`[MILVUS] Load collection warning:`, e);
     }
 
     // 构建关键词搜索表达式
@@ -481,10 +489,10 @@ export async function searchKeywords(params: {
             .sort((a, b) => b.score - a.score)
             .slice(0, k);
 
-        console.log(`[MILVUS] BM25 search found ${sortedResults.length} results`);
+        logger.info(`[MILVUS] BM25 search found ${sortedResults.length} results`);
         return sortedResults;
     } catch (error) {
-        console.error(`[MILVUS] BM25 search error:`, error);
+        logger.error(`[MILVUS] BM25 search error:`, error);
         return [];
     }
 }
@@ -569,7 +577,7 @@ export async function hybridSearch(params: {
     const config = { ...DEFAULT_HYBRID_CONFIG, ...params.config };
     const { query, collection, vector, filter } = params;
 
-    console.log(`[MILVUS] Hybrid search in collection: ${collection}, mode: ${config.mode}`);
+    logger.info(`[MILVUS] Hybrid search in collection: ${collection}, mode: ${config.mode}`);
 
     // 根据配置决定执行哪些检索
     const promises: Promise<any>[] = [];
@@ -592,10 +600,10 @@ export async function hybridSearch(params: {
                         ...r,
                         similarity: r.score,
                     }));
-                    console.log(`[MILVUS] Vector search found ${vectorResults.length} results`);
+                    logger.info(`[MILVUS] Vector search found ${vectorResults.length} results`);
                 })
                 .catch(error => {
-                    console.error(`[MILVUS] Vector search error:`, error);
+                    logger.error(`[MILVUS] Vector search error:`, error);
                     vectorResults = [];
                 })
         );
@@ -614,10 +622,10 @@ export async function hybridSearch(params: {
             })
                 .then(results => {
                     keywordResults = results;
-                    console.log(`[MILVUS] Keyword search found ${keywordResults.length} results`);
+                    logger.info(`[MILVUS] Keyword search found ${keywordResults.length} results`);
                 })
                 .catch(error => {
-                    console.error(`[MILVUS] Keyword search error:`, error);
+                    logger.error(`[MILVUS] Keyword search error:`, error);
                     keywordResults = [];
                 })
         );

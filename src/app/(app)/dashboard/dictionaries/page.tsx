@@ -1,22 +1,29 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { fetchDictionariesAction } from '@/actions/dictionary';
+import { createLogger } from '@/lib/logger';
 import { useSession } from 'next-auth/react';
+import { useTranslations } from 'next-intl';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Separator } from 'src/components/ui/separator';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from 'src/components/ui/tabs';
+import { useEffect, useMemo, useState } from 'react';
+import { toast } from 'sonner';
 import { Button } from 'src/components/ui/button';
+import { Separator } from 'src/components/ui/separator';
+import { Skeleton } from 'src/components/ui/skeleton';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from 'src/components/ui/tabs';
+import { AddPublicDictionaryDialog } from './components/add-public-dictionary-dialog';
+import { CreateDictionaryDialog } from './components/create-dictionary-dialog';
 import type { Dictionary as UIDictionary } from './components/dictionary-artwork';
 import { DictionaryArtwork } from './components/dictionary-artwork';
-import { CreateDictionaryDialog } from './components/create-dictionary-dialog';
-import { DictionaryEntriesManager } from './components/dictionary-entries-manager';
-import { fetchDictionariesAction } from '@/actions/dictionary';
-import { toast } from 'sonner';
 import ImportDictionaryDialog from './components/import-dictionary-dialog';
-import { Skeleton } from 'src/components/ui/skeleton';
-import { AddPublicDictionaryDialog } from './components/add-public-dictionary-dialog';
-import { useTranslations } from 'next-intl';
-
+const logger = createLogger({
+    type: 'dashboard:dictionaries',
+}, {
+    json: false,// 开启json格式输出
+    pretty: false, // 关闭开发环境美化输出
+    colors: true, // 仅当json：false时启用颜色输出可用
+    includeCaller: false, // 日志不包含调用者
+});
 export default function DictionariesPage() {
     const { data: session, status, update } = useSession();
     const router = useRouter();
@@ -29,14 +36,6 @@ export default function DictionariesPage() {
     const searchParams = useSearchParams();
     const [loading, setLoading] = useState(true);
     const [reloadToken, setReloadToken] = useState(0);
-    useEffect(() => {
-        //console.log("客户端Session状态:", status);
-        //console.log("客户端Session数据:", session);
-        console.log(
-            '客户端过期时间:',
-            session?.expires ? new Date(session.expires).toLocaleString() : '未设置'
-        );
-    }, [session, status]);
     // 汇总可供导入的词库（全部）
     const allDictionariesLite = useMemo(() => {
         const all = [...publicDictionaries, ...projectDictionaries, ...privateDictionaries];
@@ -72,7 +71,7 @@ export default function DictionariesPage() {
                     setPublicDictionaries([]);
                 }
             } catch (e) {
-                console.error(t('loadPublicFailed'), e);
+                logger.error(t('loadPublicFailed'), e);
             }
             // 项目词库
             try {
@@ -96,7 +95,7 @@ export default function DictionariesPage() {
                     setProjectDictionaries([]);
                 }
             } catch (e) {
-                console.error(t('loadProjectFailed'), e);
+                logger.error(t('loadProjectFailed'), e);
             }
 
             // 私有词库（需登录）
@@ -122,7 +121,7 @@ export default function DictionariesPage() {
                 setPrivateDictionaries([]);
             }
         } catch (error) {
-            console.error(t('loadErrorDesc'), error);
+            logger.error(t('loadErrorDesc'), error);
             toast.error(t('loadError'), { description: t('loadErrorDesc') as string });
         } finally {
             setLoading(false);
@@ -157,7 +156,7 @@ export default function DictionariesPage() {
             if (tab === 'public' || tab === 'project' || tab === 'private') {
                 setActiveTab(tab);
             }
-        } catch {}
+        } catch { }
     }, [searchParams]);
 
     // 处理新词典创建
@@ -211,10 +210,10 @@ export default function DictionariesPage() {
         const updateDictionary = (dict: UIDictionary) =>
             dict.id === dictionaryId
                 ? {
-                      ...dict,
-                      ...updatedData,
-                      cover: getDictionaryCover(updatedData.domain ?? dict.domain),
-                  }
+                    ...dict,
+                    ...updatedData,
+                    cover: getDictionaryCover(updatedData.domain ?? dict.domain),
+                }
                 : dict;
 
         setPublicDictionaries(prev => prev.map(updateDictionary));
@@ -226,10 +225,10 @@ export default function DictionariesPage() {
             setSelectedDictionary(prev =>
                 prev
                     ? {
-                          ...prev,
-                          ...updatedData,
-                          cover: getDictionaryCover(updatedData.domain ?? prev.domain),
-                      }
+                        ...prev,
+                        ...updatedData,
+                        cover: getDictionaryCover(updatedData.domain ?? prev.domain),
+                    }
                     : null
             );
         }

@@ -1,11 +1,5 @@
-import React from 'react';
-import { CheckIcon, PaperPlaneIcon, PlusIcon, TrashIcon } from '@radix-ui/react-icons';
-import { Wand } from 'lucide-react';
-import { cn } from 'src/lib/utils';
-import { useTranslations, useLocale } from 'next-intl';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card';
 import {
     Command,
     CommandEmpty,
@@ -24,17 +18,29 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { useChatbarContent, useChatbarStream } from '@/hooks/useRightPanel';
 import { useDialog } from '@/hooks/useDialog';
+import { useChatbarContent, useChatbarStream } from '@/hooks/useRightPanel';
+import { CheckIcon, PaperPlaneIcon, PlusIcon, TrashIcon } from '@radix-ui/react-icons';
 import MarkdownPreview from '@uiw/react-markdown-preview';
+import { Wand } from 'lucide-react';
+import { useLocale, useTranslations } from 'next-intl';
+import React from 'react';
+import { cn } from 'src/lib/utils';
 // Server Actions imports
-import { baselineTranslateAction } from '@/actions/pre-translate';
-import { extractMonolingualTermsAction, lookupDictionaryAction } from '@/actions/pre-translate';
-import { evaluateSyntaxAction } from '@/actions/quality-assure';
-import { evaluateDiscourseAction } from '@/actions/postedit';
 import { queryDictionaryEntriesByScopeAction } from '@/actions/dictionary';
 import { searchMemoryAction } from '@/actions/memories';
-
+import { evaluateDiscourseAction } from '@/actions/postedit';
+import { baselineTranslateAction, extractMonolingualTermsAction, lookupDictionaryAction } from '@/actions/pre-translate';
+import { evaluateSyntaxAction } from '@/actions/quality-assure';
+import { createLogger } from '@/lib/logger';
+const logger = createLogger({
+    type: 'ide:chat',
+}, {
+    json: false,// 开启json格式输出
+    pretty: false, // 关闭开发环境美化输出
+    colors: true, // 仅当json：false时启用颜色输出可用
+    includeCaller: false, // 日志不包含调用者
+});
 // 这些将被翻译替换
 const agentConfigs = [
     { key: 'basicTranslation', avatar: '/avatars/01.png' },
@@ -150,7 +156,7 @@ export function CardsChat() {
                 content: typeof result === 'string' ? result : JSON.stringify(result, null, 2),
             });
         } catch (error) {
-            console.error('智能体处理失败:', error);
+            logger.error('智能体处理失败:', error);
             addMessage({
                 role: 'assistant',
                 content: `处理失败: ${error instanceof Error ? error.message : '未知错误'}`,
@@ -340,7 +346,7 @@ export function CardsChat() {
                                     },
                                     { initialMessage: t('processing') }
                                 );
-                            } catch {}
+                            } catch { }
                         }
                     }}
                     className="flex w-full items-center gap-2"

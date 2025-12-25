@@ -1,12 +1,11 @@
 'use server';
 
-import { findProjectByIdDB } from '@/db/project';
-import { findDocumentByIdDB } from '@/db/document';
 import { auth } from '@/auth';
-import { DocumentTab, DocumentItemTab, ExplorerTabs } from '@/types/explorerTabs';
-import { findDocumentItemsByDocumentIdDB, DocumentItem } from '@/db/documentItem';
+import { DocumentItem, findDocumentItemsByDocumentIdDB } from '@/db/documentItem';
+import { findProjectByIdDB } from '@/db/project';
+import { createLogger } from '@/lib/logger';
+import { DocumentTab, ExplorerTabs } from '@/types/explorerTabs';
 import { getTranslations } from 'next-intl/server';
-
 // 在文件开头添加类型定义
 type Metadata = {
     level?: number;
@@ -16,7 +15,14 @@ type Metadata = {
 };
 
 // 获取项目下的所有文档，并转换为标签页格式
-
+const logger = createLogger({
+    type: 'actions:explorer-tabs',
+}, {
+    json: false,// 开启json格式输出
+    pretty: false, // 关闭开发环境美化输出
+    colors: true, // 仅当json：false时启用颜色输出可用
+    includeCaller: false, // 日志不包含调用者
+});
 export async function fetchProjectTabsAction(projectId: string): Promise<ExplorerTabs> {
     const session = await auth();
     const t = await getTranslations('IDE.explorerPanel');
@@ -45,13 +51,13 @@ export async function fetchProjectTabsAction(projectId: string): Promise<Explore
             projectName: project?.name || t('project'),
             documentTabs: documentTabs,
         };
-        console.log(projectTabs);
+        logger.info("项目文档信息:", projectTabs);
         if (!projectTabs.documentTabs.length) {
             return { projectId: '0', projectName: t('welcomePage'), documentTabs: [] };
         }
         return projectTabs;
     } catch (error) {
-        console.error('获取项目文档失败:', error);
+        logger.error('获取项目文档失败:', error);
         return { projectId: '0', projectName: t('welcomePage'), documentTabs: [] };
     }
 }

@@ -1,16 +1,22 @@
 'use client';
-import React, { useEffect, useState } from 'react';
-import { LANGUAGES } from '@/constants/languages';
-import { Button } from 'src/components/ui/button';
-import { Textarea } from 'src/components/ui/textarea';
-import { Card, CardFooter, CardContent } from 'src/components/ui/card';
-import { Mic, Undo2, ArrowLeftRight, FileText, RotateCw } from 'lucide-react';
-import { cn } from 'src/lib/utils';
 import { runPreTranslateAction } from '@/actions/pre-translate';
 import { LanguageSelector } from '@/components/language-selector';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useTranslationLanguage, useTranslationContent } from '@/hooks/useTranslation';
-
+import { LANGUAGES } from '@/constants/languages';
+import { useTranslationContent, useTranslationLanguage } from '@/hooks/useTranslation';
+import { createLogger } from '@/lib/logger';
+import { ArrowLeftRight, FileText, Mic, Undo2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Button } from 'src/components/ui/button';
+import { Textarea } from 'src/components/ui/textarea';
+const logger = createLogger({
+    type: 'translation:text-translation-table',
+}, {
+    json: false,// 开启json格式输出
+    pretty: false, // 关闭开发环境美化输出
+    colors: true, // 仅当json：false时启用颜色输出可用
+    includeCaller: false, // 日志不包含调用者
+});
 const TextTranslationTable = () => {
     const languages = LANGUAGES;
     const {
@@ -46,7 +52,7 @@ const TextTranslationTable = () => {
                 setIsTranslating(false);
             }, 1000);
         } catch (error) {
-            console.error('Error:', error);
+            logger.error('handleTranslation 失败:', error);
             setIsTranslating(false);
         }
     };

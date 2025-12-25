@@ -1,28 +1,33 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Button } from 'src/components/ui/button';
-import { Input } from 'src/components/ui/input';
-import { Label } from 'src/components/ui/label';
-import { Textarea } from 'src/components/ui/textarea';
-import { ScrollArea } from 'src/components/ui/scroll-area';
-import { Card, CardContent, CardHeader, CardTitle } from 'src/components/ui/card';
-import { Plus, Search, Edit, Trash2, Edit3 } from 'lucide-react';
-import type { Dictionary, DictionaryEntry } from '@prisma/client';
-import { Switch } from 'src/components/ui/switch';
 import {
     createDictionaryEntryAction,
-    updateDictionaryEntryAction,
-    deleteDictionaryEntryAction,
-    fetchDictionaryEntriesAction,
-    searchDictionaryEntriesAction,
     deleteDictionaryAction,
+    deleteDictionaryEntryAction,
     fetchDictionaryEntriesPagedAction,
+    updateDictionaryEntryAction
 } from '@/actions/dictionary';
+import { createLogger } from '@/lib/logger';
+import type { Dictionary, DictionaryEntry } from '@prisma/client';
+import { Edit, Plus, Search, Trash2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { Button } from 'src/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from 'src/components/ui/card';
+import { Input } from 'src/components/ui/input';
+import { Label } from 'src/components/ui/label';
+import { ScrollArea } from 'src/components/ui/scroll-area';
+import { Switch } from 'src/components/ui/switch';
+import { Textarea } from 'src/components/ui/textarea';
 import { ImportDictionaryEntriesDialog } from './import-dictionary-entries-dialog';
-import { EditDictionaryDialog } from './edit-dictionary-dialog';
-
+const logger = createLogger({
+    type: 'dictionaries:dictionary-entries-manager',
+}, {
+    json: false,// 开启json格式输出
+    pretty: false, // 关闭开发环境美化输出
+    colors: true, // 仅当json：false时启用颜色输出可用
+    includeCaller: false, // 日志不包含调用者
+});
 interface DictionaryEntriesManagerProps {
     dictionary: Dictionary;
     onEntriesUpdated: () => void;
@@ -88,7 +93,7 @@ export function DictionaryEntriesManager({
                 if (opts?.pageSize) setPageSize(opts.pageSize);
             }
         } catch (error) {
-            console.error('加载词典条目失败:', error);
+            logger.error('加载词典条目失败:', error);
             toast.error('加载词典条目失败');
         }
     };
@@ -189,7 +194,7 @@ export function DictionaryEntriesManager({
             setEditingEntry(null);
             setEditForm({ sourceText: '', targetText: '', notes: '' });
         } catch (error) {
-            console.error('保存词条失败:', error);
+            logger.error('保存词条失败:', error);
             toast.error('保存词条时发生错误');
         } finally {
             setLoading(false);
@@ -221,7 +226,7 @@ export function DictionaryEntriesManager({
                 toast.error(result.error ?? '删除词条失败');
             }
         } catch (error) {
-            console.error('删除词条失败:', error);
+            logger.error('删除词条失败:', error);
             toast.error('删除词条时发生错误');
         }
     };
@@ -244,7 +249,7 @@ export function DictionaryEntriesManager({
                 toast.error(result.error ?? '更新状态失败');
             }
         } catch (error) {
-            console.error('切换启用状态失败:', error);
+            logger.error('切换启用状态失败:', error);
             toast.error('切换启用状态时发生错误');
         } finally {
             setLoading(false);
@@ -305,7 +310,7 @@ export function DictionaryEntriesManager({
                                                 toast.error(result.error ?? '删除词典失败');
                                             }
                                         } catch (error) {
-                                            console.error('删除词典失败:', error);
+                                            logger.error('删除词典失败:', error);
                                             toast.error('删除词典时发生错误');
                                         } finally {
                                             setLoading(false);
@@ -317,9 +322,9 @@ export function DictionaryEntriesManager({
                                 删除词库
                             </Button>
                         )}
-                        {/* <Button 
-                            variant="outline" 
-                            size="sm" 
+                        {/* <Button
+                            variant="outline"
+                            size="sm"
                             disabled={loading}
                             onClick={() => {
                                 // 这里可以触发编辑词典的对话框

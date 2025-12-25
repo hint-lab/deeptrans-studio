@@ -4,18 +4,26 @@ if (process.env.NODE_ENV !== 'production') {
         .then((dotenv: any) => {
             dotenv?.config?.();
         })
-        .catch(() => {});
+        .catch(() => { });
 }
-import { createWorker, connection } from './queue';
-import { TTL_PROGRESS, TTL_BATCH, setJSONWithTTL, setTextWithTTL } from '@/lib/redis-ttl';
-import { runPreTranslateAction } from '../actions/pre-translate';
-import { runQualityAssureAction } from '../actions/quality-assure';
-import { extractDocumentTermsAction } from '../actions/project-init';
-import { embedBatchAction } from '../actions/embedding';
-import { upsertVectors } from '../lib/vector/milvus';
-import { updateDocumentItemByIdDB, fetchDocumentItemNeedsMtReviewByIdDB } from '@/db/documentItem';
+import { fetchDocumentItemNeedsMtReviewByIdDB, updateDocumentItemByIdDB } from '@/db/documentItem';
+import { createLogger } from '@/lib/logger';
+import { TTL_BATCH, setJSONWithTTL } from '@/lib/redis-ttl';
 import { Client as MinioClient } from 'minio';
-
+import { embedBatchAction } from '../actions/embedding';
+import { runPreTranslateAction } from '../actions/pre-translate';
+import { extractDocumentTermsAction } from '../actions/project-init';
+import { runQualityAssureAction } from '../actions/quality-assure';
+import { upsertVectors } from '../lib/vector/milvus';
+import { connection, createWorker } from './queue';
+const logger = createLogger({
+    type: 'worker',
+}, {
+    json: false,// 开启json格式输出
+    pretty: false, // 关闭开发环境美化输出
+    colors: true, // 仅当json：false时启用颜色输出可用
+    includeCaller: false, // 日志不包含调用者
+});
 // Pre-translate worker
 const preWorker = createWorker(
     'pretranslate',
@@ -38,19 +46,19 @@ const preWorker = createWorker(
         const done = Number(await connection.get(`batch.${batchId}.done`)) || 0;
         const percent = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
         await job.updateProgress(percent);
-        console.log(`[pre] job=${job.id} finished pre-translate pipeline`);
+        logger.info(`[pre] job=${job.id} finished pre-translate pipeline`);
     },
     24
 );
 
 preWorker.on('active', job => {
-    console.log(`[pre] active job=${job.id} name=${job.name}`);
+    logger.info(`[pre] active job=${job.id} name=${job.name}`);
 });
 preWorker.on('progress', (job, progress) => {
-    console.log(`[pre] progress job=${job.id} progress=${progress}`);
+    logger.info(`[pre] progress job=${job.id} progress=${progress}`);
 });
 preWorker.on('completed', async job => {
-    console.log(`[pre] completed job=${job.id}`);
+    logger.info(`[pre] completed job=${job.id}`);
     // 自动推进：PRE_TRANSLATE -> (needsMtReview ? MT_REVIEW : QA)
     try {
         const itemId = (job?.data as any)?.id;
@@ -58,17 +66,17 @@ preWorker.on('completed', async job => {
         const needs = await fetchDocumentItemNeedsMtReviewByIdDB(itemId);
         const next = needs ? 'MT_REVIEW' : 'QA';
         await updateDocumentItemByIdDB(itemId, { status: next as any } as any);
-    } catch {}
+    } catch { }
 });
 preWorker.on('failed', async (job, err) => {
-    console.error(`[pre] failed job=${job?.id} error=${err?.message || err}`);
+    logger.error(`[pre] failed job=${job?.id} error=${err?.message || err}`);
     try {
         const batchId = (job?.data as any)?.batchId;
         if (batchId) {
-            await connection.incr(`batch:${batchId}:failed`).catch(() => {});
+            await connection.incr(`batch:${batchId}:failed`).catch(() => { });
             await connection
                 .set(`batch:${batchId}:fail:${job?.id}`, String(err?.message || err))
-                .catch(() => {});
+                .catch(() => { });
         }
         // 标记段状态：ERROR 或 CANCELED
         try {
@@ -77,11 +85,11 @@ preWorker.on('failed', async (job, err) => {
                 await updateDocumentItemByIdDB(itemId, {
                     status: (err?.message === 'JOB_CANCELED' ? 'CANCELED' : 'ERROR') as any,
                 } as any);
-        } catch {}
-    } catch {}
+        } catch { }
+    } catch { }
 });
 preWorker.on('error', err => {
-    console.error(`[pre] worker error: ${err?.message || err}`);
+    logger.error(`[pre] worker error: ${err?.message || err}`);
 });
 
 // QA worker
@@ -110,34 +118,34 @@ const qaWorker = createWorker(
         const done = Number(await connection.get(`qa.${batchId}.done`)) || 0;
         const percent = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
         await job.updateProgress(percent);
-        console.log(`[qa] job=${job.id} QA pipeline complete`);
+        logger.info(`[qa] job=${job.id} QA pipeline complete`);
     },
     16
 );
 
 qaWorker.on('active', job => {
-    console.log(`[qa] active job=${job.id} name=${job.name}`);
+    logger.info(`[qa] active job=${job.id} name=${job.name}`);
 });
 qaWorker.on('progress', (job, progress) => {
-    console.log(`[qa] progress job=${job.id} progress=${progress}`);
+    logger.info(`[qa] progress job=${job.id} progress=${progress}`);
 });
 qaWorker.on('completed', job => {
-    console.log(`[qa] completed job=${job.id}`);
+    logger.info(`[qa] completed job=${job.id}`);
 });
 qaWorker.on('failed', async (job, err) => {
-    console.error(`[qa] failed job=${job?.id} error=${err?.message || err}`);
+    logger.error(`[qa] failed job=${job?.id} error=${err?.message || err}`);
     try {
         const batchId = (job?.data as any)?.batchId;
         if (batchId) {
-            await connection.incr(`qa.${batchId}.failed`).catch(() => {});
+            await connection.incr(`qa.${batchId}.failed`).catch(() => { });
             await connection
                 .set(`qa.${batchId}.fail.${job?.id}`, String((err as Error)?.message || err))
-                .catch(() => {});
+                .catch(() => { });
         }
-    } catch {}
+    } catch { }
 });
 qaWorker.on('error', err => {
-    console.error(`[qa] worker error: ${err?.message || err}`);
+    logger.error(`[qa] worker error: ${err?.message || err}`);
 });
 
 // Document terms worker
@@ -170,7 +178,7 @@ const docTermsWorker = createWorker(
         } else {
             await job.updateProgress(100);
         }
-        console.log(
+        logger.info(
             `[doc-terms] job=${job.id} extracted ${Array.isArray(terms) ? terms.length : 0} terms`
         );
     },
@@ -178,65 +186,65 @@ const docTermsWorker = createWorker(
 );
 
 docTermsWorker.on('active', job => {
-    console.log(`[doc-terms] active job=${job.id} name=${job.name}`);
+    logger.info(`[doc-terms] active job=${job.id} name=${job.name}`);
 });
 docTermsWorker.on('progress', (job, progress) => {
-    console.log(`[doc-terms] progress job=${job.id} progress=${progress}`);
+    logger.info(`[doc-terms] progress job=${job.id} progress=${progress}`);
 });
 docTermsWorker.on('completed', job => {
-    console.log(`[doc-terms] completed job=${job.id}`);
+    logger.info(`[doc-terms] completed job=${job.id}`);
 });
 docTermsWorker.on('failed', async (job, err) => {
-    console.error(`[doc-terms] failed job=${job?.id} error=${err?.message || err}`);
+    logger.error(`[doc-terms] failed job=${job?.id} error=${err?.message || err}`);
 });
 docTermsWorker.on('error', err => {
-    console.error(`[doc-terms] worker error: ${err?.message || err}`);
+    logger.error(`[doc-terms] worker error: ${err?.message || err}`);
 });
 
 connection.on('error', (err: any) => {
-    console.error(`[redis] error: ${err?.message || err}`);
+    logger.error(`[redis] error: ${err?.message || err}`);
 });
 
 process.on('unhandledRejection', (reason: any) => {
-    console.error('[process] unhandledRejection:', reason);
+    logger.error('[process] unhandledRejection:', reason);
 });
 process.on('uncaughtException', (err: any) => {
-    console.error('[process] uncaughtException:', err);
+    logger.error('[process] uncaughtException:', err);
 });
 process.on('SIGINT', async () => {
-    console.log('[worker] SIGINT received, shutting down...');
+    logger.info('[worker] SIGINT received, shutting down...');
     try {
         await preWorker.close();
-    } catch {}
+    } catch { }
     try {
         await qaWorker.close();
-    } catch {}
+    } catch { }
     try {
         await docTermsWorker.close();
-    } catch {}
+    } catch { }
     try {
         await connection.quit();
-    } catch {}
+    } catch { }
     process.exit(0);
 });
 process.on('SIGTERM', async () => {
-    console.log('[worker] SIGTERM received, shutting down...');
+    logger.info('[worker] SIGTERM received, shutting down...');
     try {
         await preWorker.close();
-    } catch {}
+    } catch { }
     try {
         await qaWorker.close();
-    } catch {}
+    } catch { }
     try {
         await docTermsWorker.close();
-    } catch {}
+    } catch { }
     try {
         await connection.quit();
-    } catch {}
+    } catch { }
     process.exit(0);
 });
 
-console.log('[worker] Pretranslate, DocTerms & QA workers started');
+logger.info('[worker] Pretranslate, DocTerms & QA workers started');
 
 // Memory-import worker
 const memoryImportWorker = createWorker(
@@ -276,10 +284,10 @@ const memoryImportWorker = createWorker(
                 const pick = (pref?: string) =>
                     pref
                         ? tuv.find((x: any) =>
-                              String(x?.['@_xml:lang'] || x?.['@_lang'] || '')
-                                  .toLowerCase()
-                                  .startsWith(pref.toLowerCase())
-                          )
+                            String(x?.['@_xml:lang'] || x?.['@_lang'] || '')
+                                .toLowerCase()
+                                .startsWith(pref.toLowerCase())
+                        )
                         : undefined;
                 let s = pick(sourceLang);
                 let t = pick(targetLang);
@@ -345,7 +353,7 @@ const memoryImportWorker = createWorker(
         }
 
         if (!pairs.length) {
-            console.warn('[WORKER_IMPORT] 未解析到有效的翻译对，跳过后续处理');
+            logger.warn('[WORKER_IMPORT] 未解析到有效的翻译对，跳过后续处理');
             return;
         }
 
@@ -353,23 +361,23 @@ const memoryImportWorker = createWorker(
         const texts = pairs.map(p => `${p.source}\n${p.target}`);
         let vectors: number[][] = [];
         try {
-            console.log(`[WORKER_IMPORT] 开始生成 ${texts.length} 条记录的嵌入向量...`);
+            logger.info(`[WORKER_IMPORT] 开始生成 ${texts.length} 条记录的嵌入向量...`);
             const batchSize = 200; // 设置为 200，留一些余量
 
             for (let i = 0; i < texts.length; i += batchSize) {
                 const batch = texts.slice(i, i + batchSize);
-                console.log(
+                logger.info(
                     `[WORKER_IMPORT] 处理第 ${i + 1}-${Math.min(i + batch.length, texts.length)} 条记录...`
                 );
                 const batchVectors = await embedBatchAction(batch);
                 vectors.push(...batchVectors);
             }
 
-            console.log(
+            logger.info(
                 `[WORKER_IMPORT] 成功生成 ${vectors.length} 个向量，第一个向量维度: ${vectors[0]?.length || 0}`
             );
         } catch (error) {
-            console.error(`[WORKER_IMPORT] 嵌入向量生成失败:`, error);
+            logger.error(`[WORKER_IMPORT] 嵌入向量生成失败:`, error);
         }
 
         const collection = 'TranslationMemory';
@@ -381,20 +389,20 @@ const memoryImportWorker = createWorker(
         }));
         const valid = points.filter(p => Array.isArray(p.vector) && p.vector.length);
 
-        console.log(
+        logger.info(
             `[WORKER_IMPORT] 准备写入 Milvus: ${valid.length}/${points.length} 条记录有有效向量`
         );
 
         if (valid.length) {
             try {
                 await upsertVectors({ collection, points: valid });
-                console.log(`[WORKER_IMPORT] 成功写入 Milvus: ${valid.length} 条记录`);
+                logger.info(`[WORKER_IMPORT] 成功写入 Milvus: ${valid.length} 条记录`);
             } catch (error) {
-                console.error(`[WORKER_IMPORT] Milvus 写入失败:`, error);
+                logger.error(`[WORKER_IMPORT] Milvus 写入失败:`, error);
                 throw error;
             }
         } else {
-            console.warn(`[WORKER_IMPORT] 警告: 没有有效向量可写入 Milvus`);
+            logger.warn(`[WORKER_IMPORT] 警告: 没有有效向量可写入 Milvus`);
         }
 
         // write rows to DB
@@ -412,9 +420,9 @@ const memoryImportWorker = createWorker(
                 })
             )
         );
-        console.log(`[WORKER_IMPORT] 导入成功，共写入 ${pairs.length} 条记忆数据`);
+        logger.info(`[WORKER_IMPORT] 导入成功，共写入 ${pairs.length} 条记忆数据`);
     },
     4
 );
 
-console.log('[worker] memory-import worker started');
+logger.info('[worker] memory-import worker started');

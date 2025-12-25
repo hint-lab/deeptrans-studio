@@ -1,10 +1,18 @@
 // 文档级术语提取智能体
-import { BaseAgent, type AgentRunContext } from '../base';
-import type { DocumentTerm } from '@/lib/terms/types';
+import { createLogger } from '@/lib/logger';
 import { buildStatCandidates } from '@/lib/terms/termStats';
+import type { DocumentTerm } from '@/lib/terms/types';
 import { DocumentTermExtractOptions } from '@/types/documentTermExtractOptions';
+import { BaseAgent, type AgentRunContext } from '../base';
 import { createAgentI18n } from '../i18n';
-
+const logger = createLogger({
+    type: 'agents:documentTermExtractAgent',
+}, {
+    json: false,// 开启json格式输出
+    pretty: false, // 关闭开发环境美化输出
+    colors: true, // 仅当json：false时启用颜色输出可用
+    includeCaller: false, // 日志不包含调用者
+});
 export class DocumentTermExtractAgent extends BaseAgent<
     { text: string; options?: DocumentTermExtractOptions; locale?: string },
     DocumentTerm[]
@@ -124,9 +132,10 @@ export class DocumentTermExtractAgent extends BaseAgent<
             }));
 
             merged.sort((a, b) => (b.score || 0) - (a.score || 0) || b.count - a.count);
+            logger.info('LLM scoring success, returning statistical candidates:', merged.slice(0, topK));
             return merged.slice(0, topK);
         } catch (error) {
-            console.warn('LLM scoring failed, returning statistical candidates:', error);
+            logger.error('LLM scoring failed, returning statistical candidates:', error);
             return candidates.slice(0, topK);
         }
     }

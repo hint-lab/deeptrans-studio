@@ -1,7 +1,7 @@
 'use client';
 
+import { Edit3, PlusIcon, Trash2 } from 'lucide-react';
 import Image from 'next/image';
-import { PlusIcon, Trash2, Edit3 } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from 'src/components/ui/button';
 import {
@@ -14,7 +14,6 @@ import {
 } from 'src/components/ui/dialog';
 import { Input } from 'src/components/ui/input';
 import { Label } from 'src/components/ui/label';
-import { Textarea } from 'src/components/ui/textarea';
 import {
     Select,
     SelectContent,
@@ -22,8 +21,9 @@ import {
     SelectTrigger,
     SelectValue,
 } from 'src/components/ui/select';
+import { Textarea } from 'src/components/ui/textarea';
 
-import { cn } from 'src/lib/utils';
+import { deleteDictionaryAction, updateDictionaryAction } from '@/actions/dictionary';
 import {
     ContextMenu,
     ContextMenuContent,
@@ -34,8 +34,9 @@ import {
     ContextMenuSubTrigger,
     ContextMenuTrigger,
 } from '@/components/ui/context-menu';
-import { updateDictionaryAction, deleteDictionaryAction } from '@/actions/dictionary';
+import { createLogger } from '@/lib/logger';
 import { toast } from 'sonner';
+import { cn } from 'src/lib/utils';
 
 // 定义Dictionary接口
 interface Dictionary {
@@ -49,7 +50,14 @@ interface Dictionary {
     entryCount?: number;
     // 其他可选属性
 }
-
+const logger = createLogger({
+    type: 'dictionary:dictionary-artwork',
+}, {
+    json: false,// 开启json格式输出
+    pretty: false, // 关闭开发环境美化输出
+    colors: true, // 仅当json：false时启用颜色输出可用
+    includeCaller: false, // 日志不包含调用者
+});
 // 导出Dictionary类型供其他文件使用
 export type { Dictionary };
 
@@ -111,13 +119,13 @@ export function DictionaryArtwork({
                 if (onDelete) {
                     onDelete(dictionary.id);
                 }
-
+                logger.info('词典删除成功！')
                 toast.success('词典删除成功！');
             } else {
                 toast.error(result.error ?? '删除词典失败');
             }
         } catch (error) {
-            console.error('删除词典失败:', error);
+            logger.error('删除词典失败:', error);
             toast.error('删除词典时发生错误');
         } finally {
             setLoading(false);
@@ -127,6 +135,7 @@ export function DictionaryArtwork({
 
     const confirmEdit = async () => {
         if (!editForm.name.trim()) {
+            logger.warn('词典删除成功！')
             toast.error('词库名称不能为空');
             return;
         }
@@ -140,6 +149,7 @@ export function DictionaryArtwork({
             });
 
             if (result.success && result.data) {
+                logger.info('词典信息更新成功！')
                 toast.success('词典信息更新成功！');
 
                 // 调用父组件的回调函数
@@ -153,10 +163,11 @@ export function DictionaryArtwork({
 
                 setShowEditDialog(false);
             } else {
+                logger.error('更新词典失败:', result.error);
                 toast.error(result.error ?? '更新词典失败');
             }
         } catch (error) {
-            console.error('更新词典失败:', error);
+            logger.error('更新词典失败:', error);
             toast.error('更新词典时发生错误');
         } finally {
             setLoading(false);

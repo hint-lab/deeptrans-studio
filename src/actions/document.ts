@@ -11,7 +11,16 @@ import {
     deleteDocumentItemsByDocumentIdDB,
     type DocumentItem,
 } from '@/db/documentItem';
+import { createLogger } from '@/lib/logger';
 import { DocumentStatus } from '@/types/enums';
+const logger = createLogger({
+    type: 'actions:document',
+}, {
+    json: false,// 开启json格式输出
+    pretty: false, // 关闭开发环境美化输出
+    colors: true, // 仅当json：false时启用颜色输出可用
+    includeCaller: false, // 日志不包含调用者
+});
 export type ContentIDType = {
     id: string;
     name: string;
@@ -110,7 +119,7 @@ export async function fetchProjectTabsAction(projectId: string): Promise<TabType
             active: false,
         }));
     } catch (error) {
-        console.error('获取项目文档失败:', error);
+        logger.error('获取项目文档失败:', error);
         return [{ id: '0', name: '欢迎页' }];
     }
 }
@@ -124,7 +133,7 @@ export async function fetchDocumentStructureAction(documentId: string): Promise<
     try {
         const document = await findDocumentWithItemsByIdDB(documentId);
         if (!document) {
-            console.error('获取文档结构失败:', '未找到文档');
+            logger.error('获取文档结构失败:', '未找到文档');
             return [];
         }
 
@@ -187,7 +196,7 @@ export async function fetchDocumentStructureAction(documentId: string): Promise<
 
         return rootElements;
     } catch (error) {
-        console.error('获取文档结构失败:', error);
+        logger.error('获取文档结构失败:', error);
         return [];
     }
 }
@@ -201,7 +210,7 @@ export async function fetchDocumentAction(documentId: string) {
     try {
         return await findDocumentWithItemsByIdDB(documentId);
     } catch (error) {
-        console.error('获取文档内容失败:', error);
+        logger.error('获取文档内容失败:', error);
         return null;
     }
 }
@@ -227,7 +236,7 @@ export async function fetchDocumentPreviewByDocIdAction(docId: string) {
             name: doc?.originalName,
         };
     } catch (error) {
-        console.error('获取预览信息失败:', error);
+        logger.error('获取预览信息失败:', error);
         return null;
     }
 }

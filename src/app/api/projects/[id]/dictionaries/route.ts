@@ -1,6 +1,15 @@
 import { auth } from '@/auth';
 import { prisma } from '@/lib/db';
-import { NextRequest, NextResponse } from 'next/server';
+import { createLogger } from '@/lib/logger';
+import { NextRequest } from 'next/server';
+const logger = createLogger({
+    type: 'request:project-dictionaries',
+}, {
+    json: false,// 开启json格式输出
+    pretty: false, // 关闭开发环境美化输出
+    colors: true, // 仅当json：false时启用颜色输出可用
+    includeCaller: false, // 日志不包含调用者
+});
 export async function GET(
     req: NextRequest,
     context: { params: Promise<{ id: string }> } // ✅ 正确：params 是 Promise
@@ -64,7 +73,7 @@ export async function GET(
 
         return Response.json(dictionaries);
     } catch (error) {
-        console.error('获取项目词典失败:', error);
+        logger.error('获取项目词典失败:', error);
         return Response.json(
             { error: '获取失败', details: error instanceof Error ? error.message : '未知错误' },
             { status: 500 }

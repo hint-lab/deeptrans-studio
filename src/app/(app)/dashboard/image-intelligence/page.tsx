@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
+import { createLogger } from '@/lib/logger';
 import {
     BookOpen,
     FileText,
@@ -34,7 +35,14 @@ import { useSession } from 'next-auth/react';
 import { useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-
+const logger = createLogger({
+    type: 'image-intelligence:page',
+}, {
+    json: false,// 开启json格式输出
+    pretty: false, // 关闭开发环境美化输出
+    colors: true, // 仅当json：false时启用颜色输出可用
+    includeCaller: false, // 日志不包含调用者
+});
 export default function ImageIntelligencePage() {
     const { data: session } = useSession();
     const tDashboard = useTranslations('Dashboard');
@@ -218,7 +226,7 @@ export default function ImageIntelligencePage() {
         } catch (error) {
             clearInterval(progressInterval);
             setTaskStatus('failed');
-            console.error('Translation error:', error);
+            logger.error('Translation error:', error);
             toast.error(t('translationError'));
         } finally {
             setIsTranslating(false);
@@ -245,7 +253,7 @@ export default function ImageIntelligencePage() {
                     setPrivateDictionaries([]);
                 }
             } catch (e) {
-                console.error(t('loadDictionariesFailed'), e);
+                logger.error(t('loadDictionariesFailed'), e);
                 toast.error(t('loadDictionariesFailed'));
             } finally {
                 setLoadingDictionaries(false);
@@ -272,7 +280,7 @@ export default function ImageIntelligencePage() {
                     }));
                 }
             } catch (e) {
-                console.error('加载词条失败', e);
+                logger.error('加载词条失败', e);
                 toast.error(t('loadEntriesFailed'));
             } finally {
                 setLoadingEntries(prev => ({ ...prev, [dictionaryId]: false }));

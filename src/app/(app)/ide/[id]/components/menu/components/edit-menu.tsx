@@ -1,20 +1,28 @@
+import { updateDocItemStatusAction } from '@/actions/document-item';
 import {
-    MenubarMenu,
-    MenubarTrigger,
     MenubarContent,
     MenubarItem,
+    MenubarMenu,
     MenubarSeparator,
+    MenubarTrigger,
 } from '@/components/ui/menubar';
-import { useTargetEditor } from '@/hooks/useEditor';
 import { useActiveDocumentItem } from '@/hooks/useActiveDocumentItem';
-import { updateDocItemStatusAction } from '@/actions/document-item';
-import { useTranslationState } from '@/hooks/useTranslation';
-import { useTranslations } from 'next-intl';
-import { toast } from 'sonner';
-import { useState } from 'react';
-import type { TranslationStage } from '@/store/features/translationSlice';
+import { useTargetEditor } from '@/hooks/useEditor';
 import { useExplorerTabs } from '@/hooks/useExplorerTabs'; // 新增导入
-
+import { useTranslationState } from '@/hooks/useTranslation';
+import { createLogger } from '@/lib/logger';
+import type { TranslationStage } from '@/store/features/translationSlice';
+import { useTranslations } from 'next-intl';
+import { useState } from 'react';
+import { toast } from 'sonner';
+const logger = createLogger({
+    type: 'ide:edit-menu',
+}, {
+    json: false,// 开启json格式输出
+    pretty: false, // 关闭开发环境美化输出
+    colors: true, // 仅当json：false时启用颜色输出可用
+    includeCaller: false, // 日志不包含调用者
+});
 export function EditMenu() {
     const t = useTranslations('IDE.menu');
     const tEditor = useTranslations('IDE.editor');
@@ -97,7 +105,7 @@ export function EditMenu() {
 
             toast.success(`已回退到 ${prevStage} 状态`);
         } catch (error) {
-            console.error('回退失败:', error);
+            logger.error('回退失败:', error);
             toast.error('回退失败，请稍后重试');
         } finally {
             setIsProcessing(false);
@@ -119,6 +127,7 @@ export function EditMenu() {
 
         const nextStage = stageMapping.forward[currentStage];
         if (!nextStage) {
+            logger.error(`无法从 ${currentStage} 状态前进`);
             toast.error(`无法从 ${currentStage} 状态前进`);
             return;
         }
@@ -150,7 +159,7 @@ export function EditMenu() {
 
             toast.success(stageMessages[nextStage] || `已前进到 ${nextStage} 状态`);
         } catch (error) {
-            console.error('前进失败:', error);
+            logger.error('前进失败:', error);
             toast.error('前进失败，请稍后重试');
         } finally {
             setIsProcessing(false);

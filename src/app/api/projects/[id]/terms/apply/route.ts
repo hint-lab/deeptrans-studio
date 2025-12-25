@@ -5,10 +5,18 @@ import { findBlankDictionaryEntriesBySourcesDB, updateDictionaryEntryTargetTextD
 import { findDocumentsByProjectIdDB, updateDocumentStatusDB } from '@/db/document';
 import { findProjectByIdDB } from '@/db/project';
 import { extractTextFromUrl } from '@/lib/file-parser';
+import { createLogger } from '@/lib/logger';
 import { getRedis } from '@/lib/redis';
 import { DocumentStatus } from '@/types/enums';
 import { NextRequest, NextResponse } from 'next/server';
-
+const logger = createLogger({
+    type: 'term:apply',
+}, {
+    json: false,// 开启json格式输出
+    pretty: false, // 关闭开发环境美化输出
+    colors: true, // 仅当json：false时启用颜色输出可用
+    includeCaller: false, // 日志不包含调用者
+});
 export async function POST(req: NextRequest, ctx: any) {
     try {
         const { id: projectId } = await (ctx?.params || {});
@@ -95,8 +103,10 @@ export async function POST(req: NextRequest, ctx: any) {
             mode: applyMode,
             copyFromOthers: true,
         });
-        if (!applied?.success)
+        if (!applied?.success) {
+            logger.error({ error: applied?.error || 'apply failed' });
             return NextResponse.json({ error: applied?.error || 'apply failed' }, { status: 500 });
+        }
         let { inserted = 0, updated = 0, skipped = 0 } = applied.data || {};
 
         // 可选：对新建且无译文的条目进行机器翻译填充
@@ -154,7 +164,7 @@ export async function POST(req: NextRequest, ctx: any) {
                     if (tt) updated += 1;
                 }
             } catch (e: any) {
-                console.error('translate terms batch failed', e);
+                logger.error('translate terms batch failed', e);
             }
         }
         try {
@@ -177,6 +187,7 @@ export async function POST(req: NextRequest, ctx: any) {
                 } catch { }
             }
         } catch { }
+        logger.error({ error: e?.message || 'apply failed' });
         return NextResponse.json({ error: e?.message || 'apply failed' }, { status: 500 });
     }
 }

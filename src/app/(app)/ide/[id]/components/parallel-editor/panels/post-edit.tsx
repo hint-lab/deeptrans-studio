@@ -1,37 +1,40 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { useAgentWorkflowSteps } from '@/hooks/useAgentWorkflowSteps';
-import { useActiveDocumentItem } from '@/hooks/useActiveDocumentItem';
-import { useTranslationContent } from '@/hooks/useTranslation';
 import { getDocumentItemIntermediateResultsAction } from '@/actions/intermediate-results';
 import { embedDiscourseAction } from '@/actions/postedit';
-import { useTranslations } from 'next-intl';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
-import { Textarea } from '@/components/ui/textarea';
+import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Switch } from '@/components/ui/switch';
+import { Progress } from '@/components/ui/progress';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
+import { useActiveDocumentItem } from '@/hooks/useActiveDocumentItem';
+import { useAgentWorkflowSteps } from '@/hooks/useAgentWorkflowSteps';
+import { useTranslationContent } from '@/hooks/useTranslation';
+import { wordDiff } from '@/lib/text-diff';
+import { cn } from '@/lib/utils';
 import {
-    Copy,
-    CheckCircle,
-    Edit3,
     AlertCircle,
     AlertTriangle,
-    XCircle,
-    TrendingUp,
-    Check,
-    X,
+    CheckCircle,
+    Copy,
     Loader2,
+    TrendingUp,
+    XCircle
 } from 'lucide-react';
+import { useTranslations } from 'next-intl';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { cn } from '@/lib/utils';
-import { wordDiff } from '@/lib/text-diff';
 
 import type { MemoryHit } from '@/agents/tools/memory';
-
+import { createLogger } from '@/lib/logger';
+const logger = createLogger({
+    type: 'parallel-editor:post-edit',
+}, {
+    json: false,// 开启json格式输出
+    pretty: false, // 关闭开发环境美化输出
+    colors: true, // 仅当json：false时启用颜色输出可用
+    includeCaller: false, // 日志不包含调用者
+});
 interface EvaluationResult {
     styleMatchScore?: number;
     styleComments?: string;
@@ -85,7 +88,7 @@ export default function PostEditPanel() {
                     }
                 }
             } catch (error) {
-                console.error('Failed to load post-edit results:', error);
+                logger.error('Failed to load post-edit results:', error);
             }
         };
 
@@ -193,7 +196,7 @@ export default function PostEditPanel() {
             const sourceTextToUse = source || sourceFromStore;
             if (!sourceTextToUse) {
                 // 如果拿不到源文，退化为用目标文做自回译式改写
-                console.warn('未获取到源文，将仅基于目标文与参考进行改写');
+                logger.warn('未获取到源文，将仅基于目标文与参考进行改写');
             }
             const rewritten = await embedDiscourseAction(
                 sourceTextToUse,
@@ -212,7 +215,7 @@ export default function PostEditPanel() {
             });
             toast.success('已重新生成语篇嵌入改写');
         } catch (e) {
-            console.error(e);
+            logger.error(e);
             toast.error('重新嵌入失败');
         } finally {
             setRegenerating(false);
@@ -246,7 +249,7 @@ export default function PostEditPanel() {
                 onLayout={(sizes: number[]) => {
                     try {
                         document.cookie = `react-resizable-panels:pe-review-layout=${JSON.stringify(sizes)}`;
-                    } catch {}
+                    } catch { }
                 }}
             >
                 {/* 语篇查询面板 */}
@@ -590,8 +593,8 @@ export default function PostEditPanel() {
                                     selectedReferences.length > 0
                                         ? t('reEmbedBasedOnSelected')
                                         : queryResults.length > 0
-                                          ? t('reEmbedBasedOnAll')
-                                          : t('noReference')
+                                            ? t('reEmbedBasedOnAll')
+                                            : t('noReference')
                                 }
                             >
                                 {regenerating ? (

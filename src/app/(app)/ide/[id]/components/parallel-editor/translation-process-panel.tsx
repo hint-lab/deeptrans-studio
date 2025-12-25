@@ -1,19 +1,27 @@
 'use client';
 
-import React, { useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useTranslations } from 'next-intl';
-import { useTranslationState } from '@/hooks/useTranslation';
 import { useAgentWorkflowSteps } from '@/hooks/useAgentWorkflowSteps';
-import MTWorkflowPanel from './panels/workflow-diagram/MTWorkflowPanel';
-import QAWorkflowPanel from './panels/workflow-diagram/QAWorkflowPanel';
-import PostEditWorkflowPanel from './panels/workflow-diagram/PostEditWorkflowPanel';
-import MtReviewPanel from './panels/mt-review';
-import QaReviewPanel from './panels/qa-review';
-import PostEditPanel from './panels/post-edit';
-import SignoffPanel from './panels/signoff';
+import { useTranslationState } from '@/hooks/useTranslation';
+import { createLogger } from '@/lib/logger';
+import { useTranslations } from 'next-intl';
+import React, { useEffect } from 'react';
 import LoggingPanel from './panels/logging';
-
+import MtReviewPanel from './panels/mt-review';
+import PostEditPanel from './panels/post-edit';
+import QaReviewPanel from './panels/qa-review';
+import SignoffPanel from './panels/signoff';
+import MTWorkflowPanel from './panels/workflow-diagram/MTWorkflowPanel';
+import PostEditWorkflowPanel from './panels/workflow-diagram/PostEditWorkflowPanel';
+import QAWorkflowPanel from './panels/workflow-diagram/QAWorkflowPanel';
+const logger = createLogger({
+    type: 'parallel-editor:translation-process-panel',
+}, {
+    json: false,// 开启json格式输出
+    pretty: false, // 关闭开发环境美化输出
+    colors: true, // 仅当json：false时启用颜色输出可用
+    includeCaller: false, // 日志不包含调用者
+});
 interface TranslationProcessPanelProps {
     panelTab: string;
     setPanelTab: (value: string) => void;
@@ -43,14 +51,14 @@ export const TranslationProcessPanel: React.FC<TranslationProcessPanelProps> = (
             COMPLETED: 'signoff',
         };
 
-        console.log('TranslationProcessPanel: currentStage changed to:', currentStage);
-        console.log('TranslationProcessPanel: current panelTab:', panelTab);
+        logger.info('TranslationProcessPanel: currentStage changed to:', currentStage);
+        logger.info('TranslationProcessPanel: current panelTab:', panelTab);
 
         if (currentStage && stageToTabMap[currentStage]) {
             const targetTab = stageToTabMap[currentStage];
-            console.log('TranslationProcessPanel: should switch to tab:', targetTab);
+            logger.info('TranslationProcessPanel: should switch to tab:', targetTab);
             if (panelTab !== targetTab) {
-                console.log(
+                logger.info(
                     'TranslationProcessPanel: switching tab from',
                     panelTab,
                     'to',
@@ -64,7 +72,7 @@ export const TranslationProcessPanel: React.FC<TranslationProcessPanelProps> = (
     // 监听 PE 工作流运行状态，自动切换到译后工作流标签页
     useEffect(() => {
         if (isPERunning && panelTab !== 'post-edit-flow') {
-            console.log('TranslationProcessPanel: PE running, switching to post-edit-flow');
+            logger.info('TranslationProcessPanel: PE running, switching to post-edit-flow');
             setPanelTab('post-edit-flow');
         }
     }, [isPERunning, panelTab, setPanelTab]);
@@ -121,7 +129,7 @@ export const TranslationProcessPanel: React.FC<TranslationProcessPanelProps> = (
                 <SignoffPanel />
             </TabsContent>
             <TabsContent value="output" className="m-0 flex-1 overflow-auto p-0">
-                <LoggingPanel logs={[]} onClear={() => {}} />
+                <LoggingPanel logs={[]} onClear={() => { }} />
             </TabsContent>
         </Tabs>
     );

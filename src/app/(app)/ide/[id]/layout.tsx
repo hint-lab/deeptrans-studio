@@ -1,23 +1,22 @@
 'use client';
-import { Menu } from './components/menu';
-import RightSidebar from './components/right-sidebar';
-import ExplorerView from './components/explorer';
-import Footer from './components/footer';
-import { CardsChat } from './components/chat';
-import PreviewCard from './components/preview';
-import HelpPanel from './components/help-panel';
+import { useRightPanel } from '@/hooks/useRightPanel';
+import { useSidebar } from '@/hooks/useSidebar';
+import { createLogger } from '@/lib/logger';
+import { useSession } from 'next-auth/react';
+import { useTranslations } from 'next-intl';
+import { useParams } from 'next/navigation';
+import React, { useEffect, useRef } from 'react';
+import { ImperativePanelHandle } from 'react-resizable-panels';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from 'src/components/ui/resizable';
 import { cn } from 'src/lib/utils';
+import { CardsChat } from './components/chat';
+import ExplorerView from './components/explorer';
+import Footer from './components/footer';
+import HelpPanel from './components/help-panel';
+import { Menu } from './components/menu';
 import ParallelEditor from './components/parallel-editor';
-import React, { useState, useEffect, useRef } from 'react';
-import { useSidebar } from '@/hooks/useSidebar';
-import { useRightPanel } from '@/hooks/useRightPanel';
-import { useBottomPanel } from '@/hooks/useBottomPanel';
-import { useParams } from 'next/navigation';
-import { useTranslationState } from '@/hooks/useTranslation';
-import { useTranslations } from 'next-intl';
-import { ImperativePanelHandle } from 'react-resizable-panels';
-import { useSession } from 'next-auth/react';
+import PreviewCard from './components/preview';
+import RightSidebar from './components/right-sidebar';
 function IDELayout({ children }: { children: React.ReactNode }) {
     const t = useTranslations('IDE');
     const { data: session, status, update } = useSession();
@@ -25,14 +24,35 @@ function IDELayout({ children }: { children: React.ReactNode }) {
     const { isSidebarOpen, toggleSidebar } = useSidebar();
     const { mode } = useRightPanel();
     const sidebarPanelRef = useRef<ImperativePanelHandle>(null);
-    const interval = 15;
+    const logger = createLogger({
+        type: 'client:ide-layout',
+    }, {
+        json: false,// 开启json格式输出
+        pretty: false, // 关闭开发环境美化输出
+        colors: true, // 仅当json：false时启用颜色输出可用
+        includeCaller: false, // 日志不包含调用者
+    });
     useEffect(() => {
-        const timer = setInterval(() => {
-            update(); // 手动更新 session
-        }, interval * 1000);
+        logger.debug('IDE Client session 状态:', status, "IDE Client session 当前时间:", new Date().toLocaleString(), "IDE Client session 过期时间:", session?.expires ? new Date(session.expires).toLocaleString() : "未设置");
+    }, [session, status]);
+    useEffect(() => {
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+                // 页面变为可见，检查session
+                if (status !== "authenticated") {
+                    update();
+                    logger.debug('IDE Client session update状态:', status, "IDE Client session update过期时间:", session);
+                }
 
-        return () => clearInterval(timer);
-    }, [interval, update]);
+            }
+        };
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
+    }, [update]);
     // 动态计算布局
     const getLayoutSizes = () => {
         if (mode === 'none') {

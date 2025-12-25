@@ -1,6 +1,11 @@
 'use client';
 
+import { updateDictionaryAction } from '@/actions/dictionary';
+import { createLogger } from '@/lib/logger';
+import { Edit3 } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { Button } from 'src/components/ui/button';
 import {
     Dialog,
@@ -12,7 +17,6 @@ import {
 } from 'src/components/ui/dialog';
 import { Input } from 'src/components/ui/input';
 import { Label } from 'src/components/ui/label';
-import { Textarea } from 'src/components/ui/textarea';
 import {
     Select,
     SelectContent,
@@ -20,12 +24,16 @@ import {
     SelectTrigger,
     SelectValue,
 } from 'src/components/ui/select';
-import { Edit3 } from 'lucide-react';
-import { updateDictionaryAction } from '@/actions/dictionary';
-import { useTranslations } from 'next-intl';
-import { toast } from 'sonner';
+import { Textarea } from 'src/components/ui/textarea';
 import { Dictionary } from './dictionary-artwork';
-
+const logger = createLogger({
+    type: 'dictionaries:edit-dictionary-dialog',
+}, {
+    json: false,// 开启json格式输出
+    pretty: false, // 关闭开发环境美化输出
+    colors: true, // 仅当json：false时启用颜色输出可用
+    includeCaller: false, // 日志不包含调用者
+});
 interface EditDictionaryDialogProps {
     dictionary: Dictionary;
     onDictionaryEdited: (dictionaryId: string, updatedData: Partial<Dictionary>) => void;
@@ -91,7 +99,7 @@ export function EditDictionaryDialog({
                 });
             }
         } catch (error) {
-            console.error('更新词典失败:', error);
+            logger.error('更新词典失败:', error);
             toast.error(t('updateError'), { description: t('error') as string });
         } finally {
             setLoading(false);

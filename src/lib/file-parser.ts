@@ -1,11 +1,19 @@
 // src/lib/file-parser.ts
 // 智能读取文件文本（支持 TXT/PDF/DOCX）
 
+import { createLogger } from '@/lib/logger';
 import { Buffer } from 'buffer'; // 如需显式导入
-import { extractDocxFromUrl } from './parsers/docx-parser';
-import path from 'path';
 import fs from 'fs/promises';
-import { logger } from '@/lib/console-enhanced';
+import path from 'path';
+import { extractDocxFromUrl } from './parsers/docx-parser';
+const logger = createLogger({
+    type: 'lib:file-parser',
+}, {
+    json: false,// 开启json格式输出
+    pretty: false, // 关闭开发环境美化输出
+    colors: true, // 仅当json：false时启用颜色输出可用
+    includeCaller: false, // 日志不包含调用者
+});
 export async function extractTextFromUrl(
     url: string
 ): Promise<{ text: string; contentType?: string }> {
@@ -22,13 +30,12 @@ export async function extractTextFromUrl(
                 const abs = path.isAbsolute(url)
                     ? url
                     : url.startsWith('data/')
-                      ? path.resolve(baseDir, url.replace(/^data[\\\/]?/, ''))
-                      : path.resolve(process.cwd(), url);
+                        ? path.resolve(baseDir, url.replace(/^data[\\\/]?/, ''))
+                        : path.resolve(process.cwd(), url);
                 localCandidate = abs;
             }
-        } catch {}
-        logger.info('[extract] localCandidate:', localCandidate);
-        logger.info('[extract] url:', url);
+        } catch { }
+        logger.debug('[extract] localCandidate:', localCandidate, '[extract] url:', url);
         let contentType = '';
         let contentLength = 0;
         let buffer: Buffer | null = null;
@@ -37,12 +44,12 @@ export async function extractTextFromUrl(
             const abs = path.resolve(localCandidate);
             const rel = path.relative(baseDir, abs);
             if (rel.startsWith('..') || path.isAbsolute(rel)) {
-                console.error('[extract] local path outside data dir');
+                logger.error('[extract] local path outside data dir');
                 return { text: '', contentType: '' };
             }
             const stat = await fs.stat(abs);
             if (stat.size > 25 * 1024 * 1024) {
-                console.error('[extract] File too large:', stat.size);
+                logger.error('[extract] File too large:', stat.size);
                 return { text: '', contentType: '' };
             }
             buffer = await fs.readFile(abs);
@@ -69,13 +76,13 @@ export async function extractTextFromUrl(
         logger.info('[extract] res:', res);
         if (!buffer) {
             if (!res || !res.ok) {
-                console.error(`[extract] Fetch failed: ${res?.status} ${res?.statusText}`);
+                logger.error(`[extract] Fetch failed: ${res?.status} ${res?.statusText}`);
                 return { text: '', contentType: res?.headers?.get('content-type') || '' };
             }
             contentType = (res.headers.get('content-type') || '').toLowerCase();
             contentLength = Number(res.headers.get('content-length') || 0);
             if (contentLength && contentLength > 25 * 1024 * 1024) {
-                console.error('[extract] File too large:', contentLength);
+                logger.error('[extract] File too large:', contentLength);
                 return { text: '', contentType };
             }
         }
@@ -90,7 +97,7 @@ export async function extractTextFromUrl(
                 const dot = pathname.lastIndexOf('.');
                 ext = dot >= 0 ? pathname.slice(dot) : '';
             }
-        } catch {}
+        } catch { }
 
         const isTextCT = contentType.startsWith('text/') || contentType.includes('plain');
         const isTextExt = ['.txt', '.md', '.csv', '.log'].includes(ext);
@@ -105,7 +112,7 @@ export async function extractTextFromUrl(
         const isDocx = isDocxCT || isDocxExt;
 
         if (process.env.DEBUG_SEGMENT === '1') {
-            console.log('[extract]', {
+            logger.debug('[extract]', {
                 contentType,
                 contentLength,
                 ext,
@@ -130,7 +137,7 @@ export async function extractTextFromUrl(
                 const text = await res.text();
                 return { text, contentType };
             } catch (err) {
-                console.error('[extract] Text read failed:', (err as Error)?.message);
+                logger.error('[extract] Text read failed:', (err as Error)?.message);
                 return { text: '', contentType };
             }
         }
@@ -145,14 +152,14 @@ export async function extractTextFromUrl(
                 // 动态导入，忽略模块初始化错误
                 const pdfParseMod = await import('pdf-parse').catch(() => null);
                 if (!pdfParseMod) {
-                    console.error('[extract] pdf-parse module not available');
+                    logger.error('[extract] pdf-parse module not available');
                     return { text: '', contentType };
                 }
                 const pdfParse = pdfParseMod.default || pdfParseMod;
                 const data = await pdfParse(buffer);
                 return { text: data.text || '', contentType };
             } catch (err) {
-                console.error('[extract] pdf-parse failed:', (err as Error)?.message);
+                logger.error('[extract] pdf-parse failed:', (err as Error)?.message);
                 return { text: '', contentType };
             }
         }
@@ -165,11 +172,11 @@ export async function extractTextFromUrl(
 
         // 其他类型：返回空文本，由上层生成占位内容
         if (process.env.DEBUG_SEGMENT === '1') {
-            console.log('[extract] unsupported type, return empty', { contentType, ext });
+            logger.debug('[extract] unsupported type, return empty', { contentType, ext });
         }
         return { text: '', contentType };
     } catch (err) {
-        console.error('[extract] General error:', (err as Error)?.message);
+        logger.error('[extract] General error:', (err as Error)?.message);
         return { text: '', contentType: '' }; // 即使 fetch 或其他失败，也返回空
     } finally {
         clearTimeout(timer);

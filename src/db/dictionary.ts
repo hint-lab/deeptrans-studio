@@ -1,7 +1,15 @@
 import { prisma } from '@/lib/db';
+import { createLogger } from '@/lib/logger';
 import { type Dictionary as PrismaDictionary } from '@prisma/client';
 import { dbTry } from './utils';
-
+const logger = createLogger({
+    type: 'db:dictionary',
+}, {
+    json: false,// 开启json格式输出
+    pretty: false, // 关闭开发环境美化输出
+    colors: true, // 仅当json：false时启用颜色输出可用
+    includeCaller: false, // 日志不包含调用者
+});
 export type Dictionary = PrismaDictionary;
 export type DictionaryCreateInput = {
     name: string;
@@ -158,11 +166,11 @@ export const findOrCreateDictionaryDB = async (
             select: { dictionaryId: true },
         });
         if (bound?.dictionaryId) {
-            console.log(`项目 ${projectId} 已有绑定词典: ${bound.dictionaryId}`);
+            logger.debug(`项目 ${projectId} 已有绑定词典: ${bound.dictionaryId}`);
             return { id: bound.dictionaryId, created: false } as const;
         }
     } catch (error) {
-        console.error('查找项目绑定失败:', error);
+        logger.error('查找项目绑定失败:', error);
     }
 
     // 2. 直接为项目创建专属词典
@@ -183,7 +191,7 @@ export const findOrCreateDictionaryDB = async (
             projectDomain = project.domain || 'general';
         }
     } catch (error) {
-        console.error('获取项目信息失败:', error);
+        logger.error('获取项目信息失败:', error);
     }
 
     // 生成唯一名称
@@ -216,12 +224,12 @@ export const findOrCreateDictionaryDB = async (
             data: { projectId, dictionaryId: createdId },
         });
 
-        console.log(
+        logger.debug(
             `为项目 ${projectId} (${projectName}) 创建新词典: ${createdId} - ${created.name}`
         );
         return { id: createdId, created: true } as const;
     } catch (error) {
-        console.error('创建词典失败:', error);
+        logger.error('创建词典失败:', error);
         throw new Error(`无法为项目 ${projectId} 创建词典`);
     }
 };

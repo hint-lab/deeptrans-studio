@@ -1,13 +1,19 @@
 'use server';
 
-import { MonoTermExtractAgent } from '@/agents';
-import { DictLookupAgent } from '@/agents';
-import { TermEmbedTranslateAgent } from '@/agents';
-import type { TermCandidate, DictEntry } from '@/types/terms';
-
+import { DictLookupAgent, MonoTermExtractAgent, TermEmbedTranslateAgent } from '@/agents';
+import { createLogger } from '@/lib/logger';
+import type { DictEntry, TermCandidate } from '@/types/terms';
 /**
  * 术语抽取 Server Action
  */
+const logger = createLogger({
+    type: 'actions:pre-translate',
+}, {
+    json: false,// 开启json格式输出
+    pretty: false, // 关闭开发环境美化输出
+    colors: true, // 仅当json：false时启用颜色输出可用
+    includeCaller: false, // 日志不包含调用者
+});
 export async function extractMonolingualTermsAction(
     text: string,
     options?: { prompt?: string; locale?: string }
@@ -26,7 +32,7 @@ export async function extractMonolingualTermsAction(
         );
         return result;
     } catch (error) {
-        console.error('术语抽取失败:', error);
+        logger.error('术语抽取失败:', error);
         throw new Error('术语抽取失败');
     }
 }
@@ -39,7 +45,7 @@ export async function lookupDictionaryAction(
     options?: { tenantId?: string; userId?: string }
 ): Promise<DictEntry[]> {
     try {
-        console.log('词典查询 Action 开始:', {
+        logger.debug('词典查询 Action 开始:', {
             termsCount: terms?.length,
             terms: terms?.map(t => t.term).slice(0, 10),
             options,
@@ -52,14 +58,14 @@ export async function lookupDictionaryAction(
             userId: options?.userId,
         });
 
-        console.log('词典查询 Action 完成:', {
+        logger.debug('词典查询 Action 完成:', {
             resultCount: result?.length,
             result: result?.slice(0, 3),
         });
 
         return result;
     } catch (error) {
-        console.error('词典查询失败:', error);
+        logger.error('词典查询失败:', error);
         throw new Error('词典查询失败');
     }
 }
@@ -74,7 +80,7 @@ export async function baselineTranslateAction(
     options?: { prompt?: string }
 ): Promise<string> {
     try {
-        console.log('基线翻译参数:', { sourceLanguage, targetLanguage });
+        logger.debug('基线翻译参数:', { sourceLanguage, targetLanguage });
         const agent = new TermEmbedTranslateAgent(sourceLanguage, targetLanguage);
         const result = await agent.execute({
             text,
@@ -86,7 +92,7 @@ export async function baselineTranslateAction(
         });
         return result;
     } catch (error) {
-        console.error('基线翻译失败:', error);
+        logger.error('基线翻译失败:', error);
         throw new Error('基线翻译失败');
     }
 }
@@ -118,7 +124,7 @@ export async function embedAndTranslateAction(
         );
         return result;
     } catch (error) {
-        console.error('术语嵌入翻译失败:', error);
+        logger.error('术语嵌入翻译失败:', error);
         throw new Error('术语嵌入翻译失败');
     }
 }
@@ -141,7 +147,7 @@ export async function runPreTranslateAction(
     translation: string;
 }> {
     try {
-        console.log('预翻译流程开始:', {
+        logger.debug('预翻译流程开始:', {
             sourceText: sourceText?.substring(0, 100) + (sourceText?.length > 100 ? '...' : ''),
             sourceLanguage,
             targetLanguage,
@@ -149,22 +155,22 @@ export async function runPreTranslateAction(
         });
 
         // 1. 术语抽取
-        console.log('步骤 1: 开始术语抽取...');
+        logger.debug('步骤 1: 开始术语抽取...');
         const terms = await extractMonolingualTermsAction(sourceText, {
             prompt: options?.prompt,
         });
-        console.log('术语抽取完成:', { count: terms?.length, terms: terms?.slice(0, 5) });
+        logger.debug('术语抽取完成:', { count: terms?.length, terms: terms?.slice(0, 5) });
 
         // 2. 词典查询
-        console.log('步骤 2: 开始词典查询...', { termsCount: terms?.length });
+        logger.debug('步骤 2: 开始词典查询...', { termsCount: terms?.length });
         const dict = await lookupDictionaryAction(terms, {
             tenantId: options?.tenantId,
             userId: options?.userId,
         });
-        console.log('词典查询完成:', { count: dict?.length, dict: dict?.slice(0, 3) });
+        logger.debug('词典查询完成:', { count: dict?.length, dict: dict?.slice(0, 3) });
 
         // 3. 术语嵌入翻译
-        console.log('步骤 3: 开始术语嵌入翻译...', { dictCount: dict?.length });
+        logger.debug('步骤 3: 开始术语嵌入翻译...', { dictCount: dict?.length });
         const translation = await embedAndTranslateAction(
             sourceText,
             sourceLanguage,
@@ -172,7 +178,7 @@ export async function runPreTranslateAction(
             dict,
             { prompt: options?.prompt }
         );
-        console.log('术语嵌入翻译完成:', { translationLength: translation?.length });
+        logger.debug('术语嵌入翻译完成:', { translationLength: translation?.length });
 
         const result = {
             terms,
@@ -180,7 +186,7 @@ export async function runPreTranslateAction(
             translation,
         };
 
-        console.log('预翻译流程完成:', {
+        logger.debug('预翻译流程完成:', {
             termsCount: terms?.length,
             dictCount: dict?.length,
             translationLength: translation?.length,
@@ -188,7 +194,7 @@ export async function runPreTranslateAction(
 
         return result;
     } catch (error) {
-        console.error('预翻译流程失败:', error);
+        logger.error('预翻译流程失败:', error);
         throw new Error('预翻译流程失败');
     }
 }

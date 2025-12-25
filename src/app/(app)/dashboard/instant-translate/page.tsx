@@ -1,8 +1,16 @@
 'use client';
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 // 去掉 Card，使用自定义样式容器
-import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
 import {
     Select,
     SelectContent,
@@ -11,38 +19,36 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
-import {
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-    DialogTrigger,
-} from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
 
+import { fetchDictionariesAction, fetchDictionaryEntriesAction } from '@/actions/dictionary';
+import { embedAndTranslateAction as textTranslate } from '@/actions/pre-translate';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
+import { Skeleton } from '@/components/ui/skeleton';
+import { LANGUAGES } from '@/constants/languages';
+import { createLogger } from '@/lib/logger';
 import {
     ArrowRightLeft,
     Copy,
-    Volume2,
-    Loader2,
-    Settings,
-    Search,
     FileText,
     Globe,
+    Loader2,
+    Search,
+    Volume2
 } from 'lucide-react';
-import { embedAndTranslateAction as textTranslate } from '@/actions/pre-translate';
 import { useSession } from 'next-auth/react';
-import { toast } from 'sonner';
-import { fetchDictionariesAction, fetchDictionaryEntriesAction } from '@/actions/dictionary';
-import { Skeleton } from '@/components/ui/skeleton';
-import { LANGUAGES } from '@/constants/languages';
 import { useTranslations } from 'next-intl';
-
+import { toast } from 'sonner';
 // 动态语言和翻译风格选项 - 将在组件内部基于翻译创建
-
+const logger = createLogger({
+    type: 'dashboard:instant-translate',
+}, {
+    json: false,// 开启json格式输出
+    pretty: false, // 关闭开发环境美化输出
+    colors: true, // 仅当json：false时启用颜色输出可用
+    includeCaller: false, // 日志不包含调用者
+});
 // 词典与词条类型（仅使用到的字段）
 interface DictionarySummary {
     id: string;
@@ -162,7 +168,7 @@ export default function InstantTranslatePage() {
 
             return allEntries;
         } catch (error) {
-            console.error('获取词典条目失败:', error);
+            logger.error('获取词典条目失败:', error);
             return [];
         }
     };
@@ -212,7 +218,7 @@ export default function InstantTranslatePage() {
                         setTranslatedText(result);
                     }
                 } catch (error: unknown) {
-                    console.error('翻译错误:', error);
+                    logger.error('翻译错误:', error);
                     toast.error(t('translationFailed'), { description: t('retryLater') });
                 } finally {
                     if (localRequestId === requestIdRef.current) {
@@ -276,7 +282,7 @@ export default function InstantTranslatePage() {
                     setPrivateDictionaries([]);
                 }
             } catch (e) {
-                console.error('加载词典失败', e);
+                logger.error('加载词典失败', e);
                 toast.error(t('loadDictionariesFailed'));
             } finally {
                 setLoadingDictionaries(false);
@@ -295,9 +301,9 @@ export default function InstantTranslatePage() {
         if (!dictionaryEntriesById[dictionaryId]) {
             setLoadingEntries(prev => ({ ...prev, [dictionaryId]: true }));
             try {
-                console.log('加载词条此单ID:', dictionaryId);
+                logger.debug('加载词条此单ID:', dictionaryId);
                 const res = await fetchDictionaryEntriesAction(dictionaryId);
-                console.log('加载词条结果:', res);
+                logger.debug('加载词条结果:', res);
                 if (res.success && res.data) {
                     setDictionaryEntriesById(prev => ({
                         ...prev,
@@ -305,7 +311,7 @@ export default function InstantTranslatePage() {
                     }));
                 }
             } catch (e) {
-                console.error('加载词条失败', e);
+                logger.error('加载词条失败', e);
                 toast.error(t('loadEntriesFailed'));
             } finally {
                 setLoadingEntries(prev => ({ ...prev, [dictionaryId]: false }));
@@ -355,7 +361,7 @@ export default function InstantTranslatePage() {
                 setTranslatedText(result);
             }
         } catch (error: unknown) {
-            console.error('翻译错误:', error);
+            logger.error('翻译错误:', error);
             toast.error('翻译失败', { description: '请稍后重试' });
         } finally {
             if (localRequestId === requestIdRef.current) {
@@ -410,7 +416,7 @@ export default function InstantTranslatePage() {
             // 由于OpenAI API的限制，我们只能通过其他方式检测
             // 暂时保持auto状态
         } catch (error) {
-            console.error('语言检测失败:', error);
+            logger.error('语言检测失败:', error);
         }
     };
 
@@ -638,67 +644,67 @@ export default function InstantTranslatePage() {
                                                             {expandedDictionaryIds.includes(
                                                                 dictionary.id
                                                             ) && (
-                                                                <div className="mt-3">
-                                                                    {(loadingEntries[
-                                                                        dictionary.id
-                                                                    ] ?? false) ? (
-                                                                        <div className="text-sm text-gray-500">
-                                                                            {t('loadingTerms')}
-                                                                        </div>
-                                                                    ) : (
-                                                                        <div className="max-h-40 space-y-2 overflow-auto pr-1">
-                                                                            {(
-                                                                                dictionaryEntriesById[
+                                                                    <div className="mt-3">
+                                                                        {(loadingEntries[
+                                                                            dictionary.id
+                                                                        ] ?? false) ? (
+                                                                            <div className="text-sm text-gray-500">
+                                                                                {t('loadingTerms')}
+                                                                            </div>
+                                                                        ) : (
+                                                                            <div className="max-h-40 space-y-2 overflow-auto pr-1">
+                                                                                {(
+                                                                                    dictionaryEntriesById[
                                                                                     dictionary.id
-                                                                                ] ?? []
-                                                                            ).map(
-                                                                                (
-                                                                                    entry: DictionaryEntryItem
-                                                                                ) => (
-                                                                                    <div
-                                                                                        key={
-                                                                                            entry.id
-                                                                                        }
-                                                                                        className="text-sm text-gray-700 dark:text-gray-300"
-                                                                                    >
-                                                                                        <span className="font-medium">
-                                                                                            {
-                                                                                                entry.sourceText
+                                                                                    ] ?? []
+                                                                                ).map(
+                                                                                    (
+                                                                                        entry: DictionaryEntryItem
+                                                                                    ) => (
+                                                                                        <div
+                                                                                            key={
+                                                                                                entry.id
                                                                                             }
-                                                                                        </span>
-                                                                                        <span className="mx-2 text-gray-400">
-                                                                                            →
-                                                                                        </span>
-                                                                                        <span>
-                                                                                            {
-                                                                                                entry.targetText
-                                                                                            }
-                                                                                        </span>
-                                                                                        {entry.notes ? (
-                                                                                            <span className="ml-2 text-xs text-gray-400">
-                                                                                                (
+                                                                                            className="text-sm text-gray-700 dark:text-gray-300"
+                                                                                        >
+                                                                                            <span className="font-medium">
                                                                                                 {
-                                                                                                    entry.notes
+                                                                                                    entry.sourceText
                                                                                                 }
-                                                                                                )
                                                                                             </span>
-                                                                                        ) : null}
-                                                                                    </div>
-                                                                                )
-                                                                            )}
-                                                                            {!(
-                                                                                dictionaryEntriesById[
+                                                                                            <span className="mx-2 text-gray-400">
+                                                                                                →
+                                                                                            </span>
+                                                                                            <span>
+                                                                                                {
+                                                                                                    entry.targetText
+                                                                                                }
+                                                                                            </span>
+                                                                                            {entry.notes ? (
+                                                                                                <span className="ml-2 text-xs text-gray-400">
+                                                                                                    (
+                                                                                                    {
+                                                                                                        entry.notes
+                                                                                                    }
+                                                                                                    )
+                                                                                                </span>
+                                                                                            ) : null}
+                                                                                        </div>
+                                                                                    )
+                                                                                )}
+                                                                                {!(
+                                                                                    dictionaryEntriesById[
                                                                                     dictionary.id
-                                                                                ] ?? []
-                                                                            ).length && (
-                                                                                <div className="text-sm text-gray-500">
-                                                                                    {t('noTerms')}
-                                                                                </div>
-                                                                            )}
-                                                                        </div>
-                                                                    )}
-                                                                </div>
-                                                            )}
+                                                                                    ] ?? []
+                                                                                ).length && (
+                                                                                        <div className="text-sm text-gray-500">
+                                                                                            {t('noTerms')}
+                                                                                        </div>
+                                                                                    )}
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                )}
                                                         </div>
                                                     ))}
                                                 </div>
@@ -786,67 +792,67 @@ export default function InstantTranslatePage() {
                                                             {expandedDictionaryIds.includes(
                                                                 dictionary.id
                                                             ) && (
-                                                                <div className="mt-3">
-                                                                    {(loadingEntries[
-                                                                        dictionary.id
-                                                                    ] ?? false) ? (
-                                                                        <div className="text-sm text-gray-500">
-                                                                            {t('loadingTerms')}
-                                                                        </div>
-                                                                    ) : (
-                                                                        <div className="max-h-40 space-y-2 overflow-auto pr-1">
-                                                                            {(
-                                                                                dictionaryEntriesById[
+                                                                    <div className="mt-3">
+                                                                        {(loadingEntries[
+                                                                            dictionary.id
+                                                                        ] ?? false) ? (
+                                                                            <div className="text-sm text-gray-500">
+                                                                                {t('loadingTerms')}
+                                                                            </div>
+                                                                        ) : (
+                                                                            <div className="max-h-40 space-y-2 overflow-auto pr-1">
+                                                                                {(
+                                                                                    dictionaryEntriesById[
                                                                                     dictionary.id
-                                                                                ] ?? []
-                                                                            ).map(
-                                                                                (
-                                                                                    entry: DictionaryEntryItem
-                                                                                ) => (
-                                                                                    <div
-                                                                                        key={
-                                                                                            entry.id
-                                                                                        }
-                                                                                        className="text-sm text-gray-700 dark:text-gray-300"
-                                                                                    >
-                                                                                        <span className="font-medium">
-                                                                                            {
-                                                                                                entry.sourceText
+                                                                                    ] ?? []
+                                                                                ).map(
+                                                                                    (
+                                                                                        entry: DictionaryEntryItem
+                                                                                    ) => (
+                                                                                        <div
+                                                                                            key={
+                                                                                                entry.id
                                                                                             }
-                                                                                        </span>
-                                                                                        <span className="mx-2 text-gray-400">
-                                                                                            →
-                                                                                        </span>
-                                                                                        <span>
-                                                                                            {
-                                                                                                entry.targetText
-                                                                                            }
-                                                                                        </span>
-                                                                                        {entry.notes ? (
-                                                                                            <span className="ml-2 text-xs text-gray-400">
-                                                                                                (
+                                                                                            className="text-sm text-gray-700 dark:text-gray-300"
+                                                                                        >
+                                                                                            <span className="font-medium">
                                                                                                 {
-                                                                                                    entry.notes
+                                                                                                    entry.sourceText
                                                                                                 }
-                                                                                                )
                                                                                             </span>
-                                                                                        ) : null}
-                                                                                    </div>
-                                                                                )
-                                                                            )}
-                                                                            {!(
-                                                                                dictionaryEntriesById[
+                                                                                            <span className="mx-2 text-gray-400">
+                                                                                                →
+                                                                                            </span>
+                                                                                            <span>
+                                                                                                {
+                                                                                                    entry.targetText
+                                                                                                }
+                                                                                            </span>
+                                                                                            {entry.notes ? (
+                                                                                                <span className="ml-2 text-xs text-gray-400">
+                                                                                                    (
+                                                                                                    {
+                                                                                                        entry.notes
+                                                                                                    }
+                                                                                                    )
+                                                                                                </span>
+                                                                                            ) : null}
+                                                                                        </div>
+                                                                                    )
+                                                                                )}
+                                                                                {!(
+                                                                                    dictionaryEntriesById[
                                                                                     dictionary.id
-                                                                                ] ?? []
-                                                                            ).length && (
-                                                                                <div className="text-sm text-gray-500">
-                                                                                    {t('noTerms')}
-                                                                                </div>
-                                                                            )}
-                                                                        </div>
-                                                                    )}
-                                                                </div>
-                                                            )}
+                                                                                    ] ?? []
+                                                                                ).length && (
+                                                                                        <div className="text-sm text-gray-500">
+                                                                                            {t('noTerms')}
+                                                                                        </div>
+                                                                                    )}
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                )}
                                                         </div>
                                                     ))}
                                                 </div>

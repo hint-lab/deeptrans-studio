@@ -1,6 +1,12 @@
 'use client';
 
+import { createDictionaryAction } from '@/actions/dictionary';
+import { getDomainOptions } from '@/constants/domains';
+import { createLogger } from '@/lib/logger';
+import { PlusCircledIcon } from '@radix-ui/react-icons';
+import { useTranslations } from 'next-intl';
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { Button } from 'src/components/ui/button';
 import {
     Dialog,
@@ -20,12 +26,15 @@ import {
     SelectTrigger,
     SelectValue,
 } from 'src/components/ui/select';
-import { PlusCircledIcon } from '@radix-ui/react-icons';
-import { createDictionaryAction } from '@/actions/dictionary';
-import { toast } from 'sonner';
-import { DOMAINS, getDomainOptions } from '@/constants/domains';
-import { useTranslations } from 'next-intl';
 import { Textarea } from 'src/components/ui/textarea';
+const logger = createLogger({
+    type: 'dashboard:add-public-dictionary-dialog',
+}, {
+    json: false,// 开启json格式输出
+    pretty: false, // 关闭开发环境美化输出
+    colors: true, // 仅当json：false时启用颜色输出可用
+    includeCaller: false, // 日志不包含调用者
+});
 type PublicDictionary = {
     id: string;
     name: string;
@@ -86,13 +95,13 @@ export function AddPublicDictionaryDialog({
                 onDictionaryAdded(newDictionary);
                 setFormData({ name: '', description: '', domain: '', isPublic: false });
                 setOpen(false);
-
+                logger.error('创建词典成功:', newDictionary);
                 toast.success('词典创建成功！');
             } else {
                 toast.error(result.error ?? '创建词典失败');
             }
         } catch (error) {
-            console.error('创建词典时出错:', error);
+            logger.error('创建词典时出错:', error);
             toast.error('创建词典时发生错误', { description: '创建词典时发生错误' as string });
         } finally {
             setLoading(false);

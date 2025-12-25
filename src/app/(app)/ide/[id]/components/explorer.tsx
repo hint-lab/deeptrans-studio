@@ -1,16 +1,23 @@
 'use client';
-import React, { useEffect, useRef, useState, useLayoutEffect } from 'react';
-import { FilePlus2, Undo2, FileIcon, FolderIcon } from 'lucide-react';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { useExplorerTabs } from '@/hooks/useExplorerTabs';
 import { fetchProjectTabsAction } from '@/actions/explorer-tabs';
-import { DocumentTab, DocumentItemTab } from '@/types/explorerTabs';
-import { useActiveDocumentItem } from '@/hooks/useActiveDocumentItem';
 import { Skeleton } from '@/components/ui/skeleton';
-import { toast } from 'sonner';
 import { getTranslationStageLabel } from '@/constants/translationStages';
+import { useActiveDocumentItem } from '@/hooks/useActiveDocumentItem';
+import { useExplorerTabs } from '@/hooks/useExplorerTabs';
+import { createLogger } from '@/lib/logger';
 import type { TranslationStage } from '@/store/features/translationSlice';
+import { DocumentItemTab, DocumentTab } from '@/types/explorerTabs';
+import { FileIcon } from 'lucide-react';
 import { useTranslations } from 'next-intl';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+const logger = createLogger({
+    type: 'ide:explorer',
+}, {
+    json: false,// 开启json格式输出
+    pretty: false, // 关闭开发环境美化输出
+    colors: true, // 仅当json：false时启用颜色输出可用
+    includeCaller: false, // 日志不包含调用者
+});
 // 本地子组件：状态点与状态徽章
 const ItemStatusDot = ({ status }: { status: string }) => {
     const isHuman =
@@ -84,7 +91,7 @@ const ExplorerView = ({ projectId }: { projectId: string }) => {
     const handleDocumentItemClick = (element: DocumentItemTab) => {
         if (element.id === activeDocumentItem.id) return;
         setActiveDocumentItem(element);
-        console.log('element', element);
+        logger.debug('element', element);
     };
 
     // 在数据变动后恢复滚动位置，避免因列表重新渲染导致的“乱跳”
@@ -100,12 +107,12 @@ const ExplorerView = ({ projectId }: { projectId: string }) => {
                 // 获取数据...
                 const projectTabs = await fetchProjectTabsAction(projectId);
                 // 转换 ProjectTabs 到 ExplorerTabs
-                console.log('projectTabs', projectTabs);
+                logger.debug('projectTabs', projectTabs);
                 setExplorerTabs({
                     ...projectTabs,
                 });
             } catch (error) {
-                console.error(t('dataLoadFailed'), error);
+                logger.error(t('dataLoadFailed'), error);
             } finally {
                 setIsLoading(false);
             }
@@ -139,8 +146,8 @@ const ExplorerView = ({ projectId }: { projectId: string }) => {
                     </div>
                 </div>
             ) : explorerTabs &&
-              explorerTabs.documentTabs &&
-              explorerTabs.documentTabs.length > 0 ? (
+                explorerTabs.documentTabs &&
+                explorerTabs.documentTabs.length > 0 ? (
                 <ul
                     ref={listRef}
                     className="flex flex-col overflow-y-auto p-2 text-sm text-foreground [overflow-anchor:none]"

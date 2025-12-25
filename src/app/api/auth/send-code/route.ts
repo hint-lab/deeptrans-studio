@@ -1,6 +1,14 @@
+import { createEmailVerificationCode, createVerificationCode } from '@/db/verificationCode';
+import { createLogger } from '@/lib/logger';
 import { NextRequest, NextResponse } from 'next/server';
-import { createVerificationCode, createEmailVerificationCode } from '@/db/verificationCode';
-
+const logger = createLogger({
+    type: 'api:auth:send-code',
+}, {
+    json: false,
+    pretty: false,
+    colors: true,
+    includeCaller: false,
+});
 export async function POST(req: NextRequest) {
     try {
         const form = await req.formData();
@@ -16,7 +24,7 @@ export async function POST(req: NextRequest) {
             if (!r.success)
                 return NextResponse.json({ error: r.error || '发送失败' }, { status: 500 });
             // TODO: 这里接入短信服务商发送验证码
-            console.log(`发送验证码到手机号 ${phone}：${code}`);
+            logger.debug(`发送验证码到手机号 ${phone}：${code}`);
             return NextResponse.json({ ok: true });
         } else {
             const email = String(form.get('email') || '').trim();
@@ -25,7 +33,7 @@ export async function POST(req: NextRequest) {
             if (!r.success)
                 return NextResponse.json({ error: r.error || '发送失败' }, { status: 500 });
             // TODO: 接入邮件服务发送验证码
-            console.log(`发送验证码到邮箱 ${email}：${code}`);
+            logger.debug(`发送验证码到邮箱 ${email}：${code}`);
             return NextResponse.json({ ok: true });
         }
     } catch (e: any) {

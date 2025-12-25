@@ -1,12 +1,20 @@
 'use server';
 
-import { prisma } from '@/lib/db';
 import { embedBatchAction, embedTextAction } from '@/actions/embedding';
-import { upsertVectors, searchVectors, hybridSearch, searchKeywords } from '@/lib/vector/milvus';
+import { prisma } from '@/lib/db';
+import { createLogger } from '@/lib/logger';
+import { hybridSearch, upsertVectors } from '@/lib/vector/milvus';
 import { HybridSearchConfig } from '@/types/hybrid-search';
-import * as XLSX from 'xlsx';
 import { XMLParser } from 'fast-xml-parser';
-
+import * as XLSX from 'xlsx';
+const logger = createLogger({
+    type: 'actions:memories',
+}, {
+    json: false,// 开启json格式输出
+    pretty: false, // 关闭开发环境美化输出
+    colors: true, // 仅当json：false时启用颜色输出可用
+    includeCaller: false, // 日志不包含调用者
+});
 type ImportInput = {
     file: File;
     memoryId?: string;
@@ -76,10 +84,10 @@ function parseTMX(xml: string, srcPref?: string, tgtPref?: string) {
         const pick = (pref?: string) =>
             pref
                 ? tuv.find((x: any) =>
-                      String(x?.['@_xml:lang'] || x?.['@_lang'] || '')
-                          .toLowerCase()
-                          .startsWith(pref.toLowerCase())
-                  )
+                    String(x?.['@_xml:lang'] || x?.['@_lang'] || '')
+                        .toLowerCase()
+                        .startsWith(pref.toLowerCase())
+                )
                 : undefined;
         let s = pick(srcPref);
         let t = pick(tgtPref);
@@ -145,24 +153,24 @@ export async function importMemoryAction(input: ImportInput) {
         // 分批处理，避免超过 API 限制
         let vectors: number[][] = [];
         try {
-            console.log(`[MEMORY_IMPORT] 开始生成 ${entries.length} 条记录的嵌入向量...`);
+            logger.log(`[MEMORY_IMPORT] 开始生成 ${entries.length} 条记录的嵌入向量...`);
             const texts = entries.map(e => `${e.source}\n${e.target}`);
             const batchSize = 200; // 设置为 200，留一些余量
 
             for (let i = 0; i < texts.length; i += batchSize) {
                 const batch = texts.slice(i, i + batchSize);
-                console.log(
+                logger.log(
                     `[MEMORY_IMPORT] 处理第 ${i + 1}-${Math.min(i + batch.length, texts.length)} 条记录...`
                 );
                 const batchVectors = await embedBatchAction(batch);
                 vectors.push(...batchVectors);
             }
 
-            console.log(
+            logger.log(
                 `[MEMORY_IMPORT] 成功生成 ${vectors.length} 个向量，第一个向量维度: ${vectors[0]?.length || 0}`
             );
         } catch (error) {
-            console.error(`[MEMORY_IMPORT] 嵌入向量生成失败:`, error);
+            logger.error(`[MEMORY_IMPORT] 嵌入向量生成失败:`, error);
         }
         const created = await prisma.$transaction(
             entries.map(e =>
@@ -189,18 +197,18 @@ export async function importMemoryAction(input: ImportInput) {
                 }))
                 .filter((p: { vector: number[] }) => Array.isArray(p.vector) && p.vector.length);
 
-            console.log(
+            logger.log(
                 `[MEMORY_IMPORT] 准备写入 Milvus: ${points.length}/${created.length} 条记录有有效向量`
             );
 
             if (points.length) {
                 await upsertVectors({ collection: 'TranslationMemory', points });
-                console.log(`[MEMORY_IMPORT] 成功写入 Milvus: ${points.length} 条记录`);
+                logger.log(`[MEMORY_IMPORT] 成功写入 Milvus: ${points.length} 条记录`);
             } else {
-                console.warn(`[MEMORY_IMPORT] 警告: 没有有效向量可写入 Milvus`);
+                logger.warn(`[MEMORY_IMPORT] 警告: 没有有效向量可写入 Milvus`);
             }
         } catch (error) {
-            console.error(`[MEMORY_IMPORT] Milvus 写入失败:`, error);
+            logger.error(`[MEMORY_IMPORT] Milvus 写入失败:`, error);
             // 重新抛出错误，让调用者知道有问题
             throw new Error(`向量索引写入失败: ${error}`);
         }
@@ -450,7 +458,7 @@ export async function searchMemoryAction(
                         .slice(0, limit);
 
                     if (merged.length) {
-                        console.log(
+                        logger.log(
                             `[SEARCH] Hybrid search found ${merged.length} results using ${searchConfig?.mode || 'hybrid'} mode`
                         );
                         return { success: true, data: merged, searchMode: 'hybrid' } as const;
@@ -458,7 +466,7 @@ export async function searchMemoryAction(
                 }
             }
         } catch (error) {
-            console.error('[SEARCH] Hybrid search error:', error);
+            logger.error('[SEARCH] Hybrid search error:', error);
         }
 
         // BM 兜底
@@ -555,27 +563,27 @@ export async function searchMemoryInLibraryAction(
                             const r = rowMap.get(String(h.id));
                             return r
                                 ? {
-                                      ...r,
-                                      score: Number(h.score || 0),
-                                      searchMode: h.source,
-                                      vectorScore: h.vectorScore,
-                                      keywordScore: h.keywordScore,
-                                  }
+                                    ...r,
+                                    score: Number(h.score || 0),
+                                    searchMode: h.source,
+                                    vectorScore: h.vectorScore,
+                                    keywordScore: h.keywordScore,
+                                }
                                 : null;
                         })
                         .filter(Boolean) as Array<{
-                        id: string;
-                        sourceText: string;
-                        targetText: string;
-                        notes?: string | null;
-                        score?: number;
-                        searchMode?: string;
-                        vectorScore?: number;
-                        keywordScore?: number;
-                    }>;
+                            id: string;
+                            sourceText: string;
+                            targetText: string;
+                            notes?: string | null;
+                            score?: number;
+                            searchMode?: string;
+                            vectorScore?: number;
+                            keywordScore?: number;
+                        }>;
 
                     if (merged.length) {
-                        console.log(
+                        logger.log(
                             `[SEARCH_LIBRARY] Hybrid search found ${merged.length} results in library ${memoryId}`
                         );
                         return { success: true, data: merged, mode: 'hybrid' as const } as const;
@@ -583,7 +591,7 @@ export async function searchMemoryInLibraryAction(
                 }
             }
         } catch (error) {
-            console.error('[SEARCH_LIBRARY] Hybrid search error:', error);
+            logger.error('[SEARCH_LIBRARY] Hybrid search error:', error);
         }
 
         // 关键词兜底（限定 memoryId）
@@ -669,13 +677,13 @@ export async function backfillMemoryVectorsAction(
             );
             let vectors: number[][] = [];
             try {
-                console.log(
+                logger.log(
                     `[BACKFILL] 生成第 ${totalUpserted + 1}-${totalUpserted + rows.length} 条记录的向量...`
                 );
                 vectors = await embedBatchAction(texts);
-                console.log(`[BACKFILL] 成功生成 ${vectors.length} 个向量`);
+                logger.log(`[BACKFILL] 成功生成 ${vectors.length} 个向量`);
             } catch (error) {
-                console.error(`[BACKFILL] 嵌入向量生成失败:`, error);
+                logger.error(`[BACKFILL] 嵌入向量生成失败:`, error);
                 throw error;
             }
             try {
@@ -688,17 +696,17 @@ export async function backfillMemoryVectorsAction(
                     }))
                     .filter(p => Array.isArray(p.vector) && p.vector.length);
 
-                console.log(
+                logger.log(
                     `[BACKFILL] 准备写入 Milvus: ${points.length}/${rows.length} 条记录有有效向量`
                 );
 
                 if (points.length) {
                     await upsertVectors({ collection: 'TranslationMemory', points });
-                    console.log(`[BACKFILL] 成功写入 Milvus: ${points.length} 条记录`);
+                    logger.log(`[BACKFILL] 成功写入 Milvus: ${points.length} 条记录`);
                 }
                 totalUpserted += rows.length;
             } catch (error) {
-                console.error(`[BACKFILL] Milvus 写入失败:`, error);
+                logger.error(`[BACKFILL] Milvus 写入失败:`, error);
                 throw error;
             }
             if (rows.length < take) break;

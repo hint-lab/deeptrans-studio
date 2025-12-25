@@ -1,6 +1,14 @@
-import jwt from 'jsonwebtoken';
+import { createLogger } from '@/lib/logger';
 import { UserRole } from '@prisma/client';
-
+import jwt from 'jsonwebtoken';
+const logger = createLogger({
+    type: 'lib:jwt',
+}, {
+    json: false,// 开启json格式输出
+    pretty: false, // 关闭开发环境美化输出
+    colors: true, // 仅当json：false时启用颜色输出可用
+    includeCaller: false, // 日志不包含调用者
+});
 interface JWTPayload {
     id: string;
     phone?: string;
@@ -26,9 +34,10 @@ export const generateJwtToken = (payload: JWTPayload): string => {
 export const verifyJwtToken = (token: string): JWTPayload | null => {
     try {
         const secret = process.env.JWT_SECRET || 'your-secret-key';
+        logger.debug('JWT验证通过:', secret);
         return jwt.verify(token, secret) as JWTPayload;
     } catch (error) {
-        console.error('JWT验证失败:', error);
+        logger.error('JWT验证失败:', error);
         return null;
     }
 };

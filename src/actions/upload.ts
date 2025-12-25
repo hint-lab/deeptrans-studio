@@ -1,7 +1,15 @@
 'use server';
 
+import { createLogger } from '@/lib/logger';
 import { createStorageService } from '@/lib/storage/factory';
-
+const logger = createLogger({
+    type: 'actions:upload',
+}, {
+    json: false,// 开启json格式输出
+    pretty: false, // 关闭开发环境美化输出
+    colors: true, // 仅当json：false时启用颜色输出可用
+    includeCaller: false, // 日志不包含调用者
+});
 // 存储服务配置
 const storageConfig = {
     type: (process.env.STORAGE_TYPE || 'minio') as 'minio' | 'cos',
@@ -23,23 +31,23 @@ export async function getUploadUrlAction(
     projectName: string
 ) {
     try {
-        console.log('开始获取上传 URL:', { fileName, contentType, projectName });
+        logger.debug('开始获取上传 URL:', { fileName, contentType, projectName });
 
         if (!fileName || !contentType || !projectName) {
-            console.error('参数缺失:', { fileName, contentType, projectName });
+            logger.error('参数缺失:', { fileName, contentType, projectName });
             throw new Error('缺少必要参数');
         }
 
         // 获取上传 URL
         const result = await storageService.getUploadUrl(fileName, contentType, projectName);
-        console.log('获取上传 URL 成功:', result);
+        logger.debug('获取上传 URL 成功:', result);
 
         return {
             success: true,
             data: result,
         };
     } catch (error) {
-        console.error('获取上传 URL 失败:', error);
+        logger.error('获取上传 URL 失败:', error);
         return {
             success: false,
             error: error instanceof Error ? error.message : '获取上传 URL 失败',
@@ -78,7 +86,7 @@ export async function uploadFileAction(formData: FormData) {
             let text = '';
             try {
                 text = await putRes.text();
-            } catch {}
+            } catch { }
             return {
                 success: false,
                 error: `上传失败: ${putRes.status} ${putRes.statusText} ${text}`,

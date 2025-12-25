@@ -1,5 +1,14 @@
 // app/actions/translate-image.ts
 'use server'
+import { createLogger } from '@/lib/logger';
+const logger = createLogger({
+    type: 'actions:translate-image',
+}, {
+    json: false,// 开启json格式输出
+    pretty: false, // 关闭开发环境美化输出
+    colors: true, // 仅当json：false时启用颜色输出可用
+    includeCaller: false, // 日志不包含调用者
+});
 // 配置语言支持
 const SUPPORTED_LANGUAGES = {
     'zh-CN': ['chi_sim', '中文'],
@@ -31,8 +40,7 @@ export async function fetchTextFromImg(
     try {
         const ocr_auth_url = process.env.OCR_AUTH_URL ?? 'http://localhost:5000/api/v1/auth/token';
         const ocr_base_url = process.env.OCR_BASE_URL ?? 'http://localhost:5000/api/v1/ocr/url';
-        console.log(ocr_auth_url)
-        console.log(process.env.OCR_CLIENT_SECRET)
+        logger.info("OCR_AUTH_URL:", ocr_auth_url)
         const res = await fetch(ocr_auth_url, {
             method: 'POST',
             headers: {
@@ -46,7 +54,7 @@ export async function fetchTextFromImg(
         let resjson = await res.json();
         const access_token = resjson?.data?.access_token;
         if (!res.ok || !access_token) {
-            console.error('获取访问令牌失败:', resjson);
+            logger.error('获取访问令牌失败:', resjson);
             throw new Error(`后端服务错误: ${res.status}`);
         }
         const response = await fetch(ocr_base_url, {
@@ -64,7 +72,7 @@ export async function fetchTextFromImg(
         });
         const data = await response.json();
         if (!response.ok) {
-            console.log(data.success, data.message)
+            logger.error(data.success, data.message)
             throw new Error(`后端服务错误: ${response.status}`);
         }
         return data;
@@ -72,7 +80,7 @@ export async function fetchTextFromImg(
 
 
     } catch (error) {
-        console.error('OCR处理错误:', error);
+        logger.error('OCR处理错误:', error);
         return
     }
 

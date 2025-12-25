@@ -1,10 +1,18 @@
 'use server';
 
-import { DiscourseQueryAgent } from '@/agents/postedit/DiscourseQueryAgent';
-import { DiscourseEvaluateAgent } from '@/agents/postedit/DiscourseEvaluateAgent';
 import { DiscourseEmbedAgent } from '@/agents/postedit/DiscourseEmbedAgent';
+import { DiscourseEvaluateAgent } from '@/agents/postedit/DiscourseEvaluateAgent';
+import { DiscourseQueryAgent } from '@/agents/postedit/DiscourseQueryAgent';
 import type { MemoryHit } from '@/agents/tools/memory';
-
+import { createLogger } from '@/lib/logger';
+const logger = createLogger({
+    type: 'actions:postedit',
+}, {
+    json: false,// 开启json格式输出
+    pretty: false, // 关闭开发环境美化输出
+    colors: true, // 仅当json：false时启用颜色输出可用
+    includeCaller: false, // 日志不包含调用者
+});
 /**
  * 语篇查询 Server Action
  */
@@ -24,7 +32,7 @@ export async function queryDiscourseAction(
         });
         return result;
     } catch (error) {
-        console.error('语篇查询失败:', error);
+        logger.error('语篇查询失败:', error);
         throw new Error('语篇查询失败');
     }
 }
@@ -52,7 +60,7 @@ export async function evaluateDiscourseAction(
         });
         return result;
     } catch (error) {
-        console.error('语篇评估失败:', error);
+        logger.error('语篇评估失败:', error);
         throw new Error('语篇评估失败');
     }
 }
@@ -80,7 +88,7 @@ export async function embedDiscourseAction(
         });
         return result;
     } catch (error) {
-        console.error('语篇嵌入改写失败:', error);
+        logger.error('语篇嵌入改写失败:', error);
         throw new Error('语篇嵌入改写失败');
     }
 }
@@ -126,7 +134,7 @@ export async function runPostEditAction(
             rewrite,
         };
     } catch (error) {
-        console.error('译后编辑流程失败:', error);
+        logger.error('译后编辑流程失败:', error);
         throw new Error('译后编辑流程失败');
     }
 }

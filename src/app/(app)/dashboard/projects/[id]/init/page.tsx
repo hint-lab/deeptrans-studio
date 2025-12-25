@@ -1,28 +1,32 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import { applySegmentAction, getLatestDocumentStatusForProjectAction, updateDocumentStatusByIdAction, type PreviewSegmentItem } from '@/actions/document';
 import { Button } from '@/components/ui/button';
-import { useTranslations } from 'next-intl';
-import { applySegmentAction, type PreviewSegmentItem } from '@/actions/document';
-import { getLatestDocumentStatusForProjectAction } from '@/actions/document';
-import {
-    Loader,
-    Play,
-    RefreshCcw,
-    Redo2,
-    Coffee,
-    Loader2,
-    SquareCheckBig,
-    Square,
-} from 'lucide-react';
-import { toast } from 'sonner';
-import SegmentPanel from './components/SegmentPanel';
-import ParsePanel from './components/ParsePanel';
-import TermsPanel from './components/TermsPanel';
-import Stepper from './components/Stepper';
 import { useProjectInit } from '@/hooks/useProjectInit';
-import { updateDocumentStatusByIdAction } from '@/actions/document';
-import { logger } from '@/lib/console-enhanced';
+import { createLogger } from '@/lib/logger';
+import {
+    Coffee,
+    Loader,
+    Loader2,
+    Redo2,
+    Square,
+    SquareCheckBig
+} from 'lucide-react';
+import { useTranslations } from 'next-intl';
+import { useParams, useRouter } from 'next/navigation';
+import { useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
+import ParsePanel from './components/ParsePanel';
+import SegmentPanel from './components/SegmentPanel';
+import Stepper from './components/Stepper';
+import TermsPanel from './components/TermsPanel';
+const logger = createLogger({
+    type: 'client:project-init-page',
+}, {
+    json: false,// 开启json格式输出
+    pretty: false, // 关闭开发环境美化输出
+    colors: true, // 仅当json：false时启用颜色输出可用
+    includeCaller: false, // 日志不包含调用者
+});
 export default function ProjectInitPage() {
     const t = useTranslations('Dashboard.Init');
     const { id } = useParams<{ id: string }>();
@@ -30,7 +34,7 @@ export default function ProjectInitPage() {
     const router = useRouter();
     const { entry, restart, updateBatchId, updateStep, updateProgress } = useProjectInit(projectId);
     const batchId = entry?.batchId || '';
-    //logger.info('ProjectInitPage render projectId, batchId', `${projectId}, ${batchId}`)
+    logger.info('ProjectInitPage render projectId, batchId', `${projectId}, ${batchId}`)
     const segPct = entry?.segPct || 0;
     const termPct = entry?.termPct || 0;
     const segPctRef = useRef(0);
@@ -79,7 +83,7 @@ export default function ProjectInitPage() {
     }
 
     // 预览兜底：没有服务端 HTML 时，用纯文本拼简易 HTML
-    useEffect(() => {}, [preview, previewHtml]);
+    useEffect(() => { }, [preview, previewHtml]);
 
     async function startSegment() {
         if (!projectId) return;
@@ -242,7 +246,7 @@ export default function ProjectInitPage() {
                     );
                     uPost.searchParams.set('batchId', batchId);
                     await fetch(uPost.toString(), { method: 'POST' });
-                } catch {}
+                } catch { }
                 // 2) 拉取全量段落，失败则回退到预览段落
                 let fullSegs: any[] = [];
                 try {
@@ -261,7 +265,7 @@ export default function ProjectInitPage() {
                             break;
                         }
                     }
-                } catch {}
+                } catch { }
                 const toApply = fullSegs.length ? fullSegs : segItems;
                 const res = await applySegmentAction(segmentDocumentId, toApply);
                 if ((res as any)?.count >= 0) {
@@ -292,7 +296,7 @@ export default function ProjectInitPage() {
             if (statusAbortRef.current) {
                 try {
                     statusAbortRef.current.abort();
-                } catch {}
+                } catch { }
             }
             const controller = new AbortController();
             statusAbortRef.current = controller;
@@ -335,7 +339,7 @@ export default function ProjectInitPage() {
             if (statusAbortRef.current) {
                 try {
                     statusAbortRef.current.abort();
-                } catch {}
+                } catch { }
             }
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -355,7 +359,7 @@ export default function ProjectInitPage() {
             try {
                 const s = await getLatestDocumentStatusForProjectAction(projectId);
                 if (s && s.documentId) setSegmentDocumentId(s.documentId);
-            } catch {}
+            } catch { }
         })();
     }, [projectId]);
 
@@ -614,7 +618,7 @@ export default function ProjectInitPage() {
                                                     try {
                                                         setTermApplying(true);
                                                         await startTerms();
-                                                    } catch {}
+                                                    } catch { }
                                                 }, 500);
                                             }}
                                             disabled={starting || (termPct > 0 && termPct < 100)}
@@ -734,8 +738,8 @@ export default function ProjectInitPage() {
                                         {applyStatsInsert
                                             ? `${t('statsInserted', { n: applyStatsInsert.inserted })}${applyStatsInsert.updated ? ` ${t('statsUpdated', { n: applyStatsInsert.updated })}` : ''}`
                                             : termFlow === 'applying'
-                                              ? t('statusTranslating')
-                                              : t('statusPending')}
+                                                ? t('statusTranslating')
+                                                : t('statusPending')}
                                     </div>
                                 </div>
                                 <div className="flex items-center justify-between rounded border bg-muted/10 px-2 py-1">
@@ -758,8 +762,8 @@ export default function ProjectInitPage() {
                                             ? translateCount !== null
                                                 ? `${t('statsInserted', { n: translateCount })}`
                                                 : termFlow === 'translating'
-                                                  ? t('statusTranslating')
-                                                  : t('statusPending')
+                                                    ? t('statusTranslating')
+                                                    : t('statusPending')
                                             : t('statusOff')}
                                     </div>
                                 </div>

@@ -1,10 +1,17 @@
 'use server';
-import { DocumentTermExtractOptions } from '@/types/documentTermExtractOptions';
 import { DocumentTermExtractAgent } from '@/agents/preprocess/DocumentTermExtractAgent';
 import { DocumentTermTranslateAgent } from '@/agents/preprocess/DocumentTermTranslateAgent';
-
+import { createLogger } from '@/lib/logger';
 import type { DocumentTerm } from '@/lib/terms/types';
-
+import { DocumentTermExtractOptions } from '@/types/documentTermExtractOptions';
+const logger = createLogger({
+    type: 'actions:project-init',
+}, {
+    json: false,// 开启json格式输出
+    pretty: false, // 关闭开发环境美化输出
+    colors: true, // 仅当json：false时启用颜色输出可用
+    includeCaller: false, // 日志不包含调用者
+});
 /**
  * 文档术语提取 Server Action
  */
@@ -15,9 +22,10 @@ export async function extractDocumentTermsAction(
     try {
         const agent = new DocumentTermExtractAgent();
         const result = await agent.execute({ text, options });
+        logger.info("文档术语提取成功:", result)
         return result;
     } catch (error) {
-        console.error('文档术语提取失败:', error);
+        logger.error('文档术语提取失败:', error);
         throw new Error('文档术语提取失败');
     }
 }
