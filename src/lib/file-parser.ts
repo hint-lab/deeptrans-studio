@@ -35,7 +35,7 @@ export async function extractTextFromUrl(
                 localCandidate = abs;
             }
         } catch { }
-        logger.debug('[extract] localCandidate:', localCandidate, '[extract] url:', url);
+        logger.debug('[extract] localCandidate:', localCandidate, ',[extract] url:', url);
         let contentType = '';
         let contentLength = 0;
         let buffer: Buffer | null = null;
@@ -71,9 +71,9 @@ export async function extractTextFromUrl(
                 contentType =
                     'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
         }
-
+        logger.info('[extract] buffer:', buffer || 'null');
         const res = buffer ? null : await fetch(url, { signal: controller.signal });
-        logger.info('[extract] res:', res);
+        logger.info('[extract] res:', res || 'null');
         if (!buffer) {
             if (!res || !res.ok) {
                 logger.error(`[extract] Fetch failed: ${res?.status} ${res?.statusText}`);
@@ -166,6 +166,7 @@ export async function extractTextFromUrl(
 
         if (isDocx) {
             const target = buffer && localPath ? localPath : url;
+            logger.info("isDocx: ", target)
             const out = await extractDocxFromUrl(target);
             return { text: out.text || '', contentType };
         }
