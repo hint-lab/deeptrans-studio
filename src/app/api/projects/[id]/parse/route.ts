@@ -3,13 +3,23 @@ import {
     findDocumentsByProjectIdDB,
     updateDocumentStatusDB,
 } from '@/db/document';
-import { extractTextFromUrl } from '@/lib/file-parser';
+import { extractFileTypeFromUrl } from '@/lib/getFileType';
+import { createLogger } from '@/lib/logger';
 import { extractDocxFromUrl } from '@/lib/parsers/docx-parser';
+import { pdfParseToStructuredJson } from '@/lib/parsers/pdf-parser';
+import { textToStructuredJson } from '@/lib/parsers/text-parser';
 import { getRedis } from '@/lib/redis';
 import { TTL_BATCH, TTL_PREVIEW, setTextWithTTL } from '@/lib/redis-ttl';
 import { DocumentStatus } from '@/types/enums';
 import { NextRequest, NextResponse } from 'next/server';
-
+const logger = createLogger({
+    type: 'request:parse',
+}, {
+    json: false,// 开启json格式输出
+    pretty: false, // 关闭开发环境美化输出
+    colors: true, // 仅当json：false时启用颜色输出可用
+    includeCaller: false, // 日志不包含调用者
+});
 function makePreviewHtmlFromText(content: string): string {
     const raw = String(content || '').slice(0, 5000);
     const esc = raw.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
@@ -40,26 +50,67 @@ export async function POST(req: NextRequest, ctx: any) {
             return NextResponse.json({ error: 'document not found' }, { status: 404 });
         let content = '';
         let previewHtml: string | undefined;
+        const { isText, isPdf, isDoc } = await extractFileTypeFromUrl(only.url);
         try {
-            const { text, html, structured } = await extractDocxFromUrl(only.url);
-            if (text || html) {
-                content = String(text || '').trim();
-                previewHtml = html;
+            if (isDoc) {
+                const { text, html, structured } = await extractDocxFromUrl(only.url);
+                if (text || html) {
+                    content = String(text || '').trim();
+                    previewHtml = html;
+                }
+                //结构化数据会入库
+                if (structured) {
+                    await setTextWithTTL(
+                        redis,
+                        `init.${batchId}.docx.structured`,
+                        JSON.stringify(structured),
+                        TTL_BATCH
+                    );
+                }
             }
-            if (structured) {
-                await setTextWithTTL(
-                    redis,
-                    `init.${batchId}.docx.structured`,
-                    JSON.stringify(structured),
-                    TTL_BATCH
-                );
+            if (isPdf) {
+                const { text, html, structured } = await pdfParseToStructuredJson(only.url);
+                if (text || html) {
+                    content = String(text || '').trim();
+                    previewHtml = html;
+                }
+                //结构化数据会入库
+                if (structured) {
+                    await setTextWithTTL(
+                        redis,
+                        `init.${batchId}.docx.structured`,
+                        JSON.stringify(structured),
+                        TTL_BATCH
+                    );
+                }
+            }
+            if (isText) {
+                const { text, html, structured } = await textToStructuredJson(only.url);
+                if (text || html) {
+                    content = String(text || '').trim();
+                    previewHtml = html;
+                }
+                //结构化数据会入库
+                if (structured) {
+                    await setTextWithTTL(
+                        redis,
+                        `init.${batchId}.docx.structured`,
+                        JSON.stringify(structured),
+                        TTL_BATCH
+                    );
+                }
             }
         } catch { }
         if (!content) {
-            const { text } = await extractTextFromUrl(only.url);
-            content = String(text || '').trim();
+            await setTextWithTTL(
+                redis,
+                `init.${batchId}.previewHtml`,
+                "empty content",
+                TTL_PREVIEW
+            );
+            logger.warn("无法解析该文档");
+            return NextResponse.json({ ok: true, step: 'parse' });
         }
-        if (!content) return NextResponse.json({ error: 'empty content' }, { status: 400 });
         if (!previewHtml) previewHtml = makePreviewHtmlFromText(content);
         const preview = content.slice(0, 1200);
         await setTextWithTTL(redis, `init.${batchId}.preview`, preview, TTL_PREVIEW);
@@ -85,6 +136,7 @@ export async function POST(req: NextRequest, ctx: any) {
                 } catch { }
             }
         } catch { }
+        logger.error({ error: e?.message || 'parse failed' });
         return NextResponse.json({ error: e?.message || 'parse failed' }, { status: 500 });
     }
 }
