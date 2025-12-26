@@ -64,10 +64,8 @@ export async function fetchTextFromImg(
                 'Authorization': `Bearer ${access_token}`,
             },
             body: JSON.stringify({
-                "image_url": imageUrl,
-                "language": "eng",
-                "psm": "6",
-                "oem": "3"
+                "file_url": imageUrl,
+                "language": "en",
             }),
         });
         const data = await response.json();

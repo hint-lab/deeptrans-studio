@@ -177,10 +177,21 @@ export default function ImageIntelligencePage() {
                 enhanceImage: true,
                 timeout: 60000
             })
+            const jsonString = data.ocr_result.text;
+            // 2. 将字符串解析为真正的数组对象
+            const items = JSON.parse(jsonString);
 
+            // 3. 过滤 type 为 'text' 的项，并提取 text 字段
+            //items.filter((item: any) => item.type === 'text').map((item: any) => item.text);
+            // 2. 过滤并拼接
+            const combinedText = items
+                .filter((item: any) => item.type === "text")
+                .map((item: any) => item.text)
+                .join('\n'); // 使用换行符拼接
             // 构建翻译参数
+            logger.info("提取的图片内容:", combinedText)
             const translationParams = {
-                sourceText: data?.ocr_result?.text || '',
+                sourceText: combinedText || '',
                 sourceLanguage: sourceLanguage,
                 targetLanguage: targetLanguage,
                 options: {

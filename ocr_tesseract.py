@@ -810,9 +810,9 @@ def test_ocr():
         schema:
           type: object
           required:
-            - image_url
+            - file_url
           properties:
-            image_url:
+            file_url:
               type: string
               format: uri
               example: "https://example.com/test.png"
@@ -857,21 +857,21 @@ def test_ocr():
     try:
         data = request.get_json()
 
-        if not data or 'image_url' not in data:
+        if not data or 'file_url' not in data:
             return json_response(
                 success=False,
                 error="缺少参数",
-                message="需要image_url参数",
+                message="需要file_url参数",
                 status_code=400
             )
 
-        image_url = data['image_url']
+        file_url = data['file_url']
 
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         }
 
-        response = requests.get(image_url, headers=headers, timeout=10)
+        response = requests.get(file_url, headers=headers, timeout=10)
         response.raise_for_status()
 
         image_data = io.BytesIO(response.content)
@@ -941,9 +941,9 @@ def ocr_from_url():
         schema:
           id: OcrRequest
           required:
-            - image_url
+            - file_url
           properties:
-            image_url:
+            file_url:
               type: string
               format: uri
               example: "https://tesseract.projectnaptha.com/img/eng_bw.png"
@@ -1005,20 +1005,20 @@ def ocr_from_url():
     try:
         data = request.get_json()
 
-        if not data or 'image_url' not in data:
+        if not data or 'file_url' not in data:
             return json_response(
                 success=False,
                 error="缺少参数",
-                message="需要image_url参数",
+                message="需要file_url参数",
                 status_code=400,
                 client_id=getattr(request, 'client_id', 'unknown')
             )
 
-        image_url = data['image_url']
+        file_url = data['file_url']
 
         # 验证URL
         try:
-            result = urlparse(image_url)
+            result = urlparse(file_url)
             if not all([result.scheme in ['http', 'https'], result.netloc]):
                 return json_response(
                     success=False,
@@ -1041,7 +1041,7 @@ def ocr_from_url():
         psm = data.get('psm', '6')
         oem = data.get('oem', '3')
 
-        logger.info(f"客户端 {getattr(request, 'client_id', 'unknown')} 请求OCR: {image_url}")
+        logger.info(f"客户端 {getattr(request, 'client_id', 'unknown')} 请求OCR: {file_url}")
 
         # 下载图片
         headers = {
@@ -1049,7 +1049,7 @@ def ocr_from_url():
             'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8'
         }
 
-        response = requests.get(image_url, headers=headers, timeout=10, stream=True)
+        response = requests.get(file_url, headers=headers, timeout=10, stream=True)
         response.raise_for_status()
 
         # 检查内容类型
@@ -1122,7 +1122,7 @@ def ocr_from_url():
                     'format': image.format
                 },
                 'parameters': {
-                    'image_url': image_url,
+                    'file_url': file_url,
                     'language': lang,
                     'psm': psm,
                     'oem': oem
