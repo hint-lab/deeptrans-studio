@@ -132,10 +132,10 @@ export class DocumentTermExtractAgent extends BaseAgent<
             }));
 
             merged.sort((a, b) => (b.score || 0) - (a.score || 0) || b.count - a.count);
-            logger.info('LLM scoring success, returning statistical candidates:', merged.slice(0, topK));
+            logger.info('LLM scoring success, returning statistical candidates: ', merged.slice(0, topK) || "null");
             return merged.slice(0, topK);
         } catch (error) {
-            logger.error('LLM scoring failed, returning statistical candidates:', error);
+            logger.error('LLM scoring failed: ', error);
             return candidates.slice(0, topK);
         }
     }

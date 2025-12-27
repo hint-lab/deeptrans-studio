@@ -26,7 +26,7 @@ export async function POST(req: NextRequest, ctx: any) {
             body = await req.json();
         } catch { }
         const batchId = String(q.get('batchId') || body?.batchId || '');
-        logger.debug(`batchId: ${batchId}`);
+        logger.debug(`req batchId: ${batchId}`);
         const terms = body?.terms || undefined;
         if (!projectId) return NextResponse.json({ error: 'missing project id' }, { status: 400 });
         if (!batchId) return NextResponse.json({ error: 'missing batchId' }, { status: 400 });
@@ -61,6 +61,7 @@ export async function POST(req: NextRequest, ctx: any) {
             { id: 'terms.all', text: bodyText, batchId, userId, projectId, ...terms },
             { jobId: `docTerms.${batchId}.all` }
         );
+        logger.debug(`getQueue: docTerms.${batchId}.item.terms.all`)
         return NextResponse.json({ ok: true, step: 'terms' });
     } catch (e: any) {
         // 构建详细的错误对象

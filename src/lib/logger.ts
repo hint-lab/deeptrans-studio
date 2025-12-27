@@ -16,12 +16,15 @@ interface LoggerOptions {
     pretty?: boolean;      // 是否美化输出（仅 JSON 模式）
     colors?: boolean;      // 是否使用颜色（仅文本模式）
     includeCaller?: boolean; // 是否包含调用者信息
+    // 添加：根据type禁用debug
+    disableDebugForTypes?: string[]; // 要禁用debug的type数组
 }
 
 class JsonLogger {
     private context: LoggerContext = {};
     private options: LoggerOptions;
-
+    // 移除原有的文件匹配配置，添加type匹配配置
+    private static debugDisabledTypes = new Set<string>();
     // 预绑定的方法
     private readonly boundLog: (...args: any[]) => LogEntry;
     private readonly boundInfo: (...args: any[]) => LogEntry;
@@ -35,8 +38,29 @@ class JsonLogger {
             pretty: process.env.NODE_ENV !== 'production',  // 开发环境美化
             colors: false,        // JSON 模式下不使用颜色
             includeCaller: true,  // 默认包含调用者信息
+            disableDebugForTypes: [], // 默认值
             ...options,
         };
+        // 从options初始化禁用类型
+        if (this.options.disableDebugForTypes) {
+            this.options.disableDebugForTypes.forEach(type => {
+                const trimmed = type.trim();
+                if (trimmed) {
+                    JsonLogger.debugDisabledTypes.add(trimmed);
+                }
+            });
+        }
+
+        // 从环境变量初始化禁用类型（优先级更高）
+        const envDisabledTypes = process.env.LOGGER_DISABLE_DEBUG_TYPES || '';
+        if (envDisabledTypes) {
+            envDisabledTypes.split(',').forEach(type => {
+                const trimmed = type.trim();
+                if (trimmed) {
+                    JsonLogger.debugDisabledTypes.add(trimmed);
+                }
+            });
+        }
         // 绑定方法
         this.boundLog = this.log.bind(this);
         this.boundInfo = this.info.bind(this);
@@ -44,7 +68,26 @@ class JsonLogger {
         this.boundError = this.error.bind(this);
         this.boundDebug = this.debug.bind(this);
     }
+    /**
+     * 静态方法：禁用特定type的debug日志
+     */
+    static disableDebugForType(type: string): void {
+        JsonLogger.debugDisabledTypes.add(type);
+    }
 
+    /**
+     * 静态方法：启用特定type的debug日志
+     */
+    static enableDebugForType(type: string): void {
+        JsonLogger.debugDisabledTypes.delete(type);
+    }
+
+    /**
+     * 静态方法：清空所有禁用规则
+     */
+    static clearDebugDisableRules(): void {
+        JsonLogger.debugDisabledTypes.clear();
+    }
     /**
      * 创建具有上下文的子 Logger
      */
@@ -344,6 +387,12 @@ class JsonLogger {
 
     debug(...args: any[]): LogEntry {
         if (process.env.NODE_ENV !== 'production') {
+            // 检查当前logger的type是否在禁用列表中
+            const currentType = this.context.type;
+            if (currentType && JsonLogger.debugDisabledTypes.has(currentType)) {
+                // 如果当前logger的type在禁用列表中，直接返回
+                return {} as LogEntry;
+            }
             return this.logWithLevel('debug', ...args);
         }
         return {} as LogEntry;

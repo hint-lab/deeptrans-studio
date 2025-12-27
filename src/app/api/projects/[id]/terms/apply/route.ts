@@ -48,6 +48,7 @@ export async function POST(req: NextRequest, ctx: any) {
         {
             const redis = await getRedis();
             const raw = await redis.get(`docTerms.${batchId}.item.terms.all`);
+            logger.debug(`redis get key: docTerms.${batchId}.item.terms.all`)
             if (raw) {
                 try {
                     const obj = JSON.parse(String(raw));
@@ -56,7 +57,11 @@ export async function POST(req: NextRequest, ctx: any) {
                     unique = Array.from(
                         new Set(terms.map(t => String(t?.term || '').trim()).filter(Boolean))
                     );
-                } catch { }
+                } catch {
+                    logger.error("JSON格式化失败: ", raw || "null")
+                } finally {
+                    logger.info("格式化docTerms: ", raw || "null")
+                }
             }
         }
         // 兜底：若 Redis 中暂无术语，尝试即时抽取一个简版术语表（不经队列）
@@ -80,7 +85,9 @@ export async function POST(req: NextRequest, ctx: any) {
                         );
                     }
                 }
-            } catch { }
+            } catch {
+                logger.error("即时抽取简版术语表时出错!")
+            }
         }
         //if (!unique.length) return NextResponse.json({ error: 'empty terms' }, { status: 400 });
 

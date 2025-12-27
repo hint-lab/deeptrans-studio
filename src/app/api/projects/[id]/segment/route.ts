@@ -6,11 +6,19 @@ import {
 } from '@/db/document';
 import { createDocumentItemsBulkDB, deleteDocumentItemsByDocumentIdDB } from '@/db/documentItem';
 import { extractTextFromUrl } from '@/lib/file-parser';
+import { createLogger } from '@/lib/logger';
 import { getRedis } from '@/lib/redis';
 import { TTL_BATCH, TTL_PROGRESS, setJSONWithTTL, setTextWithTTL } from '@/lib/redis-ttl';
 import { DocumentStatus } from '@/types/enums';
 import { NextRequest, NextResponse } from 'next/server';
-
+const logger = createLogger({
+    type: 'request:segment',
+}, {
+    json: false,// 开启json格式输出
+    pretty: false, // 关闭开发环境美化输出
+    colors: true, // 仅当json：false时启用颜色输出可用
+    includeCaller: false, // 日志不包含调用者
+});
 async function buildTextFromStructuredHelper(
     only: any,
     opts?: { isPreview?: boolean; headChars?: number; maxParas?: number }
@@ -106,6 +114,7 @@ export async function POST(req: NextRequest, ctx: any) {
             }> = [];
             try {
                 const raw = await redis.get(`init.${batchId}.docx.structured`);
+                logger.info(`Get segment from redis key:  init.${batchId}.docx.structured, value: `, raw || "")
                 if (raw) {
                     const obj = JSON.parse(String(raw));
                     if (Array.isArray(obj?.paragraphs)) paragraphs = obj.paragraphs as any[];
@@ -245,8 +254,11 @@ export async function POST(req: NextRequest, ctx: any) {
                     metadata: s.metadata ?? null,
                 }));
                 if (items.length) await createDocumentItemsBulkDB(items as any);
+                logger.info(`持久化文档${docId}内容到数据库`)
             }
-        } catch { }
+        } catch (err) {
+            logger.error(`持久化文档${(only as any)?.id}内容到数据库失败`, (err as Error)?.message)
+        }
         try {
             await updateDocumentStatusDB(only.id, DocumentStatus.SEGMENTING as any);
         } catch { }

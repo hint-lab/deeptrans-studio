@@ -1,0 +1,191 @@
+services:
+  db:
+    image: postgres:13
+    container_name: deeptrans-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-123456}
+      POSTGRES_DB: ${POSTGRES_DB:-deeptrans}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - app_local
+
+  traefik:
+    image: traefik:v3.5
+    container_name: deeptrans-traefik
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik_data:/etc/traefik/acme
+    networks:
+      - web
+    command:
+      - "--log.level=DEBUG"  # 改为DEBUG以便查看更多信息
+      - "--accesslog=true"
+      - "--api.insecure=true"
+      - "--api.dashboard=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.network=deeptrans-studio_web"  # 使用完整的网络名称
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+      - "--entrypoints.web.http.redirections.entrypoint.permanent=true"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.le.acme.tlschallenge=true"
+      - "--certificatesresolvers.le.acme.email=wang-hao@deeptrans.studio"
+      - "--certificatesresolvers.le.acme.storage=/etc/traefik/acme/acme.json"
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.traefik.rule=Host(`traefik.deeptrans.studio`)"
+      - "traefik.http.routers.traefik.service=api@internal"
+      - "traefik.http.routers.traefik.entrypoints=websecure"
+      - "traefik.http.routers.traefik.tls=true"
+      - "traefik.http.routers.traefik.tls.certresolver=le"
+  minio:
+    image: minio/minio:latest
+    container_name: deeptrans-minio
+    restart: always
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+      MINIO_BUCKET_NAME: ${MINIO_BUCKET:-deeptrans}
+    volumes:
+      - minio-data:/data
+    ports:
+      - "${MINIO_PORT:-9000}:9000" # API 端口）
+      - "${MINIO_CONSOLE_PORT:-9001}:9001" # 控制台端口
+    command: minio server /data --console-address ":9001"
+    healthcheck:
+      test: [ "CMD", "mc", "ready", "local" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - app_local
+      - web  # 连接到web网络
+    labels:
+      - "traefik.enable=true"
+      # 1. 控制台路由 (Console) - 用于浏览器访问
+      - "traefik.http.routers.minio-console.rule=Host(`minio-admin.deeptrans.studio`)"
+      - "traefik.http.routers.minio-console.entrypoints=websecure"
+      - "traefik.http.routers.minio-console.tls=true"
+      - "traefik.http.routers.minio-console.tls.certresolver=le"
+      - "traefik.http.routers.minio-console.service=minio-console-svc"
+      - "traefik.http.services.minio-console-svc.loadbalancer.server.port=9001"
+
+      # 2. API 路由 (S3 API) - 用于程序和 SDK 访问
+      - "traefik.http.routers.minio-api.rule=Host(`minio.deeptrans.studio`)"
+      - "traefik.http.routers.minio-api.entrypoints=websecure"
+      - "traefik.http.routers.minio-api.tls=true"
+      - "traefik.http.routers.minio-api.tls.certresolver=le"
+      - "traefik.http.routers.minio-api.service=minio-api-svc"
+      - "traefik.http.services.minio-api-svc.loadbalancer.server.port=9000"
+  redis:
+    image: redis:7-alpine
+    container_name: deeptrans-redis
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    networks:
+      - app_local
+
+  app:
+    image: registry.cn-hangzhou.aliyuncs.com/hintlab/deeptrans-studio
+    container_name: deeptrans-app
+    env_file:
+      - .env
+    depends_on:
+      - db
+      - redis
+    networks:
+      - web
+      - app_local
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.services.app.loadbalancer.server.port=3000"
+      - "traefik.http.routers.app.rule=Host(`www.deeptrans.studio`) || Host(`deeptrans.studio`)"
+      - "traefik.http.routers.app.entrypoints=websecure"
+      - "traefik.http.routers.app.tls=true"
+      - "traefik.http.routers.app.tls.certresolver=le"
+    restart: unless-stopped
+
+  app_worker:
+    image: registry.cn-hangzhou.aliyuncs.com/hintlab/deeptrans-studio-worker
+    container_name: deeptrans-app_worker
+    env_file:
+      - .env
+    depends_on:
+      - db
+      - redis
+    networks:
+      - app_local
+    restart: unless-stopped
+
+  milvus:
+    container_name: deeptrans-milvus
+    image: milvusdb/milvus:v2.3.10
+    command: ["milvus", "run", "standalone"]
+    security_opt:
+      - seccomp:unconfined
+    environment:
+      ETCD_USE_EMBED: "true"
+      ETCD_DATA_DIR: "/var/lib/milvus/etcd"
+      MINIO_ADDRESS: minio:9000
+      MINIO_ACCESS_KEY_ID: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_ACCESS_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+      MINIO_USE_SSL: "false"
+      MINIO_BUCKET_NAME: "milvus-bucket"
+      COMMON_STORAGETYPE: "minio"
+    volumes:
+      - milvus-data:/var/lib/milvus
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      interval: 30s
+      start_period: 90s
+      timeout: 20s
+      retries: 3
+    ports:
+      - "19530:19530"
+      - "9091:9091"
+    depends_on:
+      - minio
+    networks:
+      - app_local
+    restart: always
+
+  attu:
+    image: zilliz/attu:latest
+    container_name: deeptrans-attu
+    ports:
+      - "8001:3000"
+    environment:
+      MILVUS_URL: milvus:19530
+    depends_on:
+      - milvus
+    restart: unless-stopped
+    networks:
+      - app_local
+
+networks:
+  web:
+    external: false
+  app_local:
+    external: false
+
+volumes:
+  postgres_data:
+  minio-data:
+  traefik_data:
+  milvus-data:
+  redis-data:
