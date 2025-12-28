@@ -359,7 +359,8 @@
                 "selectedFile": "Selected file: {name}",
                 "selectFileHint": "Select a file to start import",
                 "importing": "Importing…",
-                "startImport": "Start Import"
+                "startImport": "Start Import",
+                "progressBatches": "progress Batches"
             },
             "createMemory": "Create Memory",
             "import": "Import",
@@ -432,6 +433,14 @@
                 "rrfParameter": "Reciprocal Rank Fusion Parameter",
                 "kValueLabel": "K Value Label",
                 "kValueHint": "K Value Hint"
+            },
+            "SearchResult": {
+                "search": "search",
+                "sourceText": "source Text",
+                "targetText": "target Text",
+                "highRelevance": "high Relevance",
+                "similarityDetails": "similarity Details",
+                "overallScore": "overall Score"
             },
             "loadFailed": "Failed to load translation memories",
             "deleteFailed": "Failed to delete translation memory",

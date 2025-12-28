@@ -365,7 +365,8 @@
                 "selectedFile": "已选择文件：{name}",
                 "selectFileHint": "请选择文件后开始导入",
                 "importing": "导入中…",
-                "startImport": "开始导入"
+                "startImport": "开始导入",
+                "progressBatches": "批处理进度"
             },
             "createMemory": "创建记忆库",
             "import": "导入",
@@ -438,6 +439,14 @@
                 "rrfParameter": "倒数排名融合参数",
                 "kValueLabel": "K值标签",
                 "kValueHint": "K值提示"
+            },
+            "SearchResult": {
+                "search": "搜索",
+                "sourceText": "源文本",
+                "targetText": "目标文本",
+                "highRelevance": "高相关性",
+                "similarityDetails": "相似度详情",
+                "overallScore": "总体分数"
             },
             "loadFailed": "加载翻译记忆库失败",
             "deleteFailed": "删除翻译记忆库失败",
