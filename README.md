@@ -1,257 +1,325 @@
-# DeepTrans Studio · 智能翻译工作室
-
-[![Next.js](https://img.shields.io/badge/Next.js-15.5-black?logo=nextdotjs)](https://nextjs.org/)
-[![React](https://img.shields.io/badge/React-19.1-149eca?logo=react)](https://react.dev/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178c6?logo=typescript)](https://www.typescriptlang.org/)
-[![Prisma](https://img.shields.io/badge/Prisma-6.1-2D3748?logo=prisma)](https://prisma.io/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-
-> 🚀 DeepTrans Studio 是一套面向专业翻译与本地化团队的智能工作平台，提供翻译 IDE、术语管理、翻译记忆、质量评估与自动化工作流等端到端能力。
-
-**开发单位**: [H!NT Lab](https://hint-lab.github.io/people/wang_hao/), Shanghai University
-
-**中文** | [English](./README_EN.md)
-
----
-
-## 📚 目录
-
-- [项目简介](#项目简介)
-- [核心能力](#核心能力)
-- [系统架构](#系统架构)
-- [技术栈](#技术栈)
-- [快速开始](#快速开始)
-  - [前置要求](#前置要求)
-  - [安装依赖](#安装依赖)
-  - [配置环境变量](#配置环境变量)
-  - [初始化数据库](#初始化数据库)
-  - [启动本地开发环境](#启动本地开发环境)
-  - [使用 Docker Compose 运行](#使用-docker-compose-运行)
-- [后台服务与任务](#后台服务与任务)
-- [目录结构](#目录结构)
-- [常用脚本](#常用脚本)
-- [国际化](#国际化)
-- [贡献指引](#贡献指引)
-- [项目说明](#项目说明)
+<div align="center">
+  <img src="public/logo.svg" alt="DeepTrans Studio" width="120" height="120">
+  
+  # DeepTrans Studio
+  
+  ### Professional AI-Powered Translation Workbench
+  
+  [![Next.js](https://img.shields.io/badge/Next.js-15.5-black?logo=nextdotjs)](https://nextjs.org/)
+  [![React](https://img.shields.io/badge/React-19.1-149eca?logo=react)](https://react.dev/)
+  [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178c6?logo=typescript)](https://www.typescriptlang.org/)
+  [![Prisma](https://img.shields.io/badge/Prisma-6.1-2D3748?logo=prisma)](https://prisma.io/)
+  [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+  
+  [English](#) | [中文](./README_ZH.md)
+  
+</div>
 
 ---
 
-## 项目简介
+## 🌟 Overview
 
-DeepTrans Studio 将 AI 翻译、本地化工程与团队协作能力整合在同一套产品内。平台围绕翻译项目的全流程打造，包括：
+**DeepTrans Studio** is an enterprise-grade translation platform that combines AI-powered translation, localization engineering, and team collaboration capabilities. Built for professional translators and localization teams, it provides comprehensive end-to-end translation workflow management.
 
-- 多场景翻译工作台（IDE、即时翻译、批量操作）
-- 专业领域词典、翻译记忆与知识库
-- AI 辅助的质量评估、术语提取与语篇审校
-- 工作流自动化与队列任务处理
-- 统一的权限、日志、运营配置与对外 API
-
-<p align="center">
-  <img src="public/ui.png" alt="DeepTrans Studio UI" width="900">
+<div align="center">
+  <img src="public/ui.png" alt="DeepTrans Studio Interface" width="900">
   <br/>
-  <em>DeepTrans Studio 界面示意</em>
- </p>
+  <em>DeepTrans Studio User Interface</em>
+</div>
 
-## 核心能力
+## ✨ Key Features
 
-- **翻译 IDE**：提供段落对齐、版本追踪、快捷键与多智能体协同的翻译工作台。
-- **AI 辅助**：内置翻译、术语抽取、语法/语篇评估、字数统计与多引擎比对。
-- **术语 & 记忆**：支持项目/个人词典、翻译记忆导入导出、Milvus 向量检索及 Attu 可视化。
-- **项目管理**：项目全生命周期、文件分段、状态流转、文档预览与任务分发。
-- **自动化工作流**：BullMQ 队列驱动 Worker，处理批量翻译、评估、文档解析、向量写入等耗时任务。
-- **开放与扩展**：通过 MinIO、Milvus、Redis 等组件可扩展自定义 AI 服务、报表或外部集成。
+### 🎯 Translation IDE
+- **Intelligent Editor**: Segment-aligned parallel editing with version control and keyboard shortcuts
+- **Multi-Agent Collaboration**: Coordinate multiple AI agents for complex translation tasks
+- **Real-time Preview**: Instant document preview with formatting preservation
 
-## 系统架构
+### 🤖 AI-Powered Translation
+- **Multi-Engine Support**: Integration with OpenAI and custom AI models
+- **Terminology Extraction**: Automated domain-specific term extraction
+- **Quality Assessment**: AI-driven grammar, syntax, and discourse evaluation
+- **Translation Memory**: Vector-based semantic search using Milvus
 
-平台采用前后端一体的 Next.js App Router 架构，结合队列与服务组件形成如下结构：
+### 📚 Knowledge Management
+- **Project Dictionaries**: Project-specific terminology databases
+- **Translation Memory**: Import/export translation memory in TMX, CSV, XLSX formats
+- **Semantic Search**: Vector similarity search powered by Milvus
+- **Visual Management**: Attu UI for vector database inspection
 
-- **Studio（Next.js 应用）**：承担前端 UI、Server Actions、NextAuth 鉴权与 API 网关能力。
-- **Worker（Node 服务）**：与 BullMQ/Redis 交互，负责批处理、嵌入生成、向量写入、任务调度。
-- **PDFMath 服务**：处理 PDF/数学类文档解析，供 Studio 和 Worker 调用。
-- **Traefik**：反向代理与证书管理，可统一暴露 Studio、Attu 等子服务。
-- **支撑组件**：PostgreSQL、Redis、Milvus(含 etcd)、MinIO、Attu UI。
+### 🔄 Workflow Automation
+- **Queue-Based Processing**: BullMQ-driven asynchronous task processing
+- **Batch Operations**: Bulk translation, evaluation, and quality checks
+- **Document Parsing**: PDF, DOCX, XLSX document parsing with PDFMath service
+- **Status Tracking**: Complete translation lifecycle management
+
+### 🔌 Extensibility
+- **Open Architecture**: Modular design with MinIO, Milvus, Redis integration
+- **API Gateway**: RESTful APIs for external integration
+- **Custom Agents**: Extensible AI agent framework
+- **Plugin System**: Support for custom translation engines and processing pipelines
+
+## 🏗️ Architecture
+
+DeepTrans Studio adopts a modern full-stack architecture based on Next.js App Router with distributed queue processing:
 
 ```mermaid
 graph TD
-    Browser -->|HTTPS| Traefik
+    Browser[Web Browser] -->|HTTPS| Traefik[Traefik Proxy]
     Traefik -->|HTTP 3000| Studio[Next.js Studio]
     Traefik --> Attu[Attu UI]
     Studio -->|Server Actions| Postgres[(PostgreSQL)]
-    Studio -->|BullMQ| Redis[(Redis)]
-    Studio -->|HTTP| PDFMath[PDFMath Service]
-    Worker -->|BullMQ| Redis
-    Worker -->|Prisma| Postgres
-    Worker -->|Milvus SDK| Milvus[(Milvus)]
-    Worker -->|S3 API| MinIO[(MinIO)]
+    Studio -->|Task Queue| Redis[(Redis)]
+    Studio -->|API Calls| PDFMath[PDFMath Service]
+    Worker[Worker Service] -->|Consume Tasks| Redis
+    Worker -->|ORM| Postgres
+    Worker -->|Vector Ops| Milvus[(Milvus)]
+    Worker -->|Object Storage| MinIO[(MinIO)]
     Milvus --> etcd[(etcd)]
 ```
 
-## 技术栈
+### Core Components
 
-| 模块 | 技术选型 |
-| --- | --- |
-| 应用框架 | Next.js 15 (App Router)、React 19、TypeScript 5 |
-| 后端能力 | Next.js Server Actions、Prisma 6、NextAuth、BullMQ |
-| 数据存储 | PostgreSQL、Redis、Milvus + etcd、MinIO |
-| AI 能力 | OpenAI 兼容接口、自研 PDFMath 服务、AI Agents |
-| 构建 & 工具 | Yarn 1、corepack、Docker Compose、Traefik、ESLint、Prettier |
+| Component | Technology | Purpose |
+|-----------|-----------|---------|
+| **Studio** | Next.js 15, React 19, TypeScript | Frontend UI, Server Actions, Authentication |
+| **Worker** | Node.js, BullMQ | Background job processing, batch operations |
+| **Database** | PostgreSQL, Prisma 6 | Relational data storage and ORM |
+| **Cache** | Redis | Session management, task queues |
+| **Vector DB** | Milvus + etcd | Semantic search, translation memory |
+| **Storage** | MinIO (S3-compatible) | Document and asset storage |
+| **Parser** | PDFMath Service | PDF and mathematical document parsing |
+| **Gateway** | Traefik | Reverse proxy, SSL/TLS termination |
 
-## 快速开始
+## 🚀 Quick Start
 
-### 前置要求
+### Prerequisites
 
-- **Node.js** ≥ 18.18（推荐使用 `corepack` 管理 Yarn 1.22.22）
-- **Yarn**（通过 `corepack enable` 启用）
-- **Docker / Docker Compose**（用于本地依赖服务或一键部署）
-- **Git** 等常用工具
+- **Node.js** ≥ 18.18 (Recommended: use `corepack` to manage Yarn 1.22.22)
+- **Yarn** (Enable via `corepack enable`)
+- **Docker** & **Docker Compose** (For services and deployment)
+- **Git**
 
-### 安装依赖
+### Installation
 
 ```bash
+# Enable corepack and setup Yarn
 corepack enable
 corepack prepare yarn@1.22.22 --activate
+
+# Install dependencies
 yarn install
 ```
 
-### 配置环境变量
+### Environment Configuration
 
-复制或创建 `.env.local` 并依据实际环境填写：
+Create `.env.local` file with the following configuration:
 
-```dotenv
-# 数据库与缓存
-DATABASE_URL="postgresql://postgres:123456@localhost:5432/deeptrans"
+```env
+# Database & Cache
+DATABASE_URL="postgresql://postgres:password@localhost:5432/deeptrans"
 REDIS_URL="redis://127.0.0.1:6379"
 
-# 鉴权 & 站点配置
-AUTH_SECRET="请生成随机字符串"
+# Authentication & Site
+AUTH_SECRET="your-secret-key-here"  # Generate with: openssl rand -base64 32
 NEXTAUTH_URL="http://localhost:3000"
 NODE_ENV=development
 
-# LLM / AI 服务
+# AI Service Configuration
 OPENAI_API_KEY="sk-xxxx"
 OPENAI_BASE_URL="https://api.openai.com/v1"
 OPENAI_API_MODEL="gpt-4o-mini"
 
-# 对象存储 & 资源
+# Object Storage
 MINIO_ACCESS_KEY=minioadmin
 MINIO_SECRET_KEY=minioadmin
 MINIO_BUCKET=deeptrans
 
-# 其他服务
-STUDIO_HOST=localhost        # Traefik/HTTPS 部署时使用
+# Services
+STUDIO_HOST=localhost
 
-# 可选：GitHub OAuth、SMTP、Milvus 访问信息等
+# Optional: GitHub OAuth, SMTP, etc.
+# GITHUB_ID=your-github-oauth-id
+# GITHUB_SECRET=your-github-oauth-secret
 ```
 
-> 💡 生产环境请将数据库、Redis、Milvus、对象存储改为专用实例，并妥善保管密钥。
+> 💡 **Security Note**: For production deployments, use dedicated instances for databases and properly secure all credentials.
 
-### 初始化数据库
+### Database Setup
 
 ```bash
-yarn prisma migrate deploy      # 或 yarn db:push 初始化结构
-yarn prisma generate            # 生成 Prisma Client
-yarn db:seed                    # 可选：导入示例数据
+# Run database migrations
+yarn prisma migrate deploy
+
+# Generate Prisma Client
+yarn prisma generate
+
+# (Optional) Seed with sample data
+yarn db:seed
 ```
 
-### 启动本地开发环境
+### Development Mode
 
-1. 启动依赖服务（推荐使用 Docker Compose 中的服务）：
-   ```bash
-   docker compose up -d db redis etcd milvus minio pdfmath worker
-   # 如需 Attu UI 或 Traefik，请追加 attu traefik
-   ```
-2. 启动 Next.js 应用（热更新）：
-   ```bash
-   yarn dev
-   ```
-3. 若希望在本地 Node 环境运行 Worker，可执行 `yarn dev:worker`（默认通过 compose 的 `worker` 容器运行）。
+**Option 1: Using Docker Compose (Recommended)**
 
-访问 [http://localhost:3000](http://localhost:3000) 即可进入 Studio；Attu（Milvus UI）默认暴露在 [http://localhost:8001](http://localhost:8001)。
+```bash
+# Start all services
+docker compose up -d db redis etcd milvus minio pdfmath worker
 
-### 使用 Docker Compose 运行
+# Start Next.js development server
+yarn dev
 
-1. 准备 `.env` / `.env.production` 并确保 `STUDIO_HOST` 指向对外域名。
-2. 构建镜像：
-   ```bash
-   docker compose build studio worker pdfmath
-   ```
-3. 启动主要服务：
-   ```bash
-   docker compose up -d traefik studio worker
-   ```
-Traefik 会将 80/443 端口映射到 Studio，Milvus/MinIO/Attu 等依赖组件可按需启动。
+# Access the application at http://localhost:3000
+```
 
-## 后台服务与任务
+**Option 2: Local Services**
 
-- **BullMQ 队列**：Studio 将批翻译、术语抽取、质量评估和文件解析任务推入 Redis，Worker 负责消费并回写结果。
-- **Milvus 向量库**：用于翻译记忆与语义检索，需要同步启动 etcd 与 MinIO。
-- **MinIO**：存储解析产物、结构化 JSON、静态资源等，可通过 S3 兼容协议访问。
-- **PDFMath 服务**：提供 PDF → Markdown/JSON 的解析能力，由 `pdfmath` 容器维护。
-- **Attu**：Milvus 官方 UI，便于查询向量、排查记忆数据。
+```bash
+# Start Next.js dev server
+yarn dev
 
-## 目录结构
+# In another terminal, start worker
+yarn dev:worker
+```
+
+Additional UIs:
+- **Studio**: http://localhost:3000
+- **Attu (Milvus UI)**: http://localhost:8001
+- **Prisma Studio**: Run `yarn prisma studio`
+
+### Production Deployment
+
+```bash
+# Configure environment
+cp .env.example .env.production
+# Edit .env.production with production values
+
+# Build images
+docker compose build studio worker pdfmath
+
+# Deploy services
+docker compose up -d traefik studio worker db redis milvus minio
+
+# Services will be available on configured domain with SSL via Traefik
+```
+
+## 📁 Project Structure
 
 ```
 deeptrans-studio/
 ├── src/
-│   ├── app/                      # Next.js App Router 页面
-│   │   ├── (app)/                # 业务页面：dashboard / ide / memories 等
-│   │   ├── api/                  # Route Handlers（逐步迁移至 Server Actions）
-│   │   └── layout.tsx            # 根布局、主题与 providers
-│   ├── actions/                  # Server Actions（数据库、AI、文件处理）
-│   ├── agents/                   # AI Agent 定义、提示词、i18n
-│   ├── components/               # 通用 UI 与业务组件
-│   ├── hooks/                    # 自定义 Hook、右侧面板、对话框管理
-│   ├── lib/                      # 工具方法（Redis、向量、LLM 客户端）
-│   ├── store/                    # Zustand / Redux store 配置
-│   ├── db/                       # Prisma client 与 repository 方法
-│   ├── types/                    # TypeScript 类型与枚举
-│   └── worker/                   # Worker 端入口、任务处理、BullMQ 队列
-├── prisma/                       # Prisma schema & migrations
-├── scripts/                      # 开发脚本、临时工具
-├── public/                       # 静态资源
-├── docker-compose.yml            # 开发/部署所需容器编排
-└── package.json / tsconfig.*     # 构建配置
+│   ├── app/                    # Next.js App Router
+│   │   ├── (app)/              # Main application pages
+│   │   ├── api/                # API routes (migrating to Server Actions)
+│   │   └── layout.tsx          # Root layout and providers
+│   ├── actions/                # Server Actions (database, AI, files)
+│   ├── agents/                 # AI agent definitions and prompts
+│   ├── components/             # Reusable UI components
+│   ├── hooks/                  # Custom React hooks
+│   ├── lib/                    # Utility functions and clients
+│   ├── store/                  # State management (Zustand)
+│   ├── db/                     # Database client and repositories
+│   ├── types/                  # TypeScript type definitions
+│   └── worker/                 # Background worker tasks
+├── prisma/                     # Database schema and migrations
+│   ├── schema.prisma           # Prisma schema definition
+│   └── migrations/             # Database migration files
+├── scripts/                    # Development and utility scripts
+├── public/                     # Static assets
+├── docker-compose.yml          # Docker services orchestration
+├── Dockerfile                  # Container image definition
+└── package.json                # Project dependencies
 ```
 
-## 常用脚本
+## 🛠️ Available Scripts
 
-| 命令 | 说明 |
-| --- | --- |
-| `yarn dev` | 启动 Next.js 开发服务器 |
-| `yarn dev:worker` | 在本地启动 Worker（如不使用 Docker） |
-| `yarn build` | 构建生产版本 Next.js 应用 |
-| `yarn build:worker` | 编译 Worker（esbuild → `dist/worker.cjs`） |
-| `yarn start` | 启动生产模式 Next.js |
-| `yarn lint` | 运行 ESLint 检查 |
-| `yarn prisma studio` | 打开 Prisma Studio GUI |
-| `yarn test:segment` / `yarn test:docx` | 针对分段解析 / 文档解析的调试脚本 |
-| `yarn queue:ui` | 启动 Bull Board 监控队列（若有配置） |
+| Command | Description |
+|---------|-------------|
+| `yarn dev` | Start Next.js development server with hot reload |
+| `yarn dev:worker` | Start worker service locally (if not using Docker) |
+| `yarn build` | Build production Next.js application |
+| `yarn build:worker` | Compile worker service (esbuild → dist/worker.cjs) |
+| `yarn start` | Start production Next.js server |
+| `yarn lint` | Run ESLint code quality checks |
+| `yarn type-check` | Run TypeScript type checking |
+| `yarn prisma studio` | Open Prisma Studio database GUI |
+| `yarn prisma generate` | Generate Prisma Client |
+| `yarn db:push` | Push schema changes to database |
+| `yarn db:seed` | Seed database with sample data |
+| `yarn test:segment` | Test segmentation parsing |
+| `yarn test:docx` | Test document parsing |
+| `yarn queue:ui` | Launch Bull Board queue monitoring |
 
-## 国际化
+## 🌍 Internationalization
 
-项目使用 [next-intl](https://next-intl-docs.vercel.app/) 管理多语言文案：
+DeepTrans Studio uses [next-intl](https://next-intl-docs.vercel.app/) for internationalization:
 
-- `src/i18n/en.json` / `zh.json` 为主文案文件。
-- 通过 `useTranslations('命名空间')` 获取文案；新增键时请同步维护多语言文件。
-- 组件层已增加兜底逻辑以防文案缺失，但正式环境建议完善翻译。
+- Translation files: `src/i18n/en.json`, `src/i18n/zh.json`
+- Usage: `useTranslations('namespace')` hook
+- Supported languages: English, Chinese (extendable)
 
-## 贡献指引
+When adding new translations, ensure all language files are updated consistently.
 
-1. **分支策略**：`feat/*`、`fix/*`、`chore/*` 等前缀，保持 PR 粒度可控。
-2. **代码规范**：遵循 ESLint/Prettier；类型尽量完整，避免滥用 `any`。
-3. **提交信息**：推荐 [Conventional Commits](https://www.conventionalcommits.org/) 规范（如 `feat: add translation memory import`）。
-4. **代码审查**：提交 PR 前请运行 `yarn lint`、必要的 `test:*` 脚本及数据库迁移检查。
-5. **文档更新**：新增/修改模块请同步更新 README、架构图或内网文档。
+## 🤝 Contributing
 
-## 项目说明
+We welcome contributions! Please follow these guidelines:
 
-- 本仓库由上海大学 H!NT Lab 开发，用于 Demo Paper（2025）投稿与复现示范。
-- 仓库默认不包含生产密钥与敏感配置，若需部署请自建 `.env` 并替换相应服务凭据。
-- 如在复现过程中遇到问题，可在 GitHub Issues 或通过论文中提供的联系方式与我们沟通。
+### Branch Strategy
+- `feat/*` - New features
+- `fix/*` - Bug fixes
+- `chore/*` - Maintenance tasks
+- `docs/*` - Documentation updates
+
+### Development Workflow
+
+1. **Fork & Clone**: Fork the repository and clone your fork
+2. **Create Branch**: Create a feature branch from `main`
+3. **Code Changes**: Make your changes following our coding standards
+4. **Quality Checks**: Run linting and type checking
+   ```bash
+   yarn lint
+   yarn type-check
+   ```
+5. **Commit**: Use [Conventional Commits](https://www.conventionalcommits.org/) format
+   ```
+   feat: add translation memory import
+   fix: resolve authentication bug
+   docs: update installation guide
+   ```
+6. **Pull Request**: Submit PR with clear description
+
+### Code Standards
+- Follow ESLint and Prettier configurations
+- Write TypeScript with proper types (avoid `any`)
+- Add JSDoc comments for complex functions
+- Write unit tests for new features
+- Update documentation as needed
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+Built with modern technologies:
+- [Next.js](https://nextjs.org/) - React framework
+- [Prisma](https://www.prisma.io/) - Database ORM
+- [Milvus](https://milvus.io/) - Vector database
+- [BullMQ](https://docs.bullmq.io/) - Job queues
+- [MinIO](https://min.io/) - Object storage
+- [Traefik](https://traefik.io/) - Reverse proxy
+
+## 📞 Support
+
+- **Issues**: [GitHub Issues](https://github.com/yourusername/deeptrans-studio/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/yourusername/deeptrans-studio/discussions)
+- **Documentation**: Check the `/docs` folder for detailed guides
 
 ---
 
-💡 如对系统有改进建议，欢迎提交 Issue / PR，与我们一起完善智能翻译平台。
-
-**H!NT Lab, Shanghai University** © 2025
+<div align="center">
+  
+  Made with ❤️ for professional translators and localization teams
+  
+  ⭐ Star us on GitHub if you find this project useful!
+  
+</div>
