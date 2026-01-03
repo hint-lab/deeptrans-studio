@@ -1,7 +1,7 @@
 <div align="center">
-  <img src="public/logo.svg" alt="DeepTrans Studio" width="120" height="120">
+  <img src="public/logo.svg" alt="DeepTrans Studio" width="240" height="240">
   
-  # DeepTrans Studio
+  <!-- # DeepTrans Studio -->
   
   ### Professional AI-Powered Translation Workbench
   
