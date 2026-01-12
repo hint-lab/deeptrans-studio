@@ -1,11 +1,20 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { useActiveDocumentItem } from '@/hooks/useActiveDocumentItem';
 import { fetchDocumentPreviewByDocIdAction } from '@/actions/document';
 import { Button } from '@/components/ui/button';
-import { Download, ExternalLink } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useActiveDocumentItem } from '@/hooks/useActiveDocumentItem';
+import { useExplorerTabs } from '@/hooks/useExplorerTabs';
+import { createLogger } from '@/lib/logger';
+import { Download, ExternalLink } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-
+import React, { useEffect, useRef, useState } from 'react';
+const logger = createLogger({
+    type: 'actions:document',
+}, {
+    json: false,// 开启json格式输出
+    pretty: false, // 关闭开发环境美化输出
+    colors: true, // 仅当json：false时启用颜色输出可用
+    includeCaller: false, // 日志不包含调用者
+});
 const PreviewCard: React.FC = () => {
     const t = useTranslations('IDE.preview');
     const { activeDocumentItem } = useActiveDocumentItem();
@@ -14,14 +23,22 @@ const PreviewCard: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const lastLoadedId = useRef<string | null>(null);
 
+    const { explorerTabs } = useExplorerTabs();
+    const tabs = explorerTabs?.documentTabs ?? [];
+    const aid = (activeDocumentItem as any)?.id;
+    const currentTab = tabs.find((t: any) => (t.items ?? []).some((it: any) => it.id === aid));
+    const docId = (currentTab as any)?.id || '';
+    logger.debug('preview docId:' + docId);
+
     useEffect(() => {
         const load = async () => {
             setLoading(true);
             setError(null);
             setUrl(null);
             try {
-                if (!activeDocumentItem?.id) return;
-                const info = await fetchDocumentPreviewByDocIdAction(activeDocumentItem.id);
+                if (!docId) return;
+                const info = await fetchDocumentPreviewByDocIdAction(docId);
+                logger.info('预览文档加载完成，文档ID:', docId);
                 if (info?.url) {
                     // 使用服务端代理，避免 localhost 拒绝连接
                     const proxied = `/api/document/preview/${activeDocumentItem.id}`;
