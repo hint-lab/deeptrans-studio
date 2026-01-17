@@ -331,7 +331,7 @@ export default function QAPanel({ projectId }: { projectId?: string }) {
                 <ResizablePanel
                     defaultSize={33}
                     minSize={20}
-                    className={cn('rounded bg-white p-2 dark:bg-slate-900', panelCls)}
+                    className={cn('flex flex-col h-full rounded bg-white p-2 dark:bg-slate-900', panelCls)}
                 >
                     <div className="mb-1 text-[11px] font-semibold text-foreground">
                         {t('headerSyntaxQA')}
@@ -499,7 +499,7 @@ export default function QAPanel({ projectId }: { projectId?: string }) {
                 <ResizablePanel
                     defaultSize={33}
                     minSize={20}
-                    className={cn('rounded bg-white p-2 dark:bg-slate-900', panelCls)}
+                    className={cn('flex flex-col h-full rounded bg-white p-2 dark:bg-slate-900', panelCls)}
                 >
                     <div className="mb-1 text-[11px] font-semibold text-foreground">
                         {t('syntaxFeatureAssessment')}
@@ -611,7 +611,7 @@ export default function QAPanel({ projectId }: { projectId?: string }) {
                 <ResizablePanel
                     defaultSize={34}
                     minSize={20}
-                    className={cn('flex-1 rounded bg-white p-2 dark:bg-slate-900', panelCls)}
+                    className={cn('flex flex-col h-full flex-1 rounded bg-white p-2 dark:bg-slate-900', panelCls)}
                 >
                     <div className="flex items-center justify-between">
                         <div className="mb-1 text-[11px] font-semibold text-foreground">
