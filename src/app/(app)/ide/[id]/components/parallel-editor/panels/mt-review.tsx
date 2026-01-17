@@ -1,32 +1,30 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
-import { useAgentWorkflowSteps } from '@/hooks/useAgentWorkflowSteps';
-import { useActiveDocumentItem } from '@/hooks/useActiveDocumentItem';
-import { cn } from '@/lib/utils';
-import { Badge } from '@/components/ui/badge';
-import { TermBadge, AddTermBadge } from '../components/TermBadge';
-import { toast } from 'sonner';
-import { wordDiff } from '@/lib/text-diff';
 import {
-    findProjectDictionaryAction,
     createDictionaryEntryAction,
-    updateDictionaryEntryAction,
     fetchDictionaryMetaByIdAction,
+    findProjectDictionaryAction,
+    updateDictionaryEntryAction,
 } from '@/actions/dictionary';
-import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import {
-    runPreTranslateAction,
-    embedAndTranslateAction,
     baselineTranslateAction,
+    embedAndTranslateAction
 } from '@/actions/pre-translate';
-import { useTranslationContent, useTranslationLanguage } from '@/hooks/useTranslation';
-import { getLanguageByCode, getLanguageLabelByCode } from '@/utils/translate';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import { Switch } from '@/components/ui/switch';
-import { Loader2, Check, X } from 'lucide-react';
+import { useActiveDocumentItem } from '@/hooks/useActiveDocumentItem';
+import { useAgentWorkflowSteps } from '@/hooks/useAgentWorkflowSteps';
+import { useTranslationContent, useTranslationLanguage } from '@/hooks/useTranslation';
+import { wordDiff } from '@/lib/text-diff';
+import { cn } from '@/lib/utils';
+import { Check, Loader2, X } from 'lucide-react';
 import { useTranslations } from 'next-intl';
+import { useParams } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
+import { AddTermBadge, TermBadge } from '../components/TermBadge';
 
 export default function PreTranslatePanel() {
     const t = useTranslations('IDE.mtReview');
@@ -163,13 +161,13 @@ export default function PreTranslatePanel() {
                 onLayout={(sizes: number[]) => {
                     try {
                         document.cookie = `react-resizable-panels:mt-review-layout=${JSON.stringify(sizes)}`;
-                    } catch {}
+                    } catch { }
                 }}
             >
                 <ResizablePanel
                     defaultSize={20}
                     minSize={10}
-                    className={cn('rounded bg-white p-2 dark:bg-slate-900', panelCls)}
+                    className={cn('flex flex-col h-full rounded bg-white p-2 dark:bg-slate-900', panelCls)}
                 >
                     <div className="flex items-center justify-between">
                         <div className="mb-1 text-[11px] font-semibold text-foreground">
@@ -208,7 +206,7 @@ export default function PreTranslatePanel() {
                                     try {
                                         await navigator.clipboard.writeText(text);
                                         toast.success(t('copied', { text }));
-                                    } catch {}
+                                    } catch { }
                                 };
 
                                 const dictArr = Array.isArray(dict) ? (dict as any[]) : [];
@@ -392,12 +390,12 @@ export default function PreTranslatePanel() {
                                                 };
                                                 const vis =
                                                     visMap[
-                                                        String(meta.visibility || '').toUpperCase()
+                                                    String(meta.visibility || '').toUpperCase()
                                                     ] || t('project');
                                                 const name = String(meta.name || '');
                                                 sourceLabel = `${vis} · ${name} · ${t('termList')}`;
                                             }
-                                        } catch {}
+                                        } catch { }
                                         // 本地替换临时项为持久项（避免直接修改只读对象）
                                         const dictArr = Array.isArray(dict) ? (dict as any[]) : [];
                                         const updated = dictArr.map(r => {
@@ -652,7 +650,7 @@ export default function PreTranslatePanel() {
                 <ResizablePanel
                     defaultSize={40}
                     minSize={20}
-                    className={cn('flex-1 rounded bg-white p-2 dark:bg-slate-900', panelCls)}
+                    className={cn('flex flex-col h-full flex-1 rounded bg-white p-2 dark:bg-slate-900', panelCls)}
                 >
                     <div className="flex items-center justify-between">
                         <div className="mb-1 text-[11px] font-semibold text-foreground">

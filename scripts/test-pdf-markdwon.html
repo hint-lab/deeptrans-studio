@@ -1,0 +1,430 @@
+<!doctype html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>PDF ⇄ Markdown 全功能最终版</title>
+    <style>
+        /* --- 基础布局 --- */
+        body {
+            display: flex;
+            margin: 0;
+            height: 100vh;
+            font-family: "Segoe UI", Roboto, sans-serif;
+            overflow: hidden;
+            background: #f4f4f4;
+        }
+
+        #left-container,
+        #right-container {
+            flex: 1;
+            overflow: auto;
+            position: relative;
+            padding: 24px;
+            box-sizing: border-box;
+        }
+
+        #left-container {
+            border-right: 1px solid #ccc;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background: #525659;
+        }
+
+        #right-container {
+            background: #fff;
+        }
+
+        /* --- PDF 页面容器 --- */
+        .pdf-page-wrapper {
+            position: relative;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+            background: #fff;
+            margin-bottom: 20px;
+        }
+
+        /* 覆盖层 */
+        .text-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 10;
+        }
+
+        /* --- PDF 段落框 --- */
+        .pdf-paragraph {
+            position: absolute;
+            cursor: pointer;
+            border: 1px solid rgba(0, 100, 255, 0.2);
+            background-color: rgba(0, 100, 255, 0.01);
+            border-radius: 3px;
+            box-sizing: border-box;
+            transition: all 0.1s;
+        }
+
+        .pdf-paragraph:hover {
+            border-color: rgba(0, 100, 255, 0.8);
+            background-color: rgba(0, 100, 255, 0.1);
+            z-index: 100;
+            box-shadow: 0 0 5px rgba(0, 100, 255, 0.2);
+        }
+
+        .pdf-paragraph.active {
+            background-color: rgba(0, 100, 255, 0.25) !important;
+            border: 2px solid #0056b3 !important;
+            z-index: 999;
+        }
+
+        /* --- Markdown 样式 --- */
+        .md-block {
+            padding: 6px 10px;
+            margin-bottom: 8px;
+            border-radius: 4px;
+            border-left: 3px solid transparent;
+            cursor: pointer;
+            color: #333;
+            line-height: 1.6;
+            transition: background 0.1s;
+        }
+
+        .md-block:hover {
+            background-color: #f5f5f5;
+        }
+
+        .md-block.active {
+            background-color: #e6f7ff;
+            border-left-color: #1890ff;
+            color: #000;
+        }
+
+        /* 根据类型显示不同样式 */
+        .md-h1 {
+            font-size: 22px;
+            font-weight: bold;
+            margin-bottom: 12px;
+            color: #000;
+            padding-top: 10px;
+        }
+
+        .md-h2 {
+            font-size: 18px;
+            font-weight: bold;
+            margin-top: 20px;
+            color: #2c3e50;
+            border-bottom: 1px solid #eee;
+        }
+
+        .md-h3 {
+            font-size: 16px;
+            font-weight: bold;
+            margin-top: 10px;
+            color: #444;
+        }
+
+        .md-p {
+            font-size: 14px;
+            color: #333;
+        }
+
+        .md-li {
+            font-size: 14px;
+            color: #333;
+            padding-left: 20px;
+            position: relative;
+        }
+
+        .md-li::before {
+            content: "•";
+            position: absolute;
+            left: 8px;
+            color: #666;
+        }
+
+        .md-caption {
+            font-size: 12px;
+            color: #666;
+            background: #f0f0f0;
+            border-radius: 4px;
+            font-style: italic;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="left-container"></div>
+    <div id="right-container"></div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>
+        /* 1. 模拟从后端获取的 原始 Markdown 字符串 */
+        /* 注意：这里的文本尽量与 PDF 内容一致，以保证匹配成功率 */
+        const RAW_MARKDOWN_STRING = `
+# Agentic Context Engineering: Evolving Contexts for Self-Improving Language Models
+
+Qizheng Zhang, Changran Hu, Shubhangi Upasani, Boyuan Ma, Fenglu Hong, Vamsidhar Kamanuru, Jay Rainton, Chen Wu, Mengmeng Ji, Hanchen Li, Urmish Thakker, James Zou, Kunle Olukotun
+
+## Abstract
+
+
+Large language model (LLM) applications such as agents and domain-specific reasoning increasingly rely on context adaptation—modifying inputs with instructions, strategies, or evidence, rather than weight updates. Prior approaches improve usability but often suffer from brevity bias, which drops domain insights for concise summaries, and from context collapse, where iterative rewriting erodes details over time. Building on the adaptive memory introduced by Dynamic Cheatsheet, we introduce ACE (Agentic Context Engineering), a framework that treats contexts as evolving playbooks that accumulate, refine, and organize strategies through a modular process of generation, reflection, and curation. ACE prevents collapse with structured, incremental updates that preserve detailed knowledge and scale with long-context models. Across agent and domain-specific benchmarks, ACE optimizes contexts both offline (e.g., system prompts) and online (e.g., agent memory), consistently outperforming strong baselines: +10.6% on agents and +8.6% on finance, while significantly reducing adaptation latency and rollout cost. Notably, ACE could adapt effectively without labeled supervision and instead by leveraging natural execution feedback. On the AppWorld leaderboard, ACE matches the top-ranked production-level agent on the overall average and surpasses it on the harder test-challenge split, despite using a smaller open-source model. These results show that comprehensive, evolving contexts enable scalable, efficient, and self-improving LLM systems with low overhead.
+
+## 1 Introduction
+
+Modern AI applications based on large language models (LLMs), such as LLM agents [49, 52] and compound AI systems [55], increasingly depend on context adaptation. Instead of modifying model weights, context adaptation improves performance after model training by incorporating clarified instructions, structured reasoning steps, or domain-specific input formats directly into the model’s inputs.. Contexts underpin many AI system components, including system prompts that guide downstream tasks [4, 36], memory that carries past facts and experiences [41, 48], and factual evidence that reduces hallucination and supplements knowledge [6].
+
+Figure 1: Overall Performance Results. Our proposed framework, ACE, consistently outperforms strong baselines across agent and domain-specific reasoning tasks.
+
+## 2 Methodology
+
+To address these limitations, we introduce ACE (Agentic Context Engineering), a framework for comprehensive context adaptation in both offline settings (e.g., system prompt optimization) and online settings (e.g., test-time memory adaptation).
+
+## References
+[1] Large language models are zero-shot reasoners.
+`;
+
+        const PDF_URL = 'https://minio.deeptrans.studio/deeptrans/t3/ae62ad08-380d-49aa-85de-839912ac47cc.pdf?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=hintlabadmin%2F20260115%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260115T025820Z&X-Amz-Expires=86400&X-Amz-SignedHeaders=host&X-Amz-Signature=45201c578c6ecac1eaa6dc0fc34dce4b9c33a980da02a4a869e10fa1a41c6d89';
+        const SCALE = 1.5;
+
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+        const leftContainer = document.getElementById('left-container');
+        const rightContainer = document.getElementById('right-container');
+        let isScrolling = false;
+
+        /* =========================================
+           2. 新增功能：Markdown 解析器 (String -> JSON)
+           ========================================= */
+        function parseMarkdown(mdText) {
+            const lines = mdText.split('\n');
+            const blocks = [];
+
+            lines.forEach(line => {
+                const text = line.trim();
+                if (!text) return; // 跳过空行
+
+                let type = 'p'; // 默认为段落
+
+                if (text.startsWith('# ')) {
+                    type = 'h1';
+                    blocks.push({ type, text: text.substring(2).trim() });
+                }
+                else if (text.startsWith('## ')) {
+                    type = 'h2';
+                    blocks.push({ type, text: text.substring(3).trim() });
+                }
+                else if (text.startsWith('### ')) {
+                    type = 'h3';
+                    blocks.push({ type, text: text.substring(4).trim() });
+                }
+                else if (text.startsWith('- ') || text.startsWith('* ')) {
+                    type = 'li';
+                    blocks.push({ type, text: text.substring(2).trim() });
+                }
+                // 智能识别图表标题 (Heuristic)
+                else if (text.startsWith('Figure') || text.startsWith('Table')) {
+                    type = 'caption';
+                    blocks.push({ type, text: text });
+                }
+                else {
+                    // 普通段落
+                    blocks.push({ type: 'p', text: text });
+                }
+            });
+
+            return blocks;
+        }
+
+        // 解析 Markdown
+        const MARKDOWN_CONTENT = parseMarkdown(RAW_MARKDOWN_STRING);
+
+        /* 3. 初始化右侧 DOM */
+        function initRightSide() {
+            rightContainer.innerHTML = ''; // 清空
+            MARKDOWN_CONTENT.forEach((block, index) => {
+                const div = document.createElement('div');
+                // 根据解析出的 type (h1, h2, p, caption) 添加对应的 CSS 类
+                div.className = `md-block md-${block.type}`;
+                div.innerText = block.text;
+                div.dataset.mdIndex = index;
+                div.onclick = () => activatePair(index, 'right');
+                rightContainer.appendChild(div);
+            });
+        }
+
+        /* 4. 加载 PDF (多页逻辑保持不变) */
+        async function loadPDF() {
+            try {
+                const loadingTask = pdfjsLib.getDocument(PDF_URL);
+                const pdfDoc = await loadingTask.promise;
+                console.log(`PDF Loaded: ${pdfDoc.numPages} pages.`);
+
+                for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {
+                    await renderPage(pdfDoc, pageNum);
+                }
+            } catch (err) {
+                console.error(err);
+                alert('PDF加载失败');
+            }
+        }
+
+        async function renderPage(pdfDoc, pageNum) {
+            const page = await pdfDoc.getPage(pageNum);
+            const viewport = page.getViewport({ scale: SCALE });
+
+            const wrapper = document.createElement('div');
+            wrapper.className = 'pdf-page-wrapper';
+            wrapper.style.width = viewport.width + 'px';
+            wrapper.style.height = viewport.height + 'px';
+
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.height = viewport.height;
+            canvas.width = viewport.width;
+
+            const textLayerDiv = document.createElement('div');
+            textLayerDiv.className = 'text-layer';
+
+            wrapper.appendChild(canvas);
+            wrapper.appendChild(textLayerDiv);
+            leftContainer.appendChild(wrapper);
+
+            await page.render({ canvasContext: ctx, viewport: viewport }).promise;
+            const textContent = await page.getTextContent();
+            buildTextLayerForPage(textContent, viewport, textLayerDiv, pageNum);
+        }
+
+        /* 5. 分段算法 (保持不变，已包含字号突变检测) */
+        function buildTextLayerForPage(textContent, viewport, container, pageNum) {
+            const items = textContent.items.map(item => {
+                const tx = pdfjsLib.Util.transform(viewport.transform, item.transform);
+                const fontHeight = Math.sqrt((tx[2] * tx[2]) + (tx[3] * tx[3]));
+                return {
+                    str: item.str, x: tx[4], y: tx[5] - fontHeight,
+                    width: item.width * SCALE, height: fontHeight,
+                    isBlank: item.str.trim().length === 0
+                };
+            }).filter(item => !item.isBlank && item.width > 2);
+
+            items.sort((a, b) => (Math.abs(a.y - b.y) < 2) ? a.x - b.x : a.y - b.y);
+
+            const paragraphs = [];
+            let currentP = null;
+
+            items.forEach(item => {
+                if (!currentP) {
+                    currentP = createBlock(item);
+                } else {
+                    const fontSizeDiff = Math.abs(item.height - currentP.avgHeight);
+                    const isFontChanged = fontSizeDiff > 1.5;
+                    const vGap = item.y - currentP.lastBottom;
+                    const isLargeGap = vGap > (item.height * 0.6);
+                    const xDiff = Math.abs(item.x - currentP.minX);
+                    const isLayoutShift = xDiff > (item.height * 4) && vGap > 0;
+                    const isSpecialStart = /^(Figure|Table|Abstract|\d\s+[A-Z])/.test(item.str);
+
+                    if (isFontChanged || isLargeGap || isLayoutShift || isSpecialStart) {
+                        paragraphs.push(currentP);
+                        currentP = createBlock(item);
+                    } else {
+                        currentP.str += ' ' + item.str;
+                        currentP.minX = Math.min(currentP.minX, item.x);
+                        currentP.maxX = Math.max(currentP.maxX, item.x + item.width);
+                        currentP.minY = Math.min(currentP.minY, item.y);
+                        currentP.maxY = Math.max(currentP.maxY, item.y + item.height);
+                        currentP.lastBottom = item.y + item.height;
+                    }
+                }
+            });
+            if (currentP) paragraphs.push(currentP);
+
+            paragraphs.forEach((p, idx) => {
+                const div = document.createElement('div');
+                div.className = 'pdf-paragraph';
+                div.style.left = p.minX + 'px';
+                div.style.top = p.minY + 'px';
+                div.style.width = (p.maxX - p.minX) + 'px';
+                div.style.height = (p.maxY - p.minY) + 'px';
+
+                const matchIdx = findMatch(p.str);
+                div.dataset.mdIndex = matchIdx;
+
+                if (matchIdx !== -1) {
+                    div.onclick = (e) => { e.stopPropagation(); activatePair(matchIdx, 'left'); };
+                    div.title = `Matches Markdown Block #${matchIdx}`;
+                }
+                container.appendChild(div);
+            });
+        }
+
+        function createBlock(item) {
+            return {
+                str: item.str, minX: item.x, maxX: item.x + item.width,
+                minY: item.y, maxY: item.y + item.height, lastBottom: item.y + item.height, avgHeight: item.height
+            };
+        }
+
+        /* 6. 模糊匹配 (保持不变) */
+        // 修复后的匹配算法：支持跨页段落匹配
+        /* 7. 智能匹配算法 (修复 Abstract 不匹配 & 支持跨页) */
+        function findMatch(pdfStr) {
+            // 1. 归一化
+            const normalize = s => s.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+            const pdf = normalize(pdfStr);
+
+            // 过滤极短噪点 (如页码 "1", "2")，保留 "Abstract"(8字符)
+            if (pdf.length < 3) return -1;
+
+            for (let i = 0; i < MARKDOWN_CONTENT.length; i++) {
+                const md = normalize(MARKDOWN_CONTENT[i].text);
+
+                // --- 策略 A: 精确匹配 (优先级最高) ---
+                // 完美解决 "Abstract" == "Abstract"
+                if (md === pdf) return i;
+
+                // --- 策略 B: 长文本包含匹配 (解决跨页段落) ---
+                // 只有当 PDF 文本片段足够长 (例如 > 10 字符) 时，我们才允许它是 Markdown 的一部分。
+                // 这防止了短词 (如 "The") 错误匹配到不相关的段落中间。
+                if (pdf.length > 10 && md.includes(pdf)) {
+                    return i;
+                }
+
+                // --- 策略 C: 短文本前缀匹配 (解决带序号标题) ---
+                // 如果 PDF 是 "1 Introduction" (MD是 "1. Introduction")，虽不全等，但是 MD 的开头。
+                // 限制长度 < 50 防止误判长段落
+                if (pdf.length > 4 && pdf.length < 50 && md.startsWith(pdf)) {
+                    return i;
+                }
+            }
+            return -1;
+        }
+
+        function activatePair(idx, source) {
+            if (idx === -1 || isScrolling) return;
+            document.querySelectorAll('.active').forEach(e => e.classList.remove('active'));
+
+            const r = rightContainer.querySelector(`.md-block[data-md-index="${idx}"]`);
+            if (r) {
+                r.classList.add('active');
+                if (source === 'left') r.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+
+            const l = document.querySelectorAll(`.pdf-paragraph[data-md-index="${idx}"]`);
+            l.forEach((e, i) => {
+                e.classList.add('active');
+                if (source === 'right' && i === 0) e.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            });
+
+            isScrolling = true;
+            setTimeout(() => isScrolling = false, 500);
+        }
+
+        // 启动
+        initRightSide();
+        loadPDF();
+    </script>
+</body>
+
+</html>

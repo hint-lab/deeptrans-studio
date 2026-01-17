@@ -621,7 +621,10 @@
             "termsDone": "术语提取完成。",
             "writingShort": "写入中…",
             "manualWriteToDict": "手动写入词库",
-            "viewDictionary": "查看词库"
+            "viewDictionary": "查看词库",
+            "parseFailedTitle": "解析失败",
+            "parseFailedDescription": "可能是由于网络连接问题，请尝试重新解析。",
+            "parseFailedMessage": "文档解析服务暂时不可用"
         }
     },
     "Projects": {
@@ -1022,6 +1025,16 @@
             "advance": "状态推进"
         },
         "parallelEditor": {
+            "toasts": {
+                "preTranslationStarted": "预翻译流程已启动",
+                "qaStarted": "智能质检已启动",
+                "postEditStarted": "译后编辑流程已启动",
+                "autoProcessInfo": "系统将自动完成处理并跳转至复核阶段，请稍候...",
+                "preTranslationComplete": "预翻译已完成，正在跳转至复核阶段...",
+                "enterReview": "预翻译已完成，正在跳转至预翻译复核阶段...",
+                "projectCompleted": "项目已完成！",
+                "readyForDelivery": "项目已准备好交付！"
+            },
             "currentStage": "当前阶段",
             "nextStep": "下一步",
             "rollback": "回退",
@@ -1029,12 +1042,17 @@
             "signOff": "签发",
             "stages": {
                 "mt": "机器翻译",
-                "qa": "质量检查",
+                "qa": "质检",
                 "postEdit": "译后编辑",
                 "review": "审核",
                 "signoff": "签收"
             },
             "actions": {
+                "startPreTranslation": "启动预翻译流程",
+                "submitToQA": "完成复核并进入质检",
+                "submitToPostEdit": "提交至译后编辑",
+                "approveSignOff": "批准并定稿",
+                "completeProject": "完成项目",
                 "translate": "翻译",
                 "review": "审核",
                 "approve": "下一步",
@@ -1047,7 +1065,8 @@
                 "inProgress": "进行中",
                 "completed": "已完成",
                 "approved": "已批准",
-                "rejected": "已拒绝"
+                "rejected": "已拒绝",
+                "systemProcessing": "系统自动处理中..."
             },
             "qaRequiresTranslation": "无法质检：请先完成翻译再进行质检",
             "postEditRequiresSource": "无法执行译后编辑：请先输入源文本",
@@ -1393,7 +1412,17 @@
             "RUNNING": "运行中",
             "START": "开始",
             "oneClickCompletion": "一键完成",
-            "oneClickCompletionDesc": "从当前分段开始，自动完成所有后续流程"
+            "oneClickCompletionDesc": "从当前分段开始，自动完成所有后续流程",
+            "groups": {
+                "preTranslation": "预翻译",
+                "qaProcess": "质检",
+                "postEditing": "译后编辑",
+                "finalization": "定稿"
+            },
+            "status": {
+                "processing": "处理中",
+                "reviewing": "人工复核"
+            }
         },
         "translationStagesShort": {
             "NOT_STARTED": "未",

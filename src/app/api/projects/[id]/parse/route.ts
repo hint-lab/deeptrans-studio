@@ -31,15 +31,16 @@ function makePreviewHtmlFromText(content: string): string {
 }
 
 export async function POST(req: NextRequest, ctx: any) {
+    let batchId = '';
+    const redis = await getRedis(); // 移到外层以便 catch 中使用
     try {
-        const redis = await getRedis();
         const { id: projectIdFromParams } = await (ctx?.params || {});
         const q = req.nextUrl.searchParams;
         let body: any = {};
         try {
             body = await req.json();
         } catch { }
-        const batchId = String(q.get('batchId') || body?.batchId || '');
+        batchId = String(q.get('batchId') || body?.batchId || '');
         const docIdFromReq = String(q.get('docId') || body?.documentId || '') || undefined;
         if (!batchId) return NextResponse.json({ error: 'missing batchId' }, { status: 400 });
 
@@ -100,15 +101,24 @@ export async function POST(req: NextRequest, ctx: any) {
                     );
                 }
             }
-        } catch { }
-        if (!content) {
+        } catch (parserError: any) {
+            // 2. 捕获解析器特定的错误（如 MinerU 故障）
+            logger.error(`Parser failed: ${parserError.message}`);
+
+            // 关键修改：如果解析器报错，抛出异常进入外层 catch，
+            // 而不是吞掉错误继续执行后续的 "if (!content)" 逻辑
+            throw parserError;
+        }
+        if (!content && !previewHtml) {
+            // 3. 确实没有内容，但也没有报错 -> 这是一个合法的空文档
+            // 这种情况下，可以写入 empty content 提示
             await setTextWithTTL(
                 redis,
                 `init.${batchId}.previewHtml`,
-                "empty content",
+                "<div class='p-4 text-gray-500'>文档内容为空</div>", // 稍微友好一点的提示
                 TTL_PREVIEW
             );
-            logger.warn("无法解析该文档");
+            logger.warn("解析成功但文档内容为空");
             return NextResponse.json({ ok: true, step: 'parse' });
         }
         if (!previewHtml) previewHtml = makePreviewHtmlFromText(content);
@@ -126,6 +136,7 @@ export async function POST(req: NextRequest, ctx: any) {
         } catch { }
         return NextResponse.json({ ok: true, step: 'parse' });
     } catch (e: any) {
+        logger.error({ error: e?.message || 'parse failed' });
         try {
             const { id: projectIdFromParams } = await ctx.params;
             const docs = await findDocumentsByProjectIdDB(projectIdFromParams);
@@ -136,7 +147,16 @@ export async function POST(req: NextRequest, ctx: any) {
                 } catch { }
             }
         } catch { }
-        logger.error({ error: e?.message || 'parse failed' });
+        // 关键修改：发生错误时，确保 Redis 中没有脏数据（如之前的 empty content）
+        // 这样前端再次获取 previewHtml 时会拿到 null，从而显示骨架屏或错误重试
+        if (batchId && redis) {
+            await setTextWithTTL(
+                redis,
+                `init.${batchId}.previewHtml`,
+                'ERROR:PARSER_FAILED', // 特殊标记
+                TTL_PREVIEW
+            );
+        }
         return NextResponse.json({ error: e?.message || 'parse failed' }, { status: 500 });
     }
 }
