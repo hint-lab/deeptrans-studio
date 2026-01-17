@@ -58,6 +58,7 @@ export default function ProjectInitPage() {
 
     async function runParse() {
         if (!projectId) return;
+        setPreviewHtml("");
         setStarting(true);
         try {
             const u = new URL(`/api/projects/${projectId}/parse`, window.location.origin);
@@ -77,11 +78,11 @@ export default function ProjectInitPage() {
             updateStep('parse');
         } catch {
             setPhase('ERROR');
+            setPreviewHtml('ERROR:PARSER_FAILED');
         } finally {
             setStarting(false);
         }
     }
-
     // 预览兜底：没有服务端 HTML 时，用纯文本拼简易 HTML
     useEffect(() => { }, [preview, previewHtml]);
 
@@ -315,8 +316,6 @@ export default function ProjectInitPage() {
                 updateProgress(nextA, nextB);
                 if (Array.isArray(j?.terms)) setTerms(j.terms);
                 if (Array.isArray(j?.dict)) setDictMatches(j.dict);
-                if (typeof j?.previewHtml === 'string' && !previewHtml)
-                    setPreviewHtml(j.previewHtml);
                 if (!(a >= 100 && b >= 100)) {
                     longPoll(a, b);
                 } else {

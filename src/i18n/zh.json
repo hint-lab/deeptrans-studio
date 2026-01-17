@@ -621,7 +621,10 @@
             "termsDone": "术语提取完成。",
             "writingShort": "写入中…",
             "manualWriteToDict": "手动写入词库",
-            "viewDictionary": "查看词库"
+            "viewDictionary": "查看词库",
+            "parseFailedTitle": "解析失败",
+            "parseFailedDescription": "可能是由于网络连接问题，请尝试重新解析。",
+            "parseFailedMessage": "文档解析服务暂时不可用"
         }
     },
     "Projects": {
