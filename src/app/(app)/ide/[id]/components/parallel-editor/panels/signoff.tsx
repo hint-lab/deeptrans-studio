@@ -1,15 +1,14 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { useActiveDocumentItem } from '@/hooks/useActiveDocumentItem';
-import { useAgentWorkflowSteps } from '@/hooks/useAgentWorkflowSteps';
 import { listTranslationProcessEventsForSignoff } from '@/actions/translation-process-event';
 import {
     TRANSLATION_STAGES_SEQUENCE,
     getTranslationStageLabel,
 } from '@/constants/translationStages';
+import { useActiveDocumentItem } from '@/hooks/useActiveDocumentItem';
 import type { TranslationStage } from '@/store/features/translationSlice';
 import { useTranslations } from 'next-intl';
+import { useEffect, useMemo, useState } from 'react';
 
 type EventItem = {
     id: string;
@@ -31,19 +30,9 @@ export default function SignoffPanel() {
     const [events, setEvents] = useState<EventItem[]>([]);
     const [loading, setLoading] = useState(false);
 
-    // 获取工作流状态
-    const preStep = useAgentWorkflowSteps(s => s.preStep);
-    const qaStep = useAgentWorkflowSteps(s => s.qaStep);
-    const peStep = useAgentWorkflowSteps(s => s.peStep);
-    const isPreRunning = useAgentWorkflowSteps(s => s.isPreRunning);
-    const isQARunning = useAgentWorkflowSteps(s => s.isQARunning);
-    const isPERunning = useAgentWorkflowSteps(s => s.isPERunning);
-    const preTranslateEmbedded = useAgentWorkflowSteps(s => s.preTranslateEmbedded);
-    const qualityAssureBiTerm = useAgentWorkflowSteps(s => s.qualityAssureBiTerm);
-    const qualityAssureSyntax = useAgentWorkflowSteps(s => s.qualityAssureSyntax);
-    const posteditResult = useAgentWorkflowSteps(s => s.posteditResult);
-
     const documentItemId = (activeDocumentItem as any)?.id;
+    // 获取当前分段的实时状态，作为时间线渲染的最高准则
+    const currentStatus = (activeDocumentItem as any)?.status as TranslationStage;
 
     useEffect(() => {
         const run = async () => {
@@ -60,20 +49,21 @@ export default function SignoffPanel() {
             }
         };
         run();
-    }, [documentItemId, (activeDocumentItem as any)?.status]);
+    }, [documentItemId, currentStatus]); // 监听 status 变化重新拉取
 
     const timeline = useMemo(() => {
         type StepStatus = 'SUCCESS' | 'FAILED' | 'STARTED' | 'IDLE';
         const stages: TranslationStage[] = TRANSLATION_STAGES_SEQUENCE;
+
+        // 1. 初始化结果集
         const results = new Map<
             TranslationStage,
             { status: StepStatus; actor: string; time?: string }
         >();
-
-        // 初始化所有 translationStage 为 IDLE
         for (const st of stages) results.set(st, { status: 'IDLE', actor: '—' });
 
-        // 根据数据库事件映射 - 按时间排序处理事件
+        // 2. 填充事件数据 (保留元数据：时间、执行人)
+        // 按时间正序排列，确保同一步骤取到的是最后一次执行的状态
         const sortedEvents = (events || []).sort((a, b) => {
             const timeA = new Date(a.finishedAt || a.createdAt || a.startedAt || 0).getTime();
             const timeB = new Date(b.finishedAt || b.createdAt || b.startedAt || 0).getTime();
@@ -83,161 +73,69 @@ export default function SignoffPanel() {
         for (const e of sortedEvents) {
             const key = String(e.stepKey) as TranslationStage;
             if (!stages.includes(key)) continue;
-            const prev = results.get(key)!;
-            const nextStatus: StepStatus =
-                e.status === 'FAILED'
-                    ? 'FAILED'
-                    : e.status === 'STARTED'
-                      ? 'STARTED'
-                      : e.status === 'SUCCESS'
-                        ? 'SUCCESS'
-                        : prev.status;
-            const actor = e.actorType === 'HUMAN' ? e.actorId || 'Human' : e.model || 'Agent';
-            const time =
-                e.finishedAt || e.createdAt || e.startedAt
-                    ? new Date((e.finishedAt || e.createdAt || e.startedAt) as any).toLocaleString()
-                    : undefined;
 
-            // 状态更新逻辑：FAILED > STARTED > SUCCESS > IDLE
-            const priority: Record<StepStatus, number> = {
-                FAILED: 3,
-                STARTED: 2,
-                SUCCESS: 1,
-                IDLE: 0,
-            } as any;
-            const curPr = priority[prev.status];
-            const nxtPr = priority[nextStatus];
+            const actor = e.actorType === 'HUMAN' ? 'Human' : 'Agent'; // 简化显示，或者显示 e.model
+            const rawTime = e.finishedAt || e.createdAt || e.startedAt;
+            const time = rawTime ? new Date(rawTime).toLocaleString() : undefined;
+            const status = e.status as StepStatus;
 
-            // 只有更高优先级或相同优先级但更新的时间才能覆盖
-            if (
-                nxtPr > curPr ||
-                (nxtPr === curPr &&
-                    time &&
-                    (!prev.time || new Date(time).getTime() > new Date(prev.time).getTime()))
-            ) {
-                results.set(key, { status: nextStatus, actor, time });
-            }
+            // 存入最新的事件信息
+            results.set(key, { status, actor, time });
         }
 
-        // 工作流顺序性逻辑：确保工作流按正确顺序进行
-        // 1. 只有一个步骤可以处于"进行中"状态（最新的）
-        // 2. 如果后续步骤在进行中，前面的步骤应该是成功状态
+        // 3. 【核心修复】基于当前状态(Current Status) 进行逻辑覆盖
+        // 这解决了两个问题：
+        // a. "GAP"问题：如果当前是 COMPLETED，中间的 REVIEW 即使没事件也应该是 SUCCESS。
+        // b. "回退"问题：如果从 QA 回退到 MT，那么 QA 应该重置为 IDLE，无论之前有没有事件。
 
-        // 找到所有进行中的步骤
-        const startedSteps: Array<{ stage: TranslationStage; time: number }> = [];
-        for (const [stage, result] of results.entries()) {
-            if (result.status === 'STARTED' && result.time) {
-                startedSteps.push({
-                    stage,
-                    time: new Date(result.time).getTime(),
-                });
-            }
-        }
+        const currentIndex = stages.indexOf(currentStatus);
 
-        // 按时间排序，最新的保持"进行中"，其他改为"成功"
-        if (startedSteps.length > 1) {
-            startedSteps.sort((a, b) => b.time - a.time); // 最新的在前
+        if (currentIndex !== -1) {
+            stages.forEach((stage, index) => {
+                const prevData = results.get(stage)!;
 
-            for (let i = 1; i < startedSteps.length; i++) {
-                const olderStep = startedSteps[i];
-                if (olderStep && olderStep.stage) {
-                    const result = results.get(olderStep.stage);
-                    if (result) {
-                        results.set(olderStep.stage, { ...result, status: 'SUCCESS' });
-                    }
-                }
-            }
-        }
-
-        // 确保工作流顺序性：如果某个步骤在进行中，前面的步骤应该已完成
-        for (let i = 0; i < stages.length; i++) {
-            const currentStage = stages[i] as TranslationStage;
-            const current = results.get(currentStage);
-
-            if (current?.status === 'STARTED') {
-                // 将前面所有待开始或进行中的步骤标记为成功
-                for (let j = 0; j < i; j++) {
-                    const prevStage = stages[j] as TranslationStage;
-                    const prev = results.get(prevStage);
-                    if (prev && (prev.status === 'IDLE' || prev.status === 'STARTED')) {
-                        results.set(prevStage, {
-                            ...prev,
+                if (index < currentIndex) {
+                    // 情况 A: 当前步骤之前的步骤 -> 强制标记为成功 (补全 GAP)
+                    // 除非它显式标记为失败(但在流转逻辑中，通常失败会卡住，不会进入下一步，所以大概率是成功)
+                    if (prevData.status !== 'SUCCESS') {
+                        results.set(stage, {
+                            ...prevData,
                             status: 'SUCCESS',
-                            actor: current.actor,
-                            time: current.time
-                                ? new Date(
-                                      new Date(current.time).getTime() - (i - j) * 1000
-                                  ).toLocaleString()
-                                : undefined,
+                            // 如果没有时间，给一个占位符或保持空，避免显示错误的旧时间
+                            actor: prevData.actor !== '—' ? prevData.actor : 'System',
                         });
                     }
-                }
-                break; // 只处理第一个进行中的步骤
-            }
-        }
+                } else if (index === currentIndex) {
+                    // 情况 B: 当前步骤
+                    if (prevData.status !== 'SUCCESS' && prevData.status !== 'FAILED') {
+                        // 【修复点】：如果是 COMPLETED 阶段，它代表终点，应该是 SUCCESS 而不是 STARTED
+                        // 其他阶段（如 MT, QA）作为当前阶段时，代表正在进行中 (STARTED)
+                        const status = stage === 'COMPLETED' ? 'SUCCESS' : 'STARTED';
 
-        // 最终状态逻辑：如果签发成功，完成也应该成功
-        const signoffResult = results.get('SIGN_OFF');
-        const completedResult = results.get('COMPLETED');
-        if (signoffResult?.status === 'SUCCESS' && completedResult?.status === 'IDLE') {
-            results.set('COMPLETED', {
-                status: 'SUCCESS',
-                actor: signoffResult.actor,
-                time: signoffResult.time,
+                        results.set(stage, {
+                            ...prevData,
+                            status: status,
+                            actor: prevData.actor !== '—' ? prevData.actor : 'System',
+                        });
+                    }
+                } else {
+                    // 情况 C: 当前步骤之后的步骤 -> 强制重置为未开始 (清除回退后的"未来"脏数据)
+                    results.set(stage, {
+                        status: 'IDLE',
+                        actor: '—',
+                        time: undefined
+                    });
+                }
             });
         }
 
-        // 兜底逻辑：如果没有数据库事件，根据当前状态推断时间线
-        if (!events || events.length === 0) {
-            const currentStatus = (activeDocumentItem as any)?.status;
-            if (currentStatus) {
-                // 找到当前状态在序列中的位置
-                const currentIndex = stages.indexOf(currentStatus);
-                if (currentIndex >= 0) {
-                    // 将当前状态之前的所有阶段标记为成功
-                    for (let i = 0; i <= currentIndex; i++) {
-                        const stage = stages[i];
-                        if (stage) {
-                            results.set(stage, {
-                                status: 'SUCCESS',
-                                actor: 'Human',
-                                time: new Date().toLocaleString(),
-                            });
-                        }
-                    }
-
-                    // 如果当前是SIGN_OFF，同时标记COMPLETED为成功
-                    if (currentStatus === 'SIGN_OFF') {
-                        results.set('COMPLETED', {
-                            status: 'SUCCESS',
-                            actor: 'Human',
-                            time: new Date().toLocaleString(),
-                        });
-                    }
-                }
-            }
-        }
-
+        // 4. 生成渲染数组
         return stages.map(st => ({
             key: st,
             label: getTranslationStageLabel(st, tStage),
             ...(results.get(st) as any),
         }));
-    }, [
-        events,
-        preStep,
-        qaStep,
-        peStep,
-        isPreRunning,
-        isQARunning,
-        isPERunning,
-        preTranslateEmbedded,
-        qualityAssureBiTerm,
-        qualityAssureSyntax,
-        posteditResult,
-        tStage,
-        (activeDocumentItem as any)?.status,
-    ]);
+    }, [events, tStage, currentStatus]);
 
     return (
         <div className="mt-2 w-full rounded border border-blue-200 bg-blue-50 p-2 dark:border-blue-900 dark:bg-blue-950/30">
@@ -257,13 +155,13 @@ export default function SignoffPanel() {
                             const dotCls = isFail
                                 ? 'bg-red-500 border-red-600'
                                 : isDone
-                                  ? 'bg-blue-600 border-blue-700'
-                                  : isRun
-                                    ? 'bg-yellow-400 border-yellow-500'
-                                    : 'bg-white dark:bg-slate-900 border-blue-300 dark:border-blue-700';
+                                    ? 'bg-blue-600 border-blue-700'
+                                    : isRun
+                                        ? 'bg-yellow-400 border-yellow-500'
+                                        : 'bg-white dark:bg-slate-900 border-blue-300 dark:border-blue-700';
                             return (
                                 <div key={s.key} className="relative flex flex-col items-center">
-                                    {/* 连接线（到下一个节点） */}
+                                    {/* 连接线 */}
                                     {i < timeline.length - 1 && (
                                         <div
                                             className={`absolute left-4 right-[-3rem] top-3 h-[2px] ${isFail ? 'bg-red-200 dark:bg-red-900' : isDone ? 'bg-blue-200 dark:bg-blue-900' : 'bg-blue-100 dark:bg-blue-800'}`}
@@ -285,10 +183,10 @@ export default function SignoffPanel() {
                                             {isFail
                                                 ? t('failed')
                                                 : isDone
-                                                  ? t('success')
-                                                  : isRun
-                                                    ? t('inProgress')
-                                                    : t('notStarted')}
+                                                    ? t('success')
+                                                    : isRun
+                                                        ? t('inProgress')
+                                                        : t('notStarted')}
                                         </div>
                                         <div className="text-foreground/50">{s.actor || '—'}</div>
                                         {s.time && (

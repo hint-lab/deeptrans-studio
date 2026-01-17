@@ -5,7 +5,7 @@ import { useAgentWorkflowSteps } from '@/hooks/useAgentWorkflowSteps';
 import { useTranslationState } from '@/hooks/useTranslation';
 import { createLogger } from '@/lib/logger';
 import { useTranslations } from 'next-intl';
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react'; // 引入 useRef
 import LoggingPanel from './panels/logging';
 import MtReviewPanel from './panels/mt-review';
 import PostEditPanel from './panels/post-edit';
@@ -14,14 +14,16 @@ import SignoffPanel from './panels/signoff';
 import MTWorkflowPanel from './panels/workflow-diagram/MTWorkflowPanel';
 import PostEditWorkflowPanel from './panels/workflow-diagram/PostEditWorkflowPanel';
 import QAWorkflowPanel from './panels/workflow-diagram/QAWorkflowPanel';
+
 const logger = createLogger({
     type: 'parallel-editor:translation-process-panel',
 }, {
-    json: false,// 开启json格式输出
-    pretty: false, // 关闭开发环境美化输出
-    colors: true, // 仅当json：false时启用颜色输出可用
-    includeCaller: false, // 日志不包含调用者
+    json: false,
+    pretty: false,
+    colors: true,
+    includeCaller: false,
 });
+
 interface TranslationProcessPanelProps {
     panelTab: string;
     setPanelTab: (value: string) => void;
@@ -37,6 +39,9 @@ export const TranslationProcessPanel: React.FC<TranslationProcessPanelProps> = (
     const { currentStage } = useTranslationState();
     const isPERunning = useAgentWorkflowSteps(s => s.isPERunning);
 
+    // 使用 ref 记录上一次的 stage，避免重复触发
+    const prevStageRef = useRef<string | null>(null);
+
     // 监听 currentStage 变化，自动切换对应的标签页
     useEffect(() => {
         const stageToTabMap: Record<string, string> = {
@@ -51,27 +56,27 @@ export const TranslationProcessPanel: React.FC<TranslationProcessPanelProps> = (
             COMPLETED: 'signoff',
         };
 
-        logger.info('TranslationProcessPanel: currentStage changed to:', currentStage);
-        logger.info('TranslationProcessPanel: current panelTab:', panelTab);
+        // 只有当 currentStage 真正发生变化时，才执行切换逻辑
+        if (currentStage && currentStage !== prevStageRef.current) {
+            logger.info('TranslationProcessPanel: currentStage changed from', prevStageRef.current, 'to', currentStage);
 
-        if (currentStage && stageToTabMap[currentStage]) {
-            const targetTab = stageToTabMap[currentStage];
-            logger.info('TranslationProcessPanel: should switch to tab:', targetTab);
-            if (panelTab !== targetTab) {
-                logger.info(
-                    'TranslationProcessPanel: switching tab from',
-                    panelTab,
-                    'to',
-                    targetTab
-                );
+            // 更新 ref
+            prevStageRef.current = currentStage;
+
+            if (stageToTabMap[currentStage]) {
+                const targetTab = stageToTabMap[currentStage];
+                logger.info('TranslationProcessPanel: Auto-switching to tab:', targetTab);
                 setPanelTab(targetTab);
             }
         }
-    }, [currentStage, panelTab, setPanelTab]);
+    }, [currentStage, setPanelTab]); // 移除 panelTab 依赖，切断循环
 
-    // 监听 PE 工作流运行状态，自动切换到译后工作流标签页
+    // 监听 PE 工作流运行状态 (这也可能导致跳变，建议也加上类似保护，或者作为特例保留)
     useEffect(() => {
         if (isPERunning && panelTab !== 'post-edit-flow') {
+            // 这里是否需要保护取决于业务逻辑：PE运行时是否强制用户看流程图？
+            // 如果是，保持原样。如果不是，可以加上类似 prevRunning 的判断。
+            // 目前看似合理，因为运行中看流程图比较直观。
             logger.info('TranslationProcessPanel: PE running, switching to post-edit-flow');
             setPanelTab('post-edit-flow');
         }
@@ -81,6 +86,7 @@ export const TranslationProcessPanel: React.FC<TranslationProcessPanelProps> = (
         <Tabs value={panelTab} onValueChange={setPanelTab} className="flex h-full flex-col pb-12">
             <div className="relative z-10 border-b bg-muted/20 px-2">
                 <TabsList className="pointer-events-auto h-9 bg-transparent">
+                    {/* ... TabsTrigger 内容保持不变 ... */}
                     <TabsTrigger value="pre-flow" className="text-xs">
                         {t('preWorkflow')}
                     </TabsTrigger>
@@ -107,6 +113,8 @@ export const TranslationProcessPanel: React.FC<TranslationProcessPanelProps> = (
                     </TabsTrigger>
                 </TabsList>
             </div>
+
+            {/* ... TabsContent 内容保持不变 ... */}
             <TabsContent value="pre-flow" className="m-1 flex-1 p-1">
                 <MTWorkflowPanel />
             </TabsContent>
