@@ -1,31 +1,49 @@
-# deps
+# 1. 依赖安装阶段 (包含 dev依赖，用于编译)
 FROM node:20-bookworm AS deps
 WORKDIR /app
-RUN corepack enable && \
-    corepack prepare yarn@1.22.22 \
-    --activate && \
-    yarn config set registry https://registry.npmmirror.com
+RUN corepack enable && corepack prepare yarn@1.22.22 --activate
+# 配置国内源（可选）
+RUN yarn config set registry https://registry.npmmirror.com
 COPY package.json yarn.lock ./
 RUN yarn install --frozen-lockfile --ignore-scripts
 
-# build
+# 2. 构建阶段
 FROM deps AS builder
 COPY . .
-RUN yarn prisma generate \
- && yarn build:worker 
-# 产出 dist/worker.js
+RUN yarn prisma generate
+RUN yarn build:worker
 
-# runtime
-FROM node:20-bookworm-slim
+# -----------------------------------------------------------------
+# 3. [新增] 生产依赖阶段 (只下载 prod 依赖，用于拷贝)
+# 这一步是为了避免在最终镜像中运行 yarn install 产生缓存
+# -----------------------------------------------------------------
+FROM node:20-bookworm AS prod-deps
 WORKDIR /app
-RUN apt-get update && apt-get install -y --no-install-recommends openssl dumb-init && rm -rf /var/lib/apt/lists/*
-ENV NODE_ENV=production NODE_OPTIONS=--max-old-space-size=512 BULLMQ_CONCURRENCY=8
+RUN corepack enable && corepack prepare yarn@1.22.22 --activate
 COPY package.json yarn.lock ./
-RUN corepack enable && corepack prepare yarn@1.22.22 --activate && yarn config set registry https://registry.npmmirror.com \
- && yarn install --frozen-lockfile --ignore-scripts --production=true
+# 只安装生产依赖
+RUN yarn install --frozen-lockfile --ignore-scripts --production=true
+
+# 4. 最终运行阶段
+FROM node:20-bookworm-slim AS runner
+WORKDIR /app
+
+# 安装系统依赖 (openssl 等)
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends openssl dumb-init && \
+    rm -rf /var/lib/apt/lists/*
+
+ENV NODE_ENV=production \
+    NODE_OPTIONS=--max-old-space-size=512 \
+    BULLMQ_CONCURRENCY=8
+
+# 直接从 prod-deps 阶段拷贝 node_modules，而不是在这一层运行 install
+COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
-# 拷贝已经在 builder 阶段生成好的 Prisma Client（避免生产镜像忽略 postinstall 导致未生成）
-COPY --from=builder /app/node_modules/.prisma /app/node_modules/.prisma
+# 拷贝 Prisma Client
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+
 USER node
-ENTRYPOINT ["dumb-init","--"]
-CMD ["node","dist/worker.cjs"]
+
+ENTRYPOINT ["dumb-init", "--"]
+CMD ["node", "dist/worker.cjs"]
