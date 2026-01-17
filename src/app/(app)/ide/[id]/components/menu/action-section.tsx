@@ -148,216 +148,6 @@ export function ActionSection() {
             });
         } catch { }
     };
-
-    const handleAutoRun = async (_currentStage: string) => {
-        // 一步到签发：从当前分段起，顺序处理当前页签
-        try {
-            const tabs = explorerTabs?.documentTabs ?? [];
-            const aid = (activeDocumentItem as any)?.id;
-            const currentTab = tabs.find((t: any) =>
-                (t.items ?? []).some((it: any) => it.id === aid)
-            );
-            const items: any[] = (currentTab?.items ?? []) as any[];
-            if (!items.length) return;
-            const startIdx = Math.max(
-                0,
-                items.findIndex((it: any) => it.id === aid)
-            );
-            const queueItems = items.slice(startIdx);
-
-            // 1) 预译（仅处理 NOT_STARTED）
-            const needPre = queueItems
-                .filter((it: any) => (it.status || 'NOT_STARTED') === 'NOT_STARTED')
-                .map((it: any) => it.id);
-            if (needPre.length) {
-                setProgressTitle('批量翻译中');
-                setBatchProgress(0);
-                setBatchOpen(true);
-                setIsRunning(true);
-                const startRes = await fetch('/api/batch-pre-translate/start', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        itemIds: needPre,
-                        sourceLanguage: sourceLanguage || 'auto',
-                        targetLanguage: targetLanguage || 'auto',
-                    }),
-                }).then(r => r.json());
-                const { batchId } = startRes || {};
-                if (batchId) {
-                    let tries = 0;
-                    // 轮询进度
-                    // 最长 10 分钟
-                    while (tries <= 600) {
-                        tries += 1;
-                        try {
-                            const p = await fetch(
-                                `/api/batch-pre-translate/progress?batchId=${encodeURIComponent(batchId)}`
-                            ).then(r => r.json());
-                            setBatchProgress(p.percent);
-                            if (p.percent >= 100) break;
-                        } catch { }
-                        await new Promise(res => setTimeout(res, 1000));
-                    }
-                    try {
-                        await fetch('/api/batch-pre-translate/persist', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ batchId }),
-                        });
-                    } catch { }
-                }
-                setBatchOpen(false);
-            }
-
-            // 2) 质检（处理非 SIGN_OFF 且 非 QA 的条目）
-            const needQA = queueItems
-                .filter(
-                    (it: any) =>
-                        (it.status || 'NOT_STARTED') !== 'SIGN_OFF' &&
-                        (it.status || 'NOT_STARTED') !== 'QA'
-                )
-                .map((it: any) => it.id);
-            if (needQA.length) {
-                setProgressTitle('批量评估中');
-                setBatchProgress(0);
-                setBatchOpen(true);
-                setIsRunning(true);
-                const startQARes = await fetch('/api/batch-quality-assure/start', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        itemIds: needQA,
-                        targetLanguage: targetLanguage || 'auto',
-                    }),
-                }).then(r => r.json());
-                const { batchId: qaId } = startQARes || {};
-                if (qaId) {
-                    let tries = 0;
-                    while (tries <= 600) {
-                        tries += 1;
-                        try {
-                            const p = await fetch(
-                                `/api/batch-quality-assure/progress?batchId=${encodeURIComponent(qaId)}`
-                            ).then(r => r.json());
-                            setBatchProgress(p.percent);
-                            if (p.percent >= 100) break;
-                        } catch { }
-                        await new Promise(res => setTimeout(res, 1000));
-                    }
-                    try {
-                        await fetch('/api/batch-quality-assure/persist', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ batchId: qaId }),
-                        });
-                    } catch { }
-                }
-                setBatchOpen(false);
-            }
-
-            // 3) 译后（标记 POST_EDIT）
-            setProgressTitle('批量译后中');
-            setBatchProgress(0);
-            setBatchOpen(true);
-            setIsRunning(true);
-            let donePE = 0;
-            const totalPE = queueItems.length;
-            for (const it of queueItems) {
-                if (it.status !== 'POST_EDIT' && it.status !== 'SIGN_OFF') {
-                    try {
-                        await updateDocItemStatusAction(it.id, 'POST_EDIT');
-                    } catch { }
-                }
-                donePE += 1;
-                setBatchProgress(Math.round((donePE / totalPE) * 100));
-            }
-            try {
-                if ((activeDocumentItem as any)?.id)
-                    await updateDocItemStatusAction((activeDocumentItem as any)?.id, 'POST_EDIT');
-            } catch { }
-
-            // 4) 签发（标记 SIGN_OFF）}
-            setProgressTitle('批量签发中');
-            setBatchProgress(0);
-            setBatchOpen(true);
-            setIsRunning(true);
-            let doneSG = 0;
-            const totalSG = queueItems.length;
-            for (const it of queueItems) {
-                if (it.status !== 'SIGN_OFF') {
-                    try {
-                        await updateDocItemStatusAction(it.id, 'SIGN_OFF');
-                    } catch { }
-                }
-                doneSG += 1;
-                setBatchProgress(Math.round((doneSG / totalSG) * 100));
-            }
-            try {
-                if ((activeDocumentItem as any)?.id)
-                    await updateDocItemStatusAction((activeDocumentItem as any)?.id, 'SIGN_OFF');
-            } catch { }
-            // 刷新左侧视图
-            try {
-                const tabsRes = await fetch(
-                    `/api/explorer-tabs?projectId=${encodeURIComponent((explorerTabs as any)?.projectId || '')}`
-                ).then(r => r.json());
-                setExplorerTabs(tabsRes);
-            } catch { }
-            setCurrentStage('SIGN_OFF' as any);
-            // 5) 完成（标记 COMPLETED）
-            setProgressTitle('批量完成中');
-            setBatchProgress(0);
-            setBatchOpen(true);
-            setIsRunning(true);
-            let doneSG1 = 0;
-            const totalSG1 = queueItems.length;
-            for (const it of queueItems) {
-                if (it.status !== 'COMPLETED') {
-                    try {
-                        await updateDocItemStatusAction(it.id, 'COMPLETED');
-                        await recordGoToNextTranslationProcessEventAction(
-                            it.id,
-                            'COMPLETED',
-                            'HUMAN',
-                            'SUCCESS'
-                        );
-                    } catch { }
-                }
-                doneSG1 += 1;
-                setBatchProgress(Math.round((doneSG1 / totalSG1) * 100));
-            }
-            try {
-                if ((activeDocumentItem as any)?.id) {
-                    await updateDocItemStatusAction((activeDocumentItem as any)?.id, 'COMPLETED');
-                    await recordGoToNextTranslationProcessEventAction(
-                        (activeDocumentItem as any)?.id,
-                        'COMPLETED',
-                        'HUMAN',
-                        'SUCCESS'
-                    );
-                }
-            } catch { }
-
-            // 刷新左侧视图
-            try {
-                const tabsRes = await fetch(
-                    `/api/explorer-tabs?projectId=$    {encodeURIComponent((explorerTabs as any)?.projectId || '')}`
-                ).then(r => r.json());
-                setExplorerTabs(tabsRes);
-            } catch { }
-            setCurrentStage('COMPLETED' as any);
-        } finally {
-            setBatchOpen(false);
-            setIsRunning(false);
-            setCurrentOperation('idle');
-        }
-    };
-
-    useEffect(() => {
-        // logger.debug(sourceLanguage, targetLanguage);
-    }, [sourceLanguage, targetLanguage]);
-
     const setPreRunning = useAgentWorkflowSteps((s: any) => s.setPreRunning);
     const setPreStep = useAgentWorkflowSteps((s: any) => s.setPreStep);
     const setPreOutputs = useAgentWorkflowSteps((s: any) => s.setPreOutputs);
@@ -367,19 +157,33 @@ export function ActionSection() {
 
     const handlePreTranslationAction = async (provider: string = 'openai') => {
         try {
+            // 检查前置条件
+            const id = (activeDocumentItem as any)?.id;
+            if (!id) {
+                toast.error('没有激活的文档项，无法进行预翻译');
+                return;
+            }
+
+            // 检查当前状态是否允许质检（应该在 NOT_STARTED 状态）
+            if (activeDocumentItem?.status !== 'NOT_STARTED') {
+                toast.error(
+                    `当前分段状态为 ${activeDocumentItem?.status || '未知'}，无法进行预翻译`
+                );
+                return;
+            }
+
+            // 检查文本内容
+            const currentText = sourceText;
+            if (!currentText.trim()) {
+                toast.error('原文内容为空，无法进行预翻译');
+                return;
+            }
             logAgent('翻译开始');
 
             setIsRunning(true);
             setCurrentOperation('translate_single');
 
             setCurrentStage('MT');
-            const currentText = sourceText;
-
-            if (!currentText.trim()) {
-                toast.error('请先输入要翻译的内容');
-                return;
-            }
-
             // 预翻译三步：单语术语提取 → 词典查询 → 术语嵌入
             try {
                 setPreRunning(true);
@@ -470,6 +274,9 @@ export function ActionSection() {
                 toast.success('翻译完成：翻译已完成并更新到目标编辑器');
                 logAgent('翻译完成');
             }
+            setCurrentStage('MT_REVIEW');
+            await updateDocItemStatusAction((activeDocumentItem as any)?.id, 'MT_REVIEW');
+            syncLocalStatusById((activeDocumentItem as any)?.id, 'MT_REVIEW');
         } catch (error) {
             logger.error('翻译失败:', error);
             toast.error('翻译失败：请检查网络连接或稍后再试');
@@ -546,6 +353,26 @@ export function ActionSection() {
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ batchId }),
                             });
+                            // 批量更新状态到 MT_REVIEW
+                            for (const item of notStartedItems) {
+                                try {
+                                    await updateDocItemStatusAction(item.id, 'MT_REVIEW');
+                                    await recordGoToNextTranslationProcessEventAction(
+                                        item.id,
+                                        'MT',
+                                        'AGENT',
+                                        'SUCCESS'
+                                    );
+                                    await recordGoToNextTranslationProcessEventAction(
+                                        item.id,
+                                        'MT_REVIEW',
+                                        'HUMAN',
+                                        'SUCCESS'
+                                    );
+                                } catch (e) {
+                                    logger.error(`更新分段 ${item.id} 状态失败:`, e);
+                                }
+                            }
                         } catch { }
 
                         setIsRunning(false);
@@ -1267,38 +1094,6 @@ export function ActionSection() {
         }
     };
 
-    // 前一步（回退）/后一步（前进） - 针对当前激活分段
-    const rollbackCurrent = async () => {
-        const id = (activeDocumentItem as any)?.id;
-        if (!id) return;
-        const mapping: Record<string, { to?: string; prev?: string }> = {
-            QA: { to: 'MT', prev: 'MT' },
-            POST_EDIT: { to: 'QA', prev: 'QA' },
-            COMPLETED: { to: 'POST_EDIT', prev: 'POST_EDIT' },
-        };
-        const m = mapping[currentStage as string];
-        if (!m?.to) return;
-        try {
-            await updateDocItemStatusAction(id, m.to);
-            if (m.prev) setCurrentStage(m.prev as any);
-        } catch { }
-    };
-
-    const advanceCurrent = async () => {
-        const id = (activeDocumentItem as any)?.id;
-        if (!id) return;
-        const mapping: Record<string, { to?: string; next?: string }> = {
-            MT: { to: 'QA', next: 'QA' },
-            QA: { to: 'POST_EDIT', next: 'POST_EDIT' },
-            POST_EDIT: { to: 'COMPLETED', next: 'COMPLETED' },
-        };
-        const m = mapping[currentStage as string];
-        if (!m?.to) return;
-        try {
-            await updateDocItemStatusAction(id, m.to);
-            if (m.next) setCurrentStage(m.next as any);
-        } catch { }
-    };
 
     // 全局快捷键：⌘B 批量预译；⌘E 批量评估；⌘⇧S 批量签发
     useEffect(() => {
@@ -1394,154 +1189,6 @@ export function ActionSection() {
     const handleEvaluateMode = (modeSel: 'single' | 'batch') => {
         if (modeSel === 'single') return evaluateCurrentTranslation(chosenProvider);
         return handleBatchEvaluate();
-    };
-
-    const postEditCurrentContent = async () => {
-        logger.debug('译后编辑');
-        setCurrentOperation('post_edit');
-        setIsRunning(true);
-        // try { await
-        //     try { await updateDocItemStatusAction(activeDocumentItem.id, 'QA'); } catch {}((activeDocumentItem as any)?.id, 'POST_EDIT'); } catch {}
-        // try { await updateDocumentTranslateStatusByItemId((activeDocumentItem as any)?.id, 'POST_EDIT'); } catch {}
-        setIsRunning(false);
-        setCurrentOperation('idle');
-    };
-
-    // 一步到签发：从当前分段所在页签，依次预译→评估→译后→签发
-    const runToSignoffFromCurrent = async () => {
-        try {
-            const tabs = explorerTabs?.documentTabs ?? [];
-            const aid = (activeDocumentItem as any)?.id;
-            const currentTab = tabs.find((t: any) =>
-                (t.items ?? []).some((it: any) => it.id === aid)
-            );
-            const items: any[] = (currentTab?.items ?? []) as any[];
-            if (!items.length) {
-                toast.error('没有可处理的分段：请先在左侧加载文档');
-                return;
-            }
-            const itemIds = items.map(i => i.id);
-
-            setIsRunning(true);
-            setCurrentOperation('translate_batch');
-            setProgressTitle('批量预译中');
-            setBatchProgress(0);
-            setBatchOpen(true);
-
-            // 1) 批量预译
-            try {
-                const startRes = await fetch('/api/batch-pre-translate/start', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        itemIds,
-                        sourceLanguage: sourceLanguage || 'auto',
-                        targetLanguage: targetLanguage || 'auto',
-                    }),
-                }).then(r => r.json());
-                const { batchId } = startRes || {};
-                if (batchId) {
-                    let tries = 0;
-                    while (tries < 600) {
-                        tries += 1;
-                        try {
-                            const p = await fetch(
-                                `/api/batch-pre-translate/progress?batchId=${encodeURIComponent(batchId)}`
-                            ).then(r => r.json());
-                            setBatchProgress(p.percent);
-                            if (p.percent >= 100) break;
-                        } catch { }
-                        await new Promise(res => setTimeout(res, 1000));
-                    }
-                    try {
-                        await fetch('/api/batch-pre-translate/persist', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ batchId }),
-                        });
-                    } catch { }
-                }
-            } catch { }
-
-            // 2) 批量评估
-            setCurrentOperation('evaluate_batch');
-            setProgressTitle('批量评估中');
-            setBatchProgress(0);
-            try {
-                const startQARes = await fetch('/api/batch-quality-assure/start', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ itemIds, targetLanguage: targetLanguage || 'auto' }),
-                }).then(r => r.json());
-                const { batchId } = startQARes || {};
-                if (batchId) {
-                    let tries = 0;
-                    while (tries < 600) {
-                        tries += 1;
-                        try {
-                            const p = await fetch(
-                                `/api/batch-quality-assure/progress?batchId=${encodeURIComponent(batchId)}`
-                            ).then(r => r.json());
-                            setBatchProgress(p.percent);
-                            if (p.percent >= 100) break;
-                        } catch { }
-                        await new Promise(res => setTimeout(res, 1000));
-                    }
-                    try {
-                        await fetch('/api/batch-quality-assure/persist', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ batchId }),
-                        });
-                    } catch { }
-                }
-            } catch { }
-
-            // 3) 标记译后→签发（当前页签）
-            setProgressTitle('批量签发中');
-            setCurrentOperation('post_edit');
-            let done = 0;
-            const total = items.length;
-            for (const it of items) {
-                try {
-                    await updateDocItemStatusAction(it.id, 'POST_EDIT');
-                } catch { }
-                try {
-                    await updateDocItemStatusAction(it.id, 'SIGN_OFF');
-                } catch { }
-                done += 1;
-                setBatchProgress(Math.round((done / total) * 100));
-            }
-            try {
-                if ((activeDocumentItem as any)?.id)
-                    await updateDocItemStatusAction((activeDocumentItem as any)?.id, 'SIGN_OFF');
-            } catch { }
-            // 本地同步（仅当前页签）
-            setExplorerTabs((prev: any) => {
-                if (!prev?.documentTabs) return prev;
-                return {
-                    ...prev,
-                    documentTabs: prev.documentTabs.map((tab: any) => ({
-                        ...tab,
-                        items: (tab.items ?? []).map((it: any) => {
-                            const inCurrent = (currentTab?.items ?? []).some(
-                                (x: any) => x.id === it.id
-                            );
-                            return inCurrent ? { ...it, status: 'SIGN_OFF' } : it;
-                        }),
-                    })),
-                };
-            });
-            setCurrentStage('SIGN_OFF' as any);
-            setBatchProgress(100);
-            setBatchOpen(false);
-            toast.success(`一步到签发完成：共处理 ${items.length} 条`);
-        } catch (e) {
-            toast.error(`一步到签发失败：${String(e)}`);
-        } finally {
-            setIsRunning(false);
-            setCurrentOperation('idle');
-        }
     };
 
     if (!mounted) {

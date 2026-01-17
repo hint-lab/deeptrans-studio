@@ -12,17 +12,20 @@ import { useRunningState } from '@/hooks/useRunning';
 import { useTranslationState } from '@/hooks/useTranslation';
 import { createLogger } from '@/lib/logger';
 import type { TranslationStage } from '@/store/features/translationSlice';
-import { Check, ChevronRight, Loader2, RotateCcw, SkipForward, Undo2 } from 'lucide-react';
+import { Check, ChevronRight, Loader2, Play, RotateCcw, SkipForward, Undo2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import React, { useEffect } from 'react';
+import { toast } from 'sonner';
+
 const logger = createLogger({
     type: 'ide:stage-badge',
 }, {
-    json: false,// 开启json格式输出
-    pretty: false, // 关闭开发环境美化输出
-    colors: true, // 仅当json：false时启用颜色输出可用
-    includeCaller: false, // 日志不包含调用者
+    json: false,
+    pretty: false,
+    colors: true,
+    includeCaller: false,
 });
+
 export type StageBadgeBarProps = {
     runTranslate: () => Promise<void>;
     undoTranslate: () => Promise<void>;
@@ -35,6 +38,45 @@ export type StageBadgeBarProps = {
     className?: string;
     label?: string;
 };
+
+// --- 核心配置：定义视觉上的节点结构 ---
+// stages: 包含的真实状态
+// isGroup: 是否为合并显示模式（显示子状态微标）
+// labelKey: 对应的 i18n key（如果是 Group）
+const VISUAL_FLOW_CONFIG = [
+    {
+        id: 'PRE_TRANS_GROUP',
+        stages: ['MT', 'MT_REVIEW'],
+        isGroup: true,
+        labelKey: 'groups.preTranslation', // 对应 "预翻译阶段"
+    },
+    {
+        id: 'QA_GROUP',
+        stages: ['QA', 'QA_REVIEW'],
+        isGroup: true,
+        labelKey: 'groups.qaProcess', // 对应 "质量检查"
+    },
+    {
+        id: 'PE_STEP',
+        stages: ['POST_EDIT'],
+        isGroup: false,
+    },
+    {
+        id: 'PE_REVIEW_STEP',
+        stages: ['POST_EDIT_REVIEW'],
+        isGroup: false,
+    },
+    {
+        id: 'SIGN_OFF_STEP',
+        stages: ['SIGN_OFF'],
+        isGroup: false,
+    },
+    {
+        id: 'COMPLETED_STEP',
+        stages: ['COMPLETED'],
+        isGroup: false,
+    }
+];
 
 const StageBadgeBar: React.FC<StageBadgeBarProps> = ({
     className,
@@ -54,26 +96,38 @@ const StageBadgeBar: React.FC<StageBadgeBarProps> = ({
     const { currentStage, setCurrentStage } = useTranslationState();
     const { activeDocumentItem, setActiveDocumentItem } = useActiveDocumentItem();
     const { updateDocumentItemStatus } = useExplorerTabs();
+
     const steps: TranslationStage[] = TRANSLATION_STAGES_SEQUENCE;
-    const acceptText = t('actions.approve');
-    const rejectText = t('actions.reject');
-    const currentStageLabel = label || t('currentStage');
     const redoText = t('redo');
+    const rejectText = t('actions.reject');
     const signOffText = t('signOff');
 
-    // 在组件中添加一个辅助函数来判断是否应该禁用按钮
+    // 按钮文案逻辑
+    const getAcceptButtonText = (stage: TranslationStage) => {
+        switch (stage) {
+            case 'NOT_STARTED': return t('actions.startPreTranslation');
+            case 'MT_REVIEW': return t('actions.submitToQA');
+            case 'QA_REVIEW': return t('actions.submitToPostEdit'); // "提交至译后编辑"
+            // 注意：这里 PE 和 PE Review 现在是分开的，所以文案要准确
+            case 'POST_EDIT_REVIEW': return t('actions.approveSignOff');
+            case 'SIGN_OFF': return t('actions.completeProject');
+            default: return t('actions.approve');
+        }
+    };
+
+    // MT QA阶段各包含两个子过程：分别为：MT、MT_REVIEW和QA、QA_REVIEW。隐藏“下一步”按钮（自动化运行中）
+    const shouldHideAcceptButton = (stage: TranslationStage) => {
+        return ['MT', 'QA'].includes(stage);
+    };
+
     const shouldDisableButtons = (): boolean => {
         return isRunning || !activeDocumentItem.id;
     };
 
-    // 辅助函数：同步状态更新
     const syncStatusUpdate = async (itemId: string, status: string) => {
         try {
-            // 1. 更新数据库
             await updateDocItemStatusAction(itemId, status as TranslationStage);
-            // 2. 同步 Explorer 状态
             updateDocumentItemStatus(itemId, status);
-            // 3. 同步当前激活文档项状态
             if (activeDocumentItem.id === itemId) {
                 setActiveDocumentItem({ ...activeDocumentItem, status });
             }
@@ -85,9 +139,7 @@ const StageBadgeBar: React.FC<StageBadgeBarProps> = ({
 
     function onRedo(stage: TranslationStage) {
         setIsRunning(true);
-        setTimeout(() => {
-            setIsRunning(false);
-        }, 5000);
+        setTimeout(() => setIsRunning(false), 3000);
     }
 
     async function onReject(stage: TranslationStage) {
@@ -125,7 +177,6 @@ const StageBadgeBar: React.FC<StageBadgeBarProps> = ({
                     await syncStatusUpdate(activeDocumentItem.id, 'SIGN_OFF');
                     break;
                 default:
-                    // 对于其他阶段（MT, QA, POST_EDIT），使用backMap
                     await syncStatusUpdate(activeDocumentItem.id, prevStage || 'NOT_STARTED');
                     break;
             }
@@ -141,80 +192,65 @@ const StageBadgeBar: React.FC<StageBadgeBarProps> = ({
 
     const onAccept = async (stage: TranslationStage) => {
         setIsRunning(true);
-
         try {
             switch (stage) {
                 case 'NOT_STARTED':
                     setCurrentStage('MT');
                     await syncStatusUpdate(activeDocumentItem.id, 'MT');
+                    toast.info(t('toasts.preTranslationStarted'), { description: t('toasts.autoProcessInfo'), duration: 4000 });
                     await runTranslate();
-                    // MT 步骤的记录已在 runTranslate 内部处理
-                    break;
-
-                case 'MT':
-                    // 根据 backMap，MT 应该前进到 MT_REVIEW
+                    // 3. 【新增】任务完成后，自动推进到 MT_REVIEW
+                    // 只有当 runTranslate 没有抛出错误时才会执行到这里
                     setCurrentStage('MT_REVIEW');
                     await syncStatusUpdate(activeDocumentItem.id, 'MT_REVIEW');
-                    await saveRecord('MT_REVIEW', 'HUMAN', 'SUCCESS');
+                    await saveRecord('MT_REVIEW', 'HUMAN', 'SUCCESS'); // 记录 MT 阶段完成（或进入 Review）
                     break;
 
                 case 'MT_REVIEW':
                     setCurrentStage('QA');
                     await syncStatusUpdate(activeDocumentItem.id, 'QA');
-                    await runQA(); // 触发QA处理流程
-                    // QA 步骤的记录已在 runQA 内部处理
-                    break;
-
-                case 'QA':
-                    // 根据 backMap，QA 应该前进到 QA_REVIEW
+                    toast.info(t('toasts.qaStarted'), { description: t('toasts.autoProcessInfo'), duration: 4000 });
+                    await runQA();
+                    // 3. 【新增】任务完成后，自动推进到 QA_REVIEW
                     setCurrentStage('QA_REVIEW');
                     await syncStatusUpdate(activeDocumentItem.id, 'QA_REVIEW');
                     await saveRecord('QA_REVIEW', 'HUMAN', 'SUCCESS');
                     break;
-
                 case 'QA_REVIEW':
                     setCurrentStage('POST_EDIT');
                     await syncStatusUpdate(activeDocumentItem.id, 'POST_EDIT');
-                    await runPostEdit(); // 自动运行译后编辑
-                    // POST_EDIT 步骤的记录已在 runPostEdit 内部处理
+                    toast.info(t('toasts.postEditStarted'));
+                    await runPostEdit();
                     break;
-
                 case 'POST_EDIT':
-                    // 根据 backMap，POST_EDIT 应该前进到 POST_EDIT_REVIEW
+                    // 人工点击下一步 -> 进入复核
                     setCurrentStage('POST_EDIT_REVIEW');
-                    await syncStatusUpdate(activeDocumentItem.id, 'POST_EDIT_REVIEW');
                     await saveRecord('POST_EDIT_REVIEW', 'HUMAN', 'SUCCESS');
+                    await syncStatusUpdate(activeDocumentItem.id, 'POST_EDIT_REVIEW');
                     break;
-
                 case 'POST_EDIT_REVIEW':
-                    // 推进到SIGN_OFF
                     setCurrentStage('SIGN_OFF');
                     await saveRecord('SIGN_OFF', 'HUMAN', 'SUCCESS');
                     await syncStatusUpdate(activeDocumentItem.id, 'SIGN_OFF');
-
-                    // 最后推进到COMPLETED
-                    setCurrentStage('COMPLETED');
-                    await saveRecord('COMPLETED', 'HUMAN', 'SUCCESS');
-                    await syncStatusUpdate(activeDocumentItem.id, 'COMPLETED');
                     break;
 
                 case 'SIGN_OFF':
                     setCurrentStage('COMPLETED');
                     await saveRecord('COMPLETED', 'HUMAN', 'SUCCESS');
                     await syncStatusUpdate(activeDocumentItem.id, 'COMPLETED');
+                    toast.success(t('toasts.projectCompleted'), { description: t('toasts.readyForDelivery') });
                     break;
 
                 default:
-                    // 其他情况默认处理
                     const nextIdx = Math.min(steps.length - 1, steps.indexOf(stage) + 1);
                     setCurrentStage(steps[nextIdx] as TranslationStage);
                     await saveRecord(steps[nextIdx] as TranslationStage, 'HUMAN', 'SUCCESS');
                     break;
             }
-
             setIsRunning(false);
         } catch (error) {
-            logger.error('当前阶段无法执行接受操作:', error);
+            logger.error('Operation failed:', error);
+            toast.error(t('toasts.operationFailed'), { description: String(error) });
             setIsRunning(false);
         }
     };
@@ -227,120 +263,123 @@ const StageBadgeBar: React.FC<StageBadgeBarProps> = ({
     };
 
     useEffect(() => {
-        logger.info(`当前处理步骤:${currentStage}`);
-        // 只在activeDocumentItem.id变化时才设置状态，避免覆盖正在进行的状态变化
         if (activeDocumentItem.id && !isRunning) {
             setCurrentStage(activeDocumentItem.status as TranslationStage);
         }
     }, [activeDocumentItem.id]);
 
+    // --- 混合渲染逻辑 ---
+    const renderVisualStepper = () => {
+        // 当前真实阶段在总流程中的索引
+        const currentRealStepIdx = steps.indexOf(currentStage as TranslationStage);
+
+        return VISUAL_FLOW_CONFIG.map((node, index) => {
+            // 判断此节点是否包含当前阶段
+            const isNodeActive = node.stages.includes(currentStage as string);
+
+            // 判断此节点是否已完成：
+            // 逻辑：该节点包含的最后一个阶段，是否在“当前真实阶段”之前？
+            const lastStageInNode = node.stages[node.stages.length - 1];
+            const lastStageIdx = steps.indexOf(lastStageInNode as TranslationStage);
+            const isNodeDone = currentRealStepIdx > lastStageIdx;
+
+            // 获取显示标签
+            let label = '';
+            if (node.isGroup && node.labelKey) {
+                // 如果是合并组，使用组名 (如 "预翻译阶段")
+                label = tStage(node.labelKey, { defaultValue: 'Stage' });
+            } else {
+                // 如果是独立节点，使用标准阶段名 (如 "译后编辑")
+                label = getTranslationStageLabel(node.stages[0] as TranslationStage, tStage);
+            }
+
+            // 样式基类
+            let containerCls = "flex items-center px-2 py-[2px] rounded-full border transition-all duration-200 relative";
+
+            if (isNodeDone) {
+                // 已完成状态：统一紫色/Indigo
+                containerCls += " bg-indigo-500 border-indigo-600 text-white shadow";
+            } else if (isNodeActive) {
+                // 进行中状态：深紫色高亮 + 光晕
+                containerCls += " bg-indigo-600 border-indigo-700 text-white shadow ring-2 ring-indigo-400/40";
+            } else {
+                // 未开始状态：灰色
+                containerCls += " bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-foreground/70";
+            }
+
+            // 子状态逻辑 (仅针对 isGroup = true 的节点)
+            const activeSubStage = node.stages.find(s => s === currentStage);
+            const isReviewing = activeSubStage?.includes('REVIEW'); // 简单判断
+
+            return (
+                <div key={node.id} className="flex items-center">
+                    <div className={containerCls}>
+                        {isRunning && isNodeActive && (
+                            <Loader2 className="mr-1 h-3 w-3 animate-spin opacity-90" />
+                        )}
+
+                        <div className="flex flex-col items-center leading-none">
+                            <span>{label}</span>
+                            {/* 只有是 Group 且处于激活状态时，才显示子状态微标 */}
+                            {node.isGroup && isNodeActive && (
+                                <span className="text-[8px] opacity-80 mt-[1px] font-normal text-yellow-500">
+                                    {isReviewing ? tStage('status.reviewing') : tStage('status.processing')}
+                                </span>
+                            )}
+                        </div>
+                    </div>
+                    {/* 连接线 */}
+                    {index < VISUAL_FLOW_CONFIG.length - 1 && (
+                        <ChevronRight className="mx-1 h-3 w-3 text-foreground/40" />
+                    )}
+                </div>
+            );
+        });
+    };
+
     return (
-        <div className={`h-8 w-full bg-background pl-2 pr-1 text-xs ${className ?? ''}`}>
-            <div className="flex w-full items-center justify-between gap-2">
-                <span className="flex items-center gap-2 whitespace-nowrap text-muted-foreground">
-                    {label}
-                </span>
-                <div className="flex items-center gap-1 px-2 py-1">
-                    {(() => {
-                        const idx = Math.max(0, steps.indexOf(currentStage as TranslationStage));
-                        const base =
-                            'px-2 py-[2px] rounded-full whitespace-nowrap border transition-all duration-200';
-                        return (
-                            <>
-                                {steps.map((step, i) => {
-                                    const isCur = i === idx;
-                                    const isDone = i < idx;
-                                    //const isHuman = step === 'MT_REVIEW' || step === 'QA_REVIEW' || step === 'POST_EDIT_REVIEW' || step === 'SIGN_OFF';
-                                    //禁用人工作业阶段黄色高亮，全部使用机器翻译风格，避免不必要的视觉冲突与歧义
-                                    const isHuman = false;
-                                    const isCompleted = step === 'COMPLETED';
-                                    let cls = `${base} bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-foreground/70`;
-                                    if (isDone)
-                                        cls = `${base} ${isHuman ? 'bg-amber-500 border-amber-600' : 'bg-indigo-500 border-indigo-600'} text-white shadow`;
-                                    if (isCur) {
-                                        if (isCompleted)
-                                            cls = `${base} bg-green-600 border-green-700 text-white shadow ring-2 ring-green-400/40`;
-                                        else
-                                            cls = `${base} ${isHuman ? 'bg-amber-500 border-amber-600' : 'bg-indigo-600 border-indigo-700'} text-white shadow ring-2 ${isHuman ? 'ring-amber-400/40' : 'ring-indigo-400/40'}`;
-                                    }
-                                    const label = getTranslationStageLabel(step, tStage);
-                                    return (
-                                        <div key={step} className="flex items-center">
-                                            <span className={cls}>
-                                                {isRunning && isCur && (
-                                                    <Loader2 className="ml-1 inline-block h-3 w-3 animate-spin align-[-2px] opacity-90" />
-                                                )}
-                                                {label}
-                                            </span>
-                                            {i < steps.length - 1 && (
-                                                <ChevronRight className="mx-1 h-3 w-3 text-foreground/40" />
-                                            )}
-                                        </div>
-                                    );
-                                })}
-                            </>
-                        );
-                    })()}
+        <div className={`h-10 w-full bg-background pl-2 pr-1 text-xs ${className ?? ''}`}>
+            <div className="flex w-full items-center justify-between gap-2 h-full">
+                {/* 左侧：混合进度条 */}
+                <div className="flex items-center overflow-x-auto no-scrollbar">
+                    {renderVisualStepper()}
+
                     {currentStage === 'ERROR' && (
-                        <span className="whitespace-nowrap rounded-full border border-red-700 bg-red-600 px-2 py-[2px] text-white shadow">
+                        <span className="ml-2 whitespace-nowrap rounded-full border border-red-700 bg-red-600 px-2 py-[2px] text-white shadow">
                             {tIDE('statusProgress.error')}
                         </span>
                     )}
                 </div>
-                <div className="ml-auto flex items-center gap-2">
-                    {(currentStage === 'MT_REVIEW' ||
-                        currentStage === 'QA_REVIEW' ||
-                        currentStage === 'POST_EDIT') && (
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-6 gap-1 rounded-none"
-                                onClick={() => onRedo(currentStage)}
-                                disabled={shouldDisableButtons()}
-                            >
-                                <RotateCcw className="h-3 w-3" />
-                                <span className="hidden sm:inline">{redoText}</span>
-                            </Button>
-                        )}
+
+                {/* 右侧：操作按钮 */}
+                <div className="ml-auto flex items-center gap-2 shrink-0">
+                    {(currentStage.includes('REVIEW') || currentStage === 'POST_EDIT') && (
+                        <Button variant="outline" size="sm" className="h-7 gap-1 rounded-sm border-dashed" onClick={() => onRedo(currentStage)} disabled={shouldDisableButtons()}>
+                            <RotateCcw className="h-3 w-3" />
+                            <span className="hidden sm:inline">{redoText}</span>
+                        </Button>
+                    )}
+
                     {currentStage !== 'NOT_STARTED' && currentStage !== 'COMPLETED' && (
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-6 gap-1 rounded-none"
-                            onClick={() => onReject(currentStage)}
-                            disabled={shouldDisableButtons()}
-                        >
+                        <Button variant="ghost" size="sm" className="h-7 gap-1 rounded-sm text-muted-foreground hover:text-foreground" onClick={() => onReject(currentStage)} disabled={shouldDisableButtons()}>
                             <Undo2 className="h-3 w-3" />
                             <span className="hidden sm:inline">{rejectText}</span>
                         </Button>
                     )}
-                    {currentStage !== 'COMPLETED' && (
-                        <Button
-                            variant="default"
-                            size="sm"
-                            className="h-6 gap-1 rounded-none"
-                            onClick={() => onAccept(currentStage)}
-                            disabled={shouldDisableButtons()}
-                        >
-                            <Check className="h-3 w-3" />
-                            <span className="hidden sm:inline">{acceptText}</span>
+
+                    {!shouldHideAcceptButton(currentStage) && currentStage !== 'COMPLETED' && (
+                        <Button variant="default" size="sm" className="h-7 gap-1 rounded-sm px-4 shadow-sm" onClick={() => onAccept(currentStage)} disabled={shouldDisableButtons()}>
+                            {currentStage === 'NOT_STARTED' ? <Play className="h-3 w-3 fill-current" /> : <Check className="h-3 w-3" />}
+                            <span className="font-medium">{getAcceptButtonText(currentStage)}</span>
                         </Button>
                     )}
                     {currentStage !== 'COMPLETED' && currentStage !== 'NOT_STARTED' && (
-                        <Button
-                            variant="secondary"
-                            size="sm"
-                            className="h-6 gap-1 rounded-none"
-                            onClick={() => onDone(currentStage)}
-                            disabled={shouldDisableButtons()}
-                        >
-                            <SkipForward className="h-3 w-3" />
-                            <span className="hidden sm:inline">{signOffText}</span>
+                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 rounded-full hover:bg-secondary" onClick={() => onDone(currentStage)} disabled={shouldDisableButtons()} title={signOffText}>
+                            <SkipForward className="h-4 w-4 text-muted-foreground" />
                         </Button>
                     )}
                 </div>
             </div>
-            {/* 仅保留 7 阶段工作流徽标作为主显示 */}
         </div>
     );
 };
