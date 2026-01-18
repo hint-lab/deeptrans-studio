@@ -89,7 +89,11 @@ export function ActionSection() {
         | 'translate_batch'
         | 'evaluate_single'
         | 'evaluate_batch'
-        | 'post_edit'
+        | 'post_edit_single'
+        | 'post_edit_batch'
+        | 'signoff_single'
+        | 'signoff_batch'
+        | 'complete_batch'
     >('idle');
     const { activeDocumentItem, setActiveDocumentItem } = useActiveDocumentItem();
     const { settings } = useUserSettings();
@@ -163,11 +167,20 @@ export function ActionSection() {
                 toast.error('没有激活的文档项，无法进行预翻译');
                 return;
             }
-
+            let currentItemStatus = activeDocumentItem?.status;
+            // 从 explorerTabs 中查找最新的状态
+            const tabs = explorerTabs?.documentTabs ?? [];
+            for (const tab of tabs) {
+                const item = (tab.items ?? []).find((it: any) => it.id === id);
+                if (item) {
+                    currentItemStatus = item.status;
+                    break;
+                }
+            }
             // 检查当前状态是否允许质检（应该在 NOT_STARTED 状态）
-            if (activeDocumentItem?.status !== 'NOT_STARTED') {
+            if (currentItemStatus !== 'NOT_STARTED') {
                 toast.error(
-                    `当前分段状态为 ${activeDocumentItem?.status || '未知'}，无法进行预翻译`
+                    `当前分段状态为 ${currentItemStatus || '未知'}，无法进行预翻译。仅在未开始阶段允许预翻译`
                 );
                 return;
             }
@@ -424,11 +437,20 @@ export function ActionSection() {
                 toast.error('没有激活的文档项，无法进行质检');
                 return;
             }
-
+            let currentItemStatus = activeDocumentItem?.status;
+            // 从 explorerTabs 中查找最新的状态
+            const tabs = explorerTabs?.documentTabs ?? [];
+            for (const tab of tabs) {
+                const item = (tab.items ?? []).find((it: any) => it.id === id);
+                if (item) {
+                    currentItemStatus = item.status;
+                    break;
+                }
+            }
             // 检查当前状态是否允许质检（应该在 MT_REVIEW 状态）
-            if (activeDocumentItem?.status !== 'MT_REVIEW') {
+            if (currentItemStatus !== 'MT_REVIEW') {
                 toast.error(
-                    `当前分段状态为 ${activeDocumentItem?.status || '未知'}，无法进行质检。仅在预翻译复核阶段允许质检`
+                    `当前分段状态为 ${currentItemStatus || '未知'}，无法进行质检。仅在预翻译复核阶段允许质检`
                 );
                 return;
             }
@@ -717,7 +739,7 @@ export function ActionSection() {
             setBatchProgress(0);
             setBatchOpen(true);
             setIsRunning(true);
-            setCurrentOperation('post_edit');
+            setCurrentOperation('signoff_batch');
 
             let done = 0;
             for (const it of itemsToSignoff) {
@@ -921,7 +943,7 @@ export function ActionSection() {
 
             // 3) 标记译后→签发→完成（当前页签）- 只处理需要推进的分段
             setProgressTitle('批量完成中');
-            setCurrentOperation('post_edit');
+            setCurrentOperation('complete_batch');
             let done = 0;
 
             for (const it of itemsToProcess) {
@@ -1231,7 +1253,9 @@ export function ActionSection() {
                     progressPercent={batchProgress}
                 />
                 <PostEditMenu
-                    isTranslating={isRunning && currentOperation === 'post_edit'}
+                    isTranslating={isRunning &&
+                        (currentOperation === 'post_edit_single' ||
+                            currentOperation === 'post_edit_batch')}
                     // 修复：只允许 QA_REVIEW 状态的分段进入译后编辑
                     canEnter={(explorerTabs?.documentTabs ?? [])
                         .flatMap(t => t.items ?? [])
@@ -1262,12 +1286,12 @@ export function ActionSection() {
                             }
                             if (currentItemStatus !== 'QA_REVIEW') {
                                 toast.error(
-                                    `当前分段状态为 ${currentItemStatus || '未知'}，无法进入译后编辑。需要质检复核通过状态`
+                                    `当前分段状态为 ${currentItemStatus || '未知'}，无法进入译后编辑。仅质检复核通过状态可以进行译后编辑`
                                 );
                                 return;
                             }
 
-                            setCurrentOperation('post_edit');
+                            setCurrentOperation('post_edit_single');
                             setIsRunning(true);
 
                             try {
@@ -1319,7 +1343,7 @@ export function ActionSection() {
                             }
 
                             setIsRunning(true);
-                            setCurrentOperation('post_edit');
+                            setCurrentOperation('post_edit_batch');
                             setProgressTitle('批量译后编辑中');
                             setBatchProgress(0);
                             setBatchOpen(true);
@@ -1385,8 +1409,25 @@ export function ActionSection() {
                         try {
                             const id = (activeDocumentItem as any)?.id;
                             if (!id) return;
+                            // 检查当前分段状态是否为 POST_EDIT_REVIEW
+                            let currentItemStatus = activeDocumentItem?.status;
+                            // 从 explorerTabs 中查找最新的状态
+                            const tabs = explorerTabs?.documentTabs ?? [];
+                            for (const tab of tabs) {
+                                const item = (tab.items ?? []).find((it: any) => it.id === id);
+                                if (item) {
+                                    currentItemStatus = item.status;
+                                    break;
+                                }
+                            }
+                            if (currentItemStatus !== 'POST_EDIT_REVIEW') {
+                                toast.error(
+                                    `当前分段状态为 ${currentItemStatus || '未知'}，无法签发。仅译后编辑复核状态可以进行签发`
+                                );
+                                return;
+                            }
                             setIsRunning(true);
-                            setCurrentOperation('post_edit');
+                            setCurrentOperation('signoff_single');
                             try {
                                 await updateDocItemStatusAction(id, 'SIGN_OFF');
                                 // 只记录 SIGN_OFF 事件，COMPLETED 事件应该在后续流程中记录
@@ -1429,7 +1470,7 @@ export function ActionSection() {
                             setBatchProgress(0);
                             setBatchOpen(true);
                             setIsRunning(true);
-                            setCurrentOperation('post_edit');
+                            setCurrentOperation('signoff_batch');
 
                             let done = 0;
                             const total = items.length;
