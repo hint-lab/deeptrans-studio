@@ -581,6 +581,7 @@
             "doneTip": "初始化完成，您可以进入项目词库或 IDE 继续。",
             "gotoDict": "进入项目词库",
             "gotoIDE": "进入 IDE",
+            "preparingIDE": "正在准备编辑器环境...",
             "modalStop": "中止",
             "modalBusy": "处理中…",
             "termsInit": "文档术语初始化",
