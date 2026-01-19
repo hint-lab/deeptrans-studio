@@ -2,8 +2,7 @@
 
 // 1. Import 修正
 import { fetchDocumentPreviewByDocIdAction } from '@/actions/document';
-import { getContentByIdAction } from 'src/actions/document-item';
-
+import { getFileUrlAction } from '@/actions/upload';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useActiveDocumentItem } from '@/hooks/useActiveDocumentItem';
@@ -13,6 +12,7 @@ import { Download, ExternalLink, FileText } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import Script from 'next/script';
 import React, { useEffect, useRef, useState } from 'react';
+import { getContentByIdAction } from 'src/actions/document-item';
 
 // --- 类型定义 ---
 type FileType = 'pdf' | 'docx' | 'text' | 'unknown';
@@ -95,8 +95,10 @@ const PreviewCard: React.FC = () => {
 
             try {
                 const info = await fetchDocumentPreviewByDocIdAction(docId);
-                const fetchUrl = info?.url ? `/api/document/preview/${activeDocumentItem.id}` : null;
-
+                logger.info('info:', info);
+                const r = await getFileUrlAction(String(info?.name));
+                const fetchUrl = (r as any)?.data?.fileUrl || null;
+                logger.info('Fetched preview URL:', fetchUrl);
                 if (!fetchUrl) {
                     setError(t('previewError'));
                     setLoading(false);
