@@ -1,6 +1,5 @@
 'use client';
 
-// 1. Import 修正
 import { fetchDocumentPreviewByDocIdAction } from '@/actions/document';
 import { getFileUrlAction } from '@/actions/upload';
 import { Button } from '@/components/ui/button';
@@ -54,7 +53,8 @@ const PreviewCard: React.FC = () => {
     // 库加载状态
     const [pdfLibReady, setPdfLibReady] = useState(false);
     const [docxLibReady, setDocxLibReady] = useState(false);
-
+    // 【新增】用于严格控制加载顺序
+    const [jszipLoaded, setJszipLoaded] = useState(false);
     // 【核心状态】：存储所有可交互段落（不分文件类型）
     const [interactiveParagraphs, setInteractiveParagraphs] = useState<InteractiveParagraph[]>([]);
     const [textLines, setTextLines] = useState<string[]>([]);
@@ -62,7 +62,7 @@ const PreviewCard: React.FC = () => {
     const containerRef = useRef<HTMLDivElement>(null);
     const textContainerRef = useRef<HTMLDivElement>(null);
     const lastLoadedId = useRef<string | null>(null);
-
+    const activeDocIdRef = useRef<string | null>(null);
     const tabs = explorerTabs?.documentTabs ?? [];
     const aid = (activeDocumentItem as any)?.id;
     const currentTab = tabs.find((t: any) => (t.items ?? []).some((it: any) => it.id === aid));
@@ -83,21 +83,23 @@ const PreviewCard: React.FC = () => {
     // 1. 获取 URL 并通过预加载识别类型
     useEffect(() => {
         let activeObjectUrl: string | null = null;
-
+        let isMounted = true; // 增加挂载标记，处理异步竞态
         const loadUrl = async () => {
             if (!docId) return;
+            if (activeDocIdRef.current === docId && url) return;
             if (lastLoadedId.current === activeDocumentItem?.id && url) return;
-
+            activeDocIdRef.current = docId;
             setLoading(true);
             setError(null);
             setInteractiveParagraphs([]);
             setTextLines([]);
-
+            setUrl(null); // 切换不同文档时，先置空防止显示旧内容
             try {
                 const info = await fetchDocumentPreviewByDocIdAction(docId);
-                logger.info('info:', info);
+                if (!isMounted || activeDocIdRef.current !== docId) return;
                 const r = await getFileUrlAction(String(info?.name));
                 const fetchUrl = (r as any)?.data?.fileUrl || null;
+                if (!isMounted || activeDocIdRef.current !== docId) return;
                 logger.info('Fetched preview URL:', fetchUrl);
                 if (!fetchUrl) {
                     setError(t('previewError'));
@@ -109,6 +111,7 @@ const PreviewCard: React.FC = () => {
                 if (!response.ok) throw new Error(`Download failed: ${response.status}`);
 
                 const blob = await response.blob();
+                if (!isMounted || activeDocIdRef.current !== docId) return;
                 const contentType = response.headers.get('content-type') || '';
 
                 let detectedType: FileType = 'unknown';
@@ -139,23 +142,27 @@ const PreviewCard: React.FC = () => {
                 activeObjectUrl = URL.createObjectURL(blob);
                 setUrl(activeObjectUrl);
                 setFileType(detectedType);
-                lastLoadedId.current = activeDocumentItem.id;
+                //lastLoadedId.current = activeDocumentItem.id;
 
                 if (detectedType === 'unknown') setLoading(false);
 
             } catch (e) {
-                logger.error('Failed to load/detect document', e);
-                setError(t('previewError'));
-                setLoading(false);
+                // 仅当当前 docId 仍然匹配时才报错，防止切换后的报错干扰
+                if (isMounted && activeDocIdRef.current === docId) {
+                    logger.error('Failed to load/detect document', e);
+                    setError(t('previewError'));
+                    setLoading(false);
+                }
             }
         };
 
         loadUrl();
 
         return () => {
+            isMounted = false;
             if (activeObjectUrl) URL.revokeObjectURL(activeObjectUrl);
         };
-    }, [docId, activeDocumentItem?.id, t]);
+    }, [docId, t]);
 
     // 2. 核心渲染分发器
     useEffect(() => {
@@ -463,8 +470,10 @@ const PreviewCard: React.FC = () => {
     return (
         <div className="flex size-full flex-col rounded-tl-md bg-background relative">
             <Script src={PDFJS_URL} onLoad={() => setPdfLibReady((p) => p || true)} />
-            <Script src={JSZIP_URL} />
-            <Script src={DOCX_JS_URL} />
+            <Script src={JSZIP_URL} onLoad={() => setJszipLoaded(true)} />
+            {jszipLoaded && (
+                <Script src={DOCX_JS_URL} />
+            )}
 
             <div className="flex items-center justify-between border-b bg-muted/40 px-2 py-1 text-[11px] text-foreground/70">
                 <span className="font-medium flex items-center gap-2">
