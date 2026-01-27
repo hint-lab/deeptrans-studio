@@ -233,7 +233,7 @@ export async function fetchDocumentPreviewByDocIdAction(docId: string) {
             documentId: doc?.id,
             url: doc?.url,
             mimeType: doc?.mimeType,
-            name: doc?.originalName,
+            name: doc?.name,
         };
     } catch (error) {
         logger.error('获取预览信息失败:', error);

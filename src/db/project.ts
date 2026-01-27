@@ -16,20 +16,35 @@ export const createProjectDB = async (
 ): Promise<(Project & { documents: Document[] }) | null> => {
     return dbTry(() => prisma.project.create({ data, include: { documents: true } }));
 };
-
+export type ProjectWithTotal = {
+    data: (Project & { documents: { id: string; status?: string; processStatus?: string }[] })[];
+    total: number;
+};
 // 按用户查找项目列表
 export const findProjectsByUserIdDB = async (
-    userId: string
-): Promise<
-    (Project & { documents: { id: string; status?: string; processStatus?: string }[] })[] | null
-> => {
-    return dbTry(() =>
-        prisma.project.findMany({
-            where: { userId },
-            orderBy: { date: 'desc' },
-            include: { documents: { orderBy: { uploadedAt: 'desc' }, take: 1 } },
-        })
-    );
+    userId: string,
+    page: number = 1,
+    pageSize: number = 10
+): Promise<ProjectWithTotal | null> => {
+    const skip = (page - 1) * pageSize;
+
+    return dbTry(async () => {
+        // 使用 $transaction 并行执行查询和计数，提高效率
+        const [data, total] = await prisma.$transaction([
+            prisma.project.findMany({
+                where: { userId },
+                orderBy: { date: 'desc' }, // 保持按时间倒序
+                include: { documents: { orderBy: { uploadedAt: 'desc' }, take: 1 } },
+                skip: skip,
+                take: pageSize,
+            }),
+            prisma.project.count({
+                where: { userId },
+            }),
+        ]);
+
+        return { data, total };
+    });
 };
 
 // 查找所有项目

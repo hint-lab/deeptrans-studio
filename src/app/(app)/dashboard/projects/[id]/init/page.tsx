@@ -49,7 +49,7 @@ export default function ProjectInitPage() {
     const [terms, setTerms] = useState<Array<{ term: string; count: number; score?: number }>>([]);
     const [previewHtml, setPreviewHtml] = useState<string>('');
     // 横向步骤视图无需折叠面板
-
+    const [isNavigatingToIDE, setIsNavigatingToIDE] = useState(false);
     const overall = Math.round((segPct + termPct) / 2);
 
     useEffect(() => {
@@ -656,7 +656,18 @@ export default function ProjectInitPage() {
                                     >
                                         {t('gotoDict')}
                                     </Button>
-                                    <Button onClick={() => router.push(`/ide/${projectId}`)}>
+                                    <Button
+                                        disabled={isNavigatingToIDE} // 跳转过程中禁用按钮
+                                        onClick={() => {
+                                            setIsNavigatingToIDE(true); // 开启遮罩
+                                            // 使用 setTimeout 稍微延迟跳转，确保 React 先渲染出遮罩（可选，通常直接 push 也可以）
+                                            requestAnimationFrame(() => {
+                                                router.push(`/ide/${projectId}`);
+                                            });
+                                        }}
+                                    >
+                                        {/* 可选：在按钮内部也显示一个小圈圈 */}
+                                        {isNavigatingToIDE && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                                         {t('gotoIDE')}
                                     </Button>
                                 </>
@@ -797,6 +808,21 @@ export default function ProjectInitPage() {
                                     </Button>
                                 )}
                             </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {isNavigatingToIDE && (
+                <div className="fixed inset-0 z-[60] flex flex-col items-center justify-center gap-4 bg-black/50 backdrop-blur-sm transition-all duration-300">
+                    <div className="flex flex-col items-center justify-center gap-3 rounded-xl bg-white p-8 shadow-2xl dark:bg-gray-900">
+                        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+                        <div className="text-center">
+                            <p className="text-base font-semibold text-gray-900 dark:text-gray-100">
+                                {t('preparingIDE') || '正在准备编辑器环境...'}
+                            </p>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                                请稍候，正在加载项目资源
+                            </p>
                         </div>
                     </div>
                 </div>

@@ -33,12 +33,14 @@ export interface CreateProjectData {
     };
 }
 
-export async function fetchUserProjectsAction() {
+export async function fetchUserProjectsAction(page: number = 1, pageSize: number = 10) {
     noStore();
     const session = await auth();
-    if (!session?.user?.id) return [];
+    // 这里如果没登录，返回空结构而不是空数组，保持类型一致
+    if (!session?.user?.id) return { data: [], total: 0 };
 
-    return findProjectsByUserIdDB(session.user.id);
+    const result = await findProjectsByUserIdDB(session.user.id, page, pageSize);
+    return result || { data: [], total: 0 };
 }
 
 export async function createNewProjectAction(data: CreateProjectData) {

@@ -581,6 +581,7 @@
             "doneTip": "初始化完成，您可以进入项目词库或 IDE 继续。",
             "gotoDict": "进入项目词库",
             "gotoIDE": "进入 IDE",
+            "preparingIDE": "正在准备编辑器环境...",
             "modalStop": "中止",
             "modalBusy": "处理中…",
             "termsInit": "文档术语初始化",
@@ -1390,11 +1391,11 @@
         },
         "translationPanel": {
             "preWorkflow": "预翻译工作流",
-            "mtReview": "预翻译复核工作流",
+            "mtReview": "预翻译复核面板",
             "qaWorkflow": "质检工作流",
-            "qaReview": "质检复核工作流",
+            "qaReview": "质检复核面板",
             "postEditWorkflow": "译后编辑工作流",
-            "postEditReview": "译后复核工作流",
+            "postEditReview": "译后复核面板",
             "signoff": "签发",
             "outputLog": "输出日志"
         },

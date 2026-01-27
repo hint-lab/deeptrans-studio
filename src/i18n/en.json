@@ -129,6 +129,8 @@
             "translatedTextCopied": "Translated text copied to clipboard"
         },
         "DocumentTranslate": {
+            "pleaseTryAgain": "Please try again",
+            "retry": "Retry",
             "title": "Document Translation",
             "description": "Upload documents for layout recognition and translation, with dictionary support.",
             "uploadDocument": "Upload Document",
@@ -198,6 +200,10 @@
             "loadEntriesFailed": "Failed to load entries"
         },
         "ImageTranslate": {
+            "translationError": "Translation Error",
+            "translationFailed": "Translation Failed",
+            "pleaseTryAgain": "Please try again",
+            "retry": "Retry",
             "title": "Image Translation",
             "description": "Upload images for OCR recognition and translation, with dictionary support.",
             "uploadImage": "Upload Image",
@@ -575,6 +581,7 @@
             "doneTip": "Initialization completed. You can go to project dictionary or IDE to continue.",
             "gotoDict": "Open Project Dictionary",
             "gotoIDE": "Open IDE",
+            "preparingIDE": "Preparing IDE environment...",
             "modalStop": "Stop",
             "modalBusy": "Processing...",
             "termsInit": "Document Terms Initialization",
@@ -615,7 +622,10 @@
             "termsDone": "Term extraction completed.",
             "writingShort": "Writing...",
             "manualWriteToDict": "Write to dictionary manually",
-            "viewDictionary": "View Dictionary"
+            "viewDictionary": "View Dictionary",
+            "parseFailedTitle": "Parse Failed",
+            "parseFailedDescription": "It might be due to network issues, please try parsing again.",
+            "parseFailedMessage": "Document parsing service is temporarily unavailable"
         }
     },
     "Projects": {
@@ -1014,6 +1024,16 @@
             "advance": "Advance Status"
         },
         "parallelEditor": {
+            "toasts": {
+                "preTranslationStarted": "Pre-translation process started",
+                "qaStarted": "Intelligent QA started",
+                "postEditStarted": "Post-editing process started",
+                "autoProcessInfo": "System is processing automatically and will jump to review stage, please wait...",
+                "preTranslationComplete": "Pre-translation completed, jumping to review stage...",
+                "enterReview": "Pre-translation completed, jumping to pre-translation review stage...",
+                "projectCompleted": "Project completed!",
+                "readyForDelivery": "Project ready for delivery!"
+            },
             "currentStage": "Current Stage",
             "nextStep": "Next Step",
             "rollback": "Rollback",
@@ -1032,14 +1052,20 @@
                 "approve": "Next",
                 "reject": "Reject",
                 "edit": "Edit",
-                "comment": "Comment"
+                "comment": "Comment",
+                "startPreTranslation": "Start Pre-translation",
+                "submitToQA": "Submit to QA",
+                "submitToPostEdit": "Submit to Post-Edit",
+                "approveSignOff": "Approve Sign-off",
+                "completeProject": "Complete Project"
             },
             "status": {
                 "pending": "Pending",
                 "inProgress": "In Progress",
                 "completed": "Completed",
                 "approved": "Approved",
-                "rejected": "Rejected"
+                "rejected": "Rejected",
+                "systemProcessing": "System processing..."
             },
             "qaRequiresTranslation": "Cannot perform QA: Please complete translation first",
             "postEditRequiresSource": "Cannot perform post-editing: Please enter source text first",
@@ -1367,7 +1393,7 @@
             "qaWorkflow": "QA Workflow",
             "qaReview": "QA Review",
             "postEditWorkflow": "PE Workflow",
-            "postEditReview": "PE Review Workflow",
+            "postEditReview": "PE Review",
             "signoff": "Sign-off",
             "outputLog": "Output Log"
         },
@@ -1385,7 +1411,17 @@
             "RUNNING": "Running",
             "START": "Start",
             "oneClickCompletion": "One-click Completion",
-            "oneClickCompletionDesc": "Start from the current segment and automatically complete all subsequent processes"
+            "oneClickCompletionDesc": "Start from the current segment and automatically complete all subsequent processes",
+            "groups": {
+                "preTranslation": "Pre-translation",
+                "qaProcess": "Quality Assurance",
+                "postEditing": "Post-editing",
+                "finalization": "Finalization"
+            },
+            "status": {
+                "processing": "Processing",
+                "reviewing": "Human Reviewing"
+            }
         },
         "translationStagesShort": {
             "NOT_STARTED": "NS",
