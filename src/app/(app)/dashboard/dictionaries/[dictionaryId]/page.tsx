@@ -1,14 +1,14 @@
 'use client';
 
-import { useEffect, useState, use as usePromise } from 'react';
-import { useRouter } from 'next/navigation';
+import { fetchDictionaryMetaByIdAction } from '@/actions/dictionary';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { DictionaryEntriesManager } from '../components/dictionary-entries-manager';
 import { type DictionaryVisibility } from '@prisma/client';
-import { fetchDictionaryMetaByIdAction } from '@/actions/dictionary';
+import { useTranslations } from 'next-intl';
+import { useRouter } from 'next/navigation';
+import { useEffect, use as usePromise, useState } from 'react';
 import { toast } from 'sonner';
-
+import { DictionaryEntriesManager } from '../components/dictionary-entries-manager';
 export default function DictionaryDetailPage({
     params,
 }: {
@@ -19,7 +19,7 @@ export default function DictionaryDetailPage({
     const [loading, setLoading] = useState(true);
     const [reloadToken, setReloadToken] = useState(0);
     const { dictionaryId } = usePromise(params);
-
+    const t = useTranslations('Dashboard.Dictionaries');
     useEffect(() => {
         const load = async () => {
             setLoading(true);
@@ -52,7 +52,7 @@ export default function DictionaryDetailPage({
     if (loading) {
         return (
             <div className="p-6">
-                <div className="text-sm text-muted-foreground">加载中...</div>
+                <div className="text-sm text-muted-foreground">Loading...</div>
             </div>
         );
     }
@@ -63,9 +63,9 @@ export default function DictionaryDetailPage({
         <div className="p-6">
             <div className="mb-4 flex items-center justify-between">
                 <div>
-                    <h1 className="text-2xl font-semibold">词库管理</h1>
+                    <h1 className="text-2xl font-semibold">{t('title')}</h1>
                     <p className="text-sm text-muted-foreground">
-                        词典 {dictionary.name || '《未命名词典》'} 中的术语条目
+                        {dictionary.name}
                     </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -73,7 +73,7 @@ export default function DictionaryDetailPage({
                         variant="outline"
                         onClick={() => router.push('/dashboard/dictionaries')}
                     >
-                        返回词库列表
+                        {t('backToList')}
                     </Button>
                 </div>
             </div>

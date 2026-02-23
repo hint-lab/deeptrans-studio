@@ -10,6 +10,7 @@ import {
 import { createLogger } from '@/lib/logger';
 import type { Dictionary, DictionaryEntry } from '@prisma/client';
 import { Edit, Plus, Search, Trash2 } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from 'src/components/ui/button';
@@ -51,6 +52,7 @@ export function DictionaryEntriesManager({
     const [originFilter, setOriginFilter] = useState<string>('');
     const [editingEntry, setEditingEntry] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
+    const t = useTranslations('Dashboard.Dictionaries');
     const [editForm, setEditForm] = useState({
         sourceText: '',
         targetText: '',
@@ -262,8 +264,8 @@ export function DictionaryEntriesManager({
                 <div className="flex items-center justify-between">
                     <div>
                         <CardTitle className="text-lg">
-                            术语条目，共 {total} 条（第 {page} /{' '}
-                            {Math.max(1, Math.ceil(total / Math.max(1, pageSize)))} 页）
+                            {t('termItem')}，{t('total')} {total} {t('entries')}（{page} /{' '}
+                            {Math.max(1, Math.ceil(total / Math.max(1, pageSize)))} {t('pages')}）
                         </CardTitle>
                     </div>
                     <div className="flex space-x-2">
@@ -285,7 +287,7 @@ export function DictionaryEntriesManager({
                             }
                         >
                             <Plus className="mr-2 h-4 w-4" />
-                            添加词条
+                            {t('addEntry')}
                         </Button>
                         {onDictionaryDeleted && (
                             <Button
@@ -341,25 +343,25 @@ export function DictionaryEntriesManager({
                     <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
                     <Input
                         type="text"
-                        placeholder="搜索词条..."
+                        placeholder={`${t('searchItem')}...`}
                         value={searchTerm}
                         onChange={e => setSearchTerm(e.target.value)}
                         className="pl-8"
                         disabled={loading}
                     />
                     <div className="mt-2 flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground">来源</span>
+                        <span className="text-xs text-muted-foreground">{t('origin')}</span>
                         <select
                             value={originFilter}
                             onChange={e => setOriginFilter(e.target.value)}
                             className="rounded border bg-background px-2 py-1 text-sm"
                         >
-                            <option value="">全部</option>
-                            <option value="manual">手动</option>
-                            <option value="import:xlsx">导入·Excel</option>
-                            <option value="import:tbx">导入·TBX</option>
-                            <option value="apply:new">术语·新建</option>
-                            <option value="apply:copied">术语·拷贝</option>
+                            <option value="">{t('all')}</option>
+                            <option value="manual">{t('manual')}</option>
+                            <option value="import:xlsx">{t('importExcel')}</option>
+                            <option value="import:tbx">{t('importTbx')}</option>
+                            <option value="apply:new">{t('applyNew')}</option>
+                            <option value="apply:copied">{t('applyCopied')}</option>
                         </select>
                     </div>
                 </div>
@@ -374,7 +376,7 @@ export function DictionaryEntriesManager({
                                     <div className="space-y-3">
                                         <div className="grid grid-cols-2 gap-3">
                                             <div>
-                                                <Label htmlFor={`source-${entry.id}`}>源语言</Label>
+                                                <Label htmlFor={`source-${entry.id}`}>{t('sourceLanguage')}</Label>
                                                 <Input
                                                     id={`source-${entry.id}`}
                                                     value={editForm.sourceText}
@@ -384,13 +386,13 @@ export function DictionaryEntriesManager({
                                                             e.target.value
                                                         )
                                                     }
-                                                    placeholder="输入源语言术语"
+                                                    placeholder={t('enterSourceLanguageTerm')}
                                                     disabled={loading}
                                                 />
                                             </div>
                                             <div>
                                                 <Label htmlFor={`target-${entry.id}`}>
-                                                    目标语言
+                                                    {t('targetLanguage')}
                                                 </Label>
                                                 <Input
                                                     id={`target-${entry.id}`}
@@ -401,20 +403,20 @@ export function DictionaryEntriesManager({
                                                             e.target.value
                                                         )
                                                     }
-                                                    placeholder="输入目标语言术语"
+                                                    placeholder={t('enterTargetLanguageTerm')}
                                                     disabled={loading}
                                                 />
                                             </div>
                                         </div>
                                         <div>
-                                            <Label htmlFor={`notes-${entry.id}`}>备注</Label>
+                                            <Label htmlFor={`notes-${entry.id}`}>{t('notes')}</Label>
                                             <Textarea
                                                 id={`notes-${entry.id}`}
                                                 value={editForm.notes}
                                                 onChange={e =>
                                                     handleInputChange('notes', e.target.value)
                                                 }
-                                                placeholder="输入备注说明"
+                                                placeholder={t('enterNotes')}
                                                 rows={2}
                                                 disabled={loading}
                                             />
@@ -426,7 +428,7 @@ export function DictionaryEntriesManager({
                                                 onClick={handleCancelEdit}
                                                 disabled={loading}
                                             >
-                                                取消
+                                                {t('cancel')}
                                             </Button>
                                             <Button
                                                 size="sm"
@@ -444,13 +446,13 @@ export function DictionaryEntriesManager({
                                             <div className="grid grid-cols-2 gap-4">
                                                 <div>
                                                     <Label className="text-sm font-medium text-muted-foreground">
-                                                        源语言
+                                                        {t('sourceLanguage')}
                                                     </Label>
                                                     <p className="text-sm">{entry.sourceText}</p>
                                                 </div>
                                                 <div>
                                                     <Label className="text-sm font-medium text-muted-foreground">
-                                                        目标语言
+                                                        {t('targetLanguage')}
                                                     </Label>
                                                     <p className="text-sm">{entry.targetText}</p>
                                                 </div>
@@ -458,7 +460,7 @@ export function DictionaryEntriesManager({
                                             <div className="mt-2 grid grid-cols-2 gap-4">
                                                 <div>
                                                     <Label className="text-sm font-medium text-muted-foreground">
-                                                        备注
+                                                        {t('notes')}
                                                     </Label>
                                                     <p className="text-sm text-muted-foreground">
                                                         {entry.notes ? entry.notes : '-'}
@@ -467,7 +469,7 @@ export function DictionaryEntriesManager({
                                                 {(entry as any).origin && (
                                                     <div>
                                                         <Label className="text-sm font-medium text-muted-foreground">
-                                                            来源
+                                                            {t('origin')}
                                                         </Label>
                                                         <p className="text-sm text-muted-foreground">
                                                             {String((entry as any).origin)}
@@ -479,7 +481,7 @@ export function DictionaryEntriesManager({
                                         <div className="flex items-center space-x-3">
                                             <div className="flex items-center gap-2">
                                                 <Label className="text-sm text-muted-foreground">
-                                                    启用
+                                                    {t('enabled')}
                                                 </Label>
                                                 <Switch
                                                     checked={!!(entry as any).enabled}
@@ -535,7 +537,7 @@ export function DictionaryEntriesManager({
 
                         {entries.length === 0 && (
                             <div className="py-8 text-center text-muted-foreground">
-                                {searchTerm ? '没有找到匹配的词条' : '暂无词条，点击上方按钮添加'}
+                                {searchTerm ? t('noMatchingEntries') : t('noEntries')}
                             </div>
                         )}
 
@@ -554,7 +556,7 @@ export function DictionaryEntriesManager({
                 </ScrollArea>
                 <div className="mt-3 flex items-center justify-between text-sm">
                     <div className="flex items-center gap-2">
-                        <span>每页</span>
+                        <span>{t('entriesPerPage')}</span>
                         <select
                             value={pageSize}
                             onChange={async e => {
@@ -567,7 +569,7 @@ export function DictionaryEntriesManager({
                             <option value={50}>50</option>
                             <option value={100}>100</option>
                         </select>
-                        <span>条</span>
+                        <span>{t('entries')}</span>
                     </div>
                     <div className="flex items-center gap-2">
                         <Button
@@ -578,10 +580,10 @@ export function DictionaryEntriesManager({
                                 await loadEntries({ page: Math.max(1, page - 1) });
                             }}
                         >
-                            上一页
+                            {t('previousPage')}
                         </Button>
                         <span>
-                            第 {page} / {Math.max(1, Math.ceil(total / Math.max(1, pageSize)))} 页
+                            {page} / {Math.max(1, Math.ceil(total / Math.max(1, pageSize)))} {t('pages')}
                         </span>
                         <Button
                             variant="outline"
@@ -591,7 +593,7 @@ export function DictionaryEntriesManager({
                                 await loadEntries({ page: page + 1 });
                             }}
                         >
-                            下一页
+                            {t('nextPage')}
                         </Button>
                     </div>
                 </div>

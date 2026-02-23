@@ -1,6 +1,11 @@
 'use client';
 
+import { createDictionaryAction } from '@/actions/dictionary';
+import { DOMAINS } from '@/constants/domains';
+import { PlusCircledIcon } from '@radix-ui/react-icons';
+import { useTranslations } from 'next-intl';
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { Button } from 'src/components/ui/button';
 import {
     Dialog,
@@ -13,7 +18,6 @@ import {
 } from 'src/components/ui/dialog';
 import { Input } from 'src/components/ui/input';
 import { Label } from 'src/components/ui/label';
-import { Textarea } from 'src/components/ui/textarea';
 import {
     Select,
     SelectContent,
@@ -22,7 +26,7 @@ import {
     SelectValue,
 } from 'src/components/ui/select';
 import { Switch } from 'src/components/ui/switch';
-import { PlusCircledIcon } from '@radix-ui/react-icons';
+import { Textarea } from 'src/components/ui/textarea';
 type ClientDictionary = {
     id: string;
     name: string;
@@ -35,10 +39,6 @@ type ClientDictionary = {
     projectId: string | null;
     userId: string | null;
 };
-import { createDictionaryAction } from '@/actions/dictionary';
-import { DOMAINS } from '@/constants/domains';
-import { toast } from 'sonner';
-
 interface CreateDictionaryDialogProps {
     onDictionaryCreated: (dictionary: ClientDictionary) => void;
     userId?: string;
@@ -56,7 +56,7 @@ export function CreateDictionaryDialog({
         domain: '',
         visibility: 'PRIVATE',
     });
-
+    const t = useTranslations('Dashboard.Dictionaries');
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
@@ -110,12 +110,12 @@ export function CreateDictionaryDialog({
             <DialogTrigger asChild>
                 <Button>
                     <PlusCircledIcon className="mr-2 h-4 w-4" />
-                    增加词库
+                    {t('addDictionary')}
                 </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-[425px]">
                 <DialogHeader>
-                    <DialogTitle>创建新词库</DialogTitle>
+                    <DialogTitle>{t('createNewDictionary')}</DialogTitle>
                     <DialogDescription>
                         {canCreatePrivate
                             ? '创建一个新的词典，用于存储专业术语和翻译对照。'
