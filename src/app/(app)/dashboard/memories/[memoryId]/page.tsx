@@ -1,21 +1,22 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { useParams } from 'next/navigation';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Separator } from '@/components/ui/separator';
-import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { toast } from 'sonner';
-import { Search, RefreshCw, Filter, Eye, EyeOff } from 'lucide-react';
 import {
     getMemoryByIdAction,
     getMemoryEntriesPagedAction,
     searchMemoryInLibraryAction,
 } from '@/actions/memories';
-import { HybridSearchConfig, DEFAULT_HYBRID_CONFIG } from '@/types/hybrid-search';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Separator } from '@/components/ui/separator';
+import { DEFAULT_HYBRID_CONFIG, HybridSearchConfig } from '@/types/hybrid-search';
+import { Eye, EyeOff, RefreshCw, Search } from 'lucide-react';
+import { useTranslations } from 'next-intl';
+import { useParams } from 'next/navigation';
+import { useEffect, useMemo, useState } from 'react';
+import { toast } from 'sonner';
 import { SearchConfigPanel } from '../components/search-config-panel';
 import { SearchResultItem } from '../components/search-result-item';
 
@@ -30,7 +31,7 @@ export default function MemoryDetailPage() {
     const [total, setTotal] = useState(0);
     const [q, setQ] = useState('');
     const [submitting, setSubmitting] = useState(false);
-
+    const t = useTranslations('Dashboard.Memories');
     // 新增状态
     const [searchConfig, setSearchConfig] =
         useState<Partial<HybridSearchConfig>>(DEFAULT_HYBRID_CONFIG);
@@ -136,7 +137,7 @@ export default function MemoryDetailPage() {
             {/* 页面头部 */}
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-xl font-medium">记忆库详情</h1>
+                    <h1 className="text-xl font-medium">{t('memoryDetails')}</h1>
                     <div className="mt-1 flex items-center gap-2">
                         <p className="text-sm text-muted-foreground">{meta?.name || memoryId}</p>
                         {isSearchMode && searchStats.totalFound !== undefined && (
@@ -149,7 +150,7 @@ export default function MemoryDetailPage() {
                 </div>
                 <div className="flex items-center gap-2">
                     <Button asChild variant="outline">
-                        <a href="/dashboard/memories">返回</a>
+                        <a href="/dashboard/memories">{t('back')}</a>
                     </Button>
                 </div>
             </div>
@@ -162,7 +163,7 @@ export default function MemoryDetailPage() {
                     <div className="relative flex-1">
                         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 transform text-muted-foreground" />
                         <Input
-                            placeholder="搜索源文、译文或备注..."
+                            placeholder={t('searchPlaceholder1')}
                             value={q}
                             onChange={e => setQ(e.target.value)}
                             className="pl-10"
@@ -180,11 +181,11 @@ export default function MemoryDetailPage() {
                             ) : (
                                 <Search className="h-4 w-4" />
                             )}
-                            搜索
+                            {t('search')}
                         </Button>
                         {q && (
                             <Button variant="outline" onClick={handleClearSearch}>
-                                清空
+                                {t('clean')}
                             </Button>
                         )}
                         <Button

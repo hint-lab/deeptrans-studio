@@ -59,6 +59,7 @@ export function AddPublicDictionaryDialog({
     const tDomains = useTranslations('Common.domains');
     const [open, setOpen] = useState(false);
     const [loading, setLoading] = useState(false);
+    const t = useTranslations('Dashboard.Dictionaries');
     const [formData, setFormData] = useState({
         name: '',
         description: '',
@@ -120,12 +121,12 @@ export function AddPublicDictionaryDialog({
             <DialogTrigger asChild>
                 <Button>
                     <PlusCircledIcon className="mr-2 h-4 w-4" />
-                    增加词库
+                    {t('addDictionary')}
                 </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-[425px]">
                 <DialogHeader>
-                    <DialogTitle>创建新词库</DialogTitle>
+                    <DialogTitle>{t('createNewDictionary')}</DialogTitle>
                     <DialogDescription>
                         {canCreatePrivate
                             ? '创建一个新的词典，用于存储专业术语和翻译对照。'

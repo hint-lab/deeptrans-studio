@@ -1,6 +1,15 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { getAllDictionariesAction } from '@/actions/dictionary';
+import { listMemoriesAction } from '@/actions/memories';
+import {
+    getProjectDictionaryBindingsAction,
+    getProjectMemoryBindingsAction,
+    updateProjectDictionaryBindingsAction,
+    updateProjectMemoryBindingsAction,
+} from '@/actions/project-bindings';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
     Dialog,
     DialogContent,
@@ -8,19 +17,10 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useTranslations } from 'next-intl';
-import { getAllDictionariesAction } from '@/actions/dictionary';
-import { listMemoriesAction } from '@/actions/memories';
-import {
-    getProjectDictionaryBindingsAction,
-    updateProjectDictionaryBindingsAction,
-    getProjectMemoryBindingsAction,
-    updateProjectMemoryBindingsAction,
-} from '@/actions/project-bindings';
+import { useEffect, useState } from 'react';
 
 type DictLite = { id: string; name: string };
 type MemLite = { id: string; name: string };

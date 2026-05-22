@@ -1,33 +1,32 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { createDictionaryAction, importDictionaryAction } from '@/actions/dictionary';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
     Dialog,
     DialogContent,
+    DialogDescription,
     DialogHeader,
     DialogTitle,
-    DialogDescription,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import {
-    Coffee,
-    Loader2,
-    Upload,
-    FileText,
-    Eye,
-    Settings,
-    CheckCircle2,
     Building2,
+    CheckCircle2,
+    Coffee,
+    Eye,
+    FileText,
+    Loader2,
+    Settings,
+    Upload,
     User,
 } from 'lucide-react';
-import { Separator } from '@/components/ui/separator';
+import { useTranslations } from 'next-intl';
+import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { createDictionaryAction, importDictionaryAction } from '@/actions/dictionary';
-
 type DictLite = { id: string; name: string };
 
 export function ImportDictionaryDialog({
@@ -48,7 +47,7 @@ export function ImportDictionaryDialog({
         Array<{ sourceText: string; targetText: string; notes?: string }>
     >([]);
     const [loading, setLoading] = useState(false);
-
+    const t = useTranslations('Dashboard.Dictionaries');
     // 字段映射（Excel）
     const [sourceKey, setSourceKey] = useState('source');
     const [targetKey, setTargetKey] = useState('target');
@@ -177,7 +176,7 @@ export function ImportDictionaryDialog({
         <>
             <Button variant="outline" onClick={() => setOpen(true)}>
                 <Upload className="mr-2 h-4 w-4" />
-                {isProject ? '导入项目词库' : '导入私有词库'}
+                {isProject ? t('importProjectDictionary') : t('importPrivateDictionary')}
             </Button>
             <Dialog open={open} onOpenChange={setOpen}>
                 <DialogContent className="flex max-h-[90vh] max-w-4xl flex-col">
@@ -188,7 +187,7 @@ export function ImportDictionaryDialog({
                             ) : (
                                 <User className="h-5 w-5 text-purple-600" />
                             )}
-                            导入智能词库
+                            导入智能词库{t('importAIEnhancedDictionary')}
                         </DialogTitle>
                         <DialogDescription>
                             {isProject

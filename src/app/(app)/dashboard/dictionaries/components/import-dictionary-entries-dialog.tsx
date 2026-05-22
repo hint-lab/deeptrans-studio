@@ -1,6 +1,9 @@
 'use client';
 
+import { importDictionaryFromFormAction } from '@/actions/dictionary';
+import { useTranslations } from 'next-intl';
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { Button } from 'src/components/ui/button';
 import {
     Dialog,
@@ -10,8 +13,8 @@ import {
     DialogTitle,
     DialogTrigger,
 } from 'src/components/ui/dialog';
-import { Label } from 'src/components/ui/label';
 import { Input } from 'src/components/ui/input';
+import { Label } from 'src/components/ui/label';
 import {
     Select,
     SelectContent,
@@ -19,9 +22,6 @@ import {
     SelectTrigger,
     SelectValue,
 } from 'src/components/ui/select';
-import { toast } from 'sonner';
-import { importDictionaryFromFormAction } from '@/actions/dictionary';
-
 interface ImportDictionaryEntriesDialogProps {
     dictionaryId: string;
     onCompleted?: () => Promise<void> | void;
@@ -37,10 +37,10 @@ export function ImportDictionaryEntriesDialog({
     const [sourceLang, setSourceLang] = useState('');
     const [targetLang, setTargetLang] = useState('');
     const [submitting, setSubmitting] = useState(false);
-
+    const t = useTranslations('Dashboard.Dictionaries');
     const handleSubmit = async () => {
         if (!file) {
-            toast.error('请先选择文件');
+            toast.error(t('pleaseSelectFile'));
             return;
         }
         const form = new FormData();
@@ -73,16 +73,16 @@ export function ImportDictionaryEntriesDialog({
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
                 <Button variant="secondary" size="sm">
-                    导入词条
+                    {t('importEntries')}
                 </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-lg">
                 <DialogHeader>
-                    <DialogTitle>导入词条（Excel/TBX）</DialogTitle>
+                    <DialogTitle>{t('importEntries')}（Excel/TBX）</DialogTitle>
                 </DialogHeader>
                 <div className="space-y-4 py-2">
                     <div className="space-y-2">
-                        <Label>选择文件</Label>
+                        <Label>{t('selectFile')}</Label>
                         <Input
                             type="file"
                             accept=".xlsx,.xls,.csv,.tbx"

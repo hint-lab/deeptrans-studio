@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { createLogger } from '@/lib/logger';
 import { type DictionaryVisibility } from '@prisma/client';
+import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { useEffect, use as usePromise, useState } from 'react';
 import { toast } from 'sonner';
@@ -27,7 +28,7 @@ export default function DictionaryDetailPage({
     const [loading, setLoading] = useState(true);
     const [reloadToken, setReloadToken] = useState(0);
     const { projectId } = usePromise(params);
-
+    const t = useTranslations('Dashboard.Dictionaries');
     useEffect(() => {
         const load = async () => {
             setLoading(true);
@@ -73,7 +74,7 @@ export default function DictionaryDetailPage({
         <div className="p-6">
             <div className="mb-4 flex items-center justify-between">
                 <div>
-                    <h1 className="text-2xl font-semibold">词库管理</h1>
+                    <h1 className="text-2xl font-semibold">{t('title')}</h1>
                     <p className="text-sm text-muted-foreground">
                         管理 {dictionary.name} 中的术语条目
                     </p>
