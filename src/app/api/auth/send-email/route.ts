@@ -1,4 +1,5 @@
 import { createEmailVerificationCode } from '@/db/verificationCode';
+import { findUserByEmailDB } from '@/db/user';
 import { createLogger } from '@/lib/logger';
 import { sendVerificationEmail } from '@/lib/mail';
 import { NextRequest, NextResponse } from 'next/server';
@@ -14,9 +15,35 @@ const logger = createLogger({
 export async function POST(request: NextRequest) {
     try {
         const form = await request.formData();
-        const mode = String(form.get('mode') || 'email');
-        const email = String(form.get('email'));
-        if (!mode) return NextResponse.json({ error: 'Email is required' }, { status: 400 });
+        const email = String(form.get('email') || '').trim();
+        const purpose = String(form.get('purpose') || 'login');
+        if (!email) return NextResponse.json({ error: 'Email is required' }, { status: 400 });
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            return NextResponse.json({ error: '邮箱格式不正确' }, { status: 400 });
+        }
+
+        const existingUser = await findUserByEmailDB(email);
+        if (purpose === 'login' && !existingUser) {
+            return NextResponse.json(
+                {
+                    code: 'USER_NOT_FOUND',
+                    error: '账号不存在，请先注册',
+                    registerUrl: `/auth/register?email=${encodeURIComponent(email)}`,
+                },
+                { status: 404 }
+            );
+        }
+        if (purpose === 'register' && existingUser) {
+            return NextResponse.json(
+                {
+                    code: 'USER_ALREADY_EXISTS',
+                    error: '该邮箱已被注册，请直接登录',
+                    loginUrl: '/auth/login',
+                },
+                { status: 409 }
+            );
+        }
+
         const isDev = process.env.NODE_ENV === 'development';
         const code = isDev ? '123456' : String(Math.floor(100000 + Math.random() * 900000));
 

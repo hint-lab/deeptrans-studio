@@ -6,10 +6,12 @@ import { toast } from 'sonner';
 import { useTranslations } from 'next-intl';
 import { emailLoginAction } from '@/actions/email-login';
 import { Icons } from '@/components/icons';
+import { useSearchParams } from 'next/navigation';
 
 export const RegisterCard = () => {
+    const searchParams = useSearchParams();
     const [name, setName] = useState('');
-    const [email, setEmail] = useState('');
+    const [email, setEmail] = useState(() => searchParams.get('email') || '');
     const [code, setCode] = useState('');
     const [cooldown, setCooldown] = useState(0);
     const [isPending, startTransition] = useTransition();
@@ -30,9 +32,13 @@ export const RegisterCard = () => {
         try {
             const form = new FormData();
             form.set('mode', 'email');
+            form.set('purpose', 'register');
             form.set('email', email.trim());
             const r = await fetch('/api/auth/send-email', { method: 'POST', body: form });
-            if (!r.ok) throw new Error(t('sendFailed'));
+            if (!r.ok) {
+                const errorData = await r.json().catch(() => ({}));
+                throw new Error(errorData.error || errorData.message || t('sendFailed'));
+            }
             toast.info(process.env.NODE_ENV === 'development' ? t('codeSentDev') : t('codeSent'));
             setCooldown(60);
             const timer = setInterval(

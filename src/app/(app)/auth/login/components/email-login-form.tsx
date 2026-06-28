@@ -12,7 +12,9 @@ export function EmailLoginForm({ buttonText }: { buttonText?: string }) {
     const [cooldown, setCooldown] = useState(0);
     const [isPending, startTransition] = useTransition();
     const [isSendingCode, setIsSendingCode] = useState(false); // 新增：发送验证码加载状态
+    const [needsRegister, setNeedsRegister] = useState(false);
     const t = useTranslations('Auth');
+    const registerHref = `/auth/register${email.trim() ? `?email=${encodeURIComponent(email.trim())}` : ''}`;
 
     const sendCode = async () => {
         if (!email) {
@@ -32,7 +34,8 @@ export function EmailLoginForm({ buttonText }: { buttonText?: string }) {
         try {
             const form = new FormData();
             form.set('mode', 'email');
-            form.set('email', email);
+            form.set('purpose', 'login');
+            form.set('email', email.trim());
 
             // 添加超时处理
             const controller = new AbortController();
@@ -47,6 +50,7 @@ export function EmailLoginForm({ buttonText }: { buttonText?: string }) {
             clearTimeout(timeoutId);
 
             if (res.ok) {
+                setNeedsRegister(false);
                 toast.info(
                     process.env.NODE_ENV === 'development' ? t('codeSentDev') : t('codeSent')
                 );
@@ -62,7 +66,8 @@ export function EmailLoginForm({ buttonText }: { buttonText?: string }) {
                 }, 1000);
             } else {
                 const errorData = await res.json().catch(() => ({}));
-                toast.error(errorData.message || t('sendFailed'));
+                if (errorData.code === 'USER_NOT_FOUND') setNeedsRegister(true);
+                toast.error(errorData.error || errorData.message || t('sendFailed'));
             }
         } catch (e: any) {
             if (e.name === 'AbortError') {
@@ -79,7 +84,10 @@ export function EmailLoginForm({ buttonText }: { buttonText?: string }) {
         e.preventDefault();
         startTransition(async () => {
             const result = await emailLoginAction({ email, code }, null);
-            if (result?.error) toast.error(t('loginFailed', { error: result.error }));
+            if (result?.error) {
+                if (result.error.includes('账号不存在')) setNeedsRegister(true);
+                toast.error(t('loginFailed', { error: result.error }));
+            }
             if (result?.success) toast.success(t('loginSuccess'));
         });
     };
@@ -96,7 +104,10 @@ export function EmailLoginForm({ buttonText }: { buttonText?: string }) {
                             placeholder={t('enterEmail')}
                             type="email"
                             value={email}
-                            onChange={e => setEmail(e.target.value)}
+                            onChange={e => {
+                                setEmail(e.target.value);
+                                setNeedsRegister(false);
+                            }}
                             required
                             disabled={isSendingCode} // 发送时禁用邮箱输入
                             className="mx-6 w-full border-none bg-transparent p-1 outline-none hover:border-none hover:ring-0 focus-visible:border-none focus-visible:ring-0 disabled:cursor-not-allowed disabled:opacity-50"
@@ -142,6 +153,15 @@ export function EmailLoginForm({ buttonText }: { buttonText?: string }) {
                         </Button>
                     </div>
                 </div>
+
+                {needsRegister && (
+                    <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                        {t('noAccount')}{' '}
+                        <a className="font-medium underline" href={registerHref}>
+                            {t('goRegister')}
+                        </a>
+                    </div>
+                )}
 
                 {/* 提交按钮 */}
                 <div className="space-y-4 pb-2">
