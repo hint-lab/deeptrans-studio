@@ -187,6 +187,8 @@ STUDIO_HOST=localhost
 # Optional: GitHub OAuth, SMTP, etc.
 # GITHUB_ID=your-github-oauth-id
 # GITHUB_SECRET=your-github-oauth-secret
+# EMAIL_SERVER=smtps://deeptrans_studio%40163.com:<your-163-authorization-code>@smtp.163.com:465
+# EMAIL_FROM="DeepTrans Studio <deeptrans_studio@163.com>"
 ```
 
 > 💡 **Production note**: The default database image is PostgreSQL 18 with pgvector and PGroonga. PGroonga is required for CJK keyword search. Production object storage uses Tencent COS; MinIO is only started by the local development compose file.

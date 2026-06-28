@@ -187,6 +187,8 @@ STUDIO_HOST=localhost
 # 可选：GitHub OAuth、SMTP 等
 # GITHUB_ID=your-github-oauth-id
 # GITHUB_SECRET=your-github-oauth-secret
+# EMAIL_SERVER=smtps://deeptrans_studio%40163.com:<163客户端授权码>@smtp.163.com:465
+# EMAIL_FROM="DeepTrans Studio <deeptrans_studio@163.com>"
 ```
 
 > 💡 **生产提示**：默认数据库镜像是 PostgreSQL 18 + pgvector + PGroonga。PGroonga 是 CJK 关键词检索的必需能力。生产对象存储使用腾讯云 COS；MinIO 只由本地开发 compose 启动。
