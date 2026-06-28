@@ -954,12 +954,7 @@ export default function InstantTranslatePage() {
                     <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
                         <div className="flex items-center justify-between">
                             <div>
-                                <div className="flex items-center gap-2 text-lg font-medium">
-                                    {t('translatedText')}
-                                    {showTranslationProgress && (
-                                        <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                                    )}
-                                </div>
+                                <div className="text-lg font-medium">{t('translatedText')}</div>
                                 <div className="text-xs text-gray-500">
                                     {getLanguageLabel(targetLanguage)}
                                 </div>
@@ -986,28 +981,17 @@ export default function InstantTranslatePage() {
                     </div>
                     <div className="p-4">
                         {showTranslationProgress ? (
-                            <div className="flex h-80 flex-col rounded-md border border-dashed border-primary/30 bg-primary/5 p-4">
-                                <div className="mb-4 flex items-center justify-between text-sm text-primary">
-                                    <span>
-                                        {isTranslationQueued
-                                            ? t('waitingToTranslate')
-                                            : t('translating')}
-                                    </span>
-                                    <span>
-                                        {getLanguageLabel(sourceLanguage)} →{' '}
-                                        {getLanguageLabel(targetLanguage)}
-                                    </span>
-                                </div>
-                                <div className="mb-6 h-1.5 overflow-hidden rounded-full bg-primary/10">
-                                    <div className="h-full w-1/3 animate-pulse rounded-full bg-primary" />
-                                </div>
-                                <div className="space-y-3">
-                                    <div className="h-4 w-11/12 animate-pulse rounded bg-primary/15" />
-                                    <div className="h-4 w-10/12 animate-pulse rounded bg-primary/15" />
-                                    <div className="h-4 w-8/12 animate-pulse rounded bg-primary/15" />
-                                </div>
+                            <div
+                                className="flex h-80 flex-col gap-3 px-3 py-2"
+                                aria-live="polite"
+                                aria-busy="true"
+                            >
+                                <div className="h-5 w-10/12 animate-pulse rounded bg-gray-200 dark:bg-gray-800" />
+                                <div className="h-5 w-8/12 animate-pulse rounded bg-gray-200 dark:bg-gray-800" />
+                                <div className="h-5 w-11/12 animate-pulse rounded bg-gray-200 dark:bg-gray-800" />
+                                <div className="h-5 w-7/12 animate-pulse rounded bg-gray-200 dark:bg-gray-800" />
                                 {translatedText && (
-                                    <div className="mt-6 flex-1 overflow-hidden whitespace-pre-wrap text-lg text-gray-500">
+                                    <div className="mt-2 overflow-hidden whitespace-pre-wrap text-lg text-gray-500">
                                         {translatedText}
                                     </div>
                                 )}
