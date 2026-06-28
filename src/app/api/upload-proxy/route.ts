@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { guardMessage, guardStatus, requireUser, requireWritableProject } from '@/lib/guards';
 import { getStorageService } from '@/lib/storage/service';
+import { assertUploadFileSize } from '@/lib/upload-limits';
 
 export async function POST(req: NextRequest) {
     try {
@@ -20,6 +21,7 @@ export async function POST(req: NextRequest) {
         if (!file) {
             return NextResponse.json({ success: false, error: '缺少文件' }, { status: 400 });
         }
+        assertUploadFileSize(file.size || 0);
         const namespace = projectId
             ? `projects/${(await requireWritableProject(projectId, authCtx)).id}`
             : `users/${authCtx.userId}/uploads`;
@@ -31,6 +33,7 @@ export async function POST(req: NextRequest) {
         );
 
         const arrayBuffer = await file.arrayBuffer();
+        assertUploadFileSize(arrayBuffer.byteLength);
         await getStorageService().putObject({
             fileName: getUrl.fileName,
             body: Buffer.from(arrayBuffer),

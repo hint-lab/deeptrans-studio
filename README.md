@@ -184,9 +184,7 @@ STORAGE_BUCKET=deeptrans
 # Services
 STUDIO_HOST=localhost
 
-# Optional: GitHub OAuth, SMTP, etc.
-# GITHUB_ID=your-github-oauth-id
-# GITHUB_SECRET=your-github-oauth-secret
+# Optional: SMTP, etc.
 # EMAIL_SERVER=smtps://deeptrans_studio%40163.com:<your-163-authorization-code>@smtp.163.com:465
 # EMAIL_FROM="DeepTrans Studio <deeptrans_studio@163.com>"
 ```

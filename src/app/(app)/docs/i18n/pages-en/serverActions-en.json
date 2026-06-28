@@ -113,10 +113,10 @@
                             "description": "Send login verification code to specified email"
                         },
                         {
-                            "method": "GET",
-                            "path": "/api/auth/oauth/[provider]",
-                            "title": "OAuth Login",
-                            "description": "Support GitHub, Google, and other OAuth provider login"
+                            "method": "POST",
+                            "path": "/api/auth/register",
+                            "title": "Email Registration",
+                            "description": "Register using email and verification code"
                         }
                     ]
                 },

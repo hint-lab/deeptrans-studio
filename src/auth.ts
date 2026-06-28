@@ -8,8 +8,6 @@ import { type PrismaClient, type UserRole } from '@prisma/client';
 import NextAuth from 'next-auth';
 
 import CredentialsProvider from 'next-auth/providers/credentials';
-import Github from 'next-auth/providers/github';
-import Google from 'next-auth/providers/google';
 
 import { findUserByEmailDB, findUserByIdDB, updateUserByIdDB } from './db/user';
 // 直接将配置内联在此文件中，不再依赖外部 authConfig
@@ -24,16 +22,6 @@ const logger = createLogger({
 });
 export const { handlers, signIn, signOut, auth } = NextAuth({
     providers: [
-        Github({
-            clientId: process.env.GITHUB_CLIENT_ID,
-            clientSecret: process.env.GITHUB_CLIENT_SECRET,
-            allowDangerousEmailAccountLinking: true,
-        }),
-        Google({
-            clientId: process.env.GOOGLE_CLIENT_ID as string,
-            clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
-            allowDangerousEmailAccountLinking: true,
-        }),
         CredentialsProvider({
             name: 'Credentials',
             credentials: {

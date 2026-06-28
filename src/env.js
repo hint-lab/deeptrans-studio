@@ -6,9 +6,6 @@ export const env = createEnv({
         DATABASE_URL: z.url(),
         NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
         AUTH_SECRET: process.env.NODE_ENV === 'production' ? z.string() : z.string().optional(),
-        GITHUB_CLIENT_ID: z.string(),
-        GITHUB_CLIENT_SECRET: z.string(),
-
         // queues + LLM
         REDIS_URL: z.url().default('redis://127.0.0.1:6379'),
         OPENAI_API_KEY: z.string(),
@@ -55,9 +52,6 @@ export const env = createEnv({
         DATABASE_URL: process.env.DATABASE_URL ?? process.env.POSTGRES_URL,
         NODE_ENV: process.env.NODE_ENV,
         AUTH_SECRET: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET,
-        GITHUB_CLIENT_ID: process.env.GITHUB_CLIENT_ID ?? process.env.GITHUB_ID,
-        GITHUB_CLIENT_SECRET: process.env.GITHUB_CLIENT_SECRET ?? process.env.GITHUB_SECRET,
-
         REDIS_URL: process.env.REDIS_URL,
         OPENAI_API_KEY: process.env.OPENAI_API_KEY,
         OPENAI_BASE_URL: process.env.OPENAI_BASE_URL,

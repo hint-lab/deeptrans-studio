@@ -113,10 +113,10 @@
                             "description": "向指定邮箱发送登录验证码"
                         },
                         {
-                            "method": "GET",
-                            "path": "/api/auth/oauth/[provider]",
-                            "title": "OAuth 登录",
-                            "description": "支持 GitHub、Google 等 OAuth 提供商登录"
+                            "method": "POST",
+                            "path": "/api/auth/register",
+                            "title": "邮箱注册",
+                            "description": "使用邮箱和验证码注册"
                         }
                     ]
                 },

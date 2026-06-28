@@ -184,9 +184,7 @@ STORAGE_BUCKET=deeptrans
 # 服务配置
 STUDIO_HOST=localhost
 
-# 可选：GitHub OAuth、SMTP 等
-# GITHUB_ID=your-github-oauth-id
-# GITHUB_SECRET=your-github-oauth-secret
+# 可选：SMTP 等
 # EMAIL_SERVER=smtps://deeptrans_studio%40163.com:<163客户端授权码>@smtp.163.com:465
 # EMAIL_FROM="DeepTrans Studio <deeptrans_studio@163.com>"
 ```

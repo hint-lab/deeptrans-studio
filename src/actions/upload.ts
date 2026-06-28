@@ -3,6 +3,7 @@
 import { createLogger } from '@/lib/logger';
 import { requireOwnedProject, requireUser, requireWritableProject } from '@/lib/guards';
 import { getStorageService } from '@/lib/storage/service';
+import { assertUploadFileSize } from '@/lib/upload-limits';
 const logger = createLogger(
     {
         type: 'actions:upload',
@@ -40,37 +41,6 @@ async function assertReadableObject(fileName: string) {
     throw new Error('无权访问文件');
 }
 
-export async function getUploadUrlAction(
-    fileName: string,
-    contentType: string,
-    scope?: UploadScope
-) {
-    try {
-        const { namespace } = await resolveUploadNamespace(scope);
-        logger.debug('开始获取上传 URL:', { fileName, contentType, namespace });
-
-        if (!fileName || !contentType) {
-            logger.error('参数缺失:', { fileName, contentType });
-            throw new Error('缺少必要参数');
-        }
-
-        // 获取上传 URL
-        const result = await getStorageService().getUploadUrl(fileName, contentType, namespace);
-        logger.debug('获取上传 URL 成功:', result);
-
-        return {
-            success: true,
-            data: result,
-        };
-    } catch (error) {
-        logger.error('获取上传 URL 失败:', error);
-        return {
-            success: false,
-            error: error instanceof Error ? error.message : '获取上传 URL 失败',
-        };
-    }
-}
-
 // 通过 Server Action 接收文件并由服务端完成上传，避免浏览器直传的 CORS/内网不可达问题
 export async function uploadFileAction(formData: FormData) {
     try {
@@ -81,6 +51,7 @@ export async function uploadFileAction(formData: FormData) {
         if (!file) {
             return { success: false, error: '缺少文件' };
         }
+        assertUploadFileSize((file as any).size || 0);
 
         const result = await getStorageService().getUploadUrl(
             file.name,
@@ -89,6 +60,7 @@ export async function uploadFileAction(formData: FormData) {
         );
 
         const arrayBuffer = await file.arrayBuffer();
+        assertUploadFileSize(arrayBuffer.byteLength);
         await getStorageService().putObject({
             fileName: result.fileName,
             body: Buffer.from(arrayBuffer),

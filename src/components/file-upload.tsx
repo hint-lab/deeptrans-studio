@@ -1,6 +1,7 @@
-import { getUploadUrlAction, uploadFileAction } from '@/actions/upload';
+import { uploadFileAction } from '@/actions/upload';
 import { Button } from '@/components/ui/button';
 import { createLogger } from '@/lib/logger';
+import { MAX_UPLOAD_FILE_SIZE_BYTES } from '@/lib/upload-limits';
 import { useTranslations } from 'next-intl';
 import { useCallback, useState } from 'react';
 import { type Accept, FileRejection, useDropzone } from 'react-dropzone';
@@ -45,8 +46,6 @@ export const IMAGE_ACCEPTED_FILE_TYPES: Accept = {
     'image/webp': ['.webp'],
 };
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
-
 export function FileUpload({
     onUploadComplete,
     projectName,
@@ -82,7 +81,7 @@ export function FileUpload({
             });
 
             // 检查文件大小
-            if (file.size > MAX_FILE_SIZE) {
+            if (file.size > MAX_UPLOAD_FILE_SIZE_BYTES) {
                 toast.error(t('fileSizeExceeded'));
                 return;
             }
@@ -95,74 +94,26 @@ export function FileUpload({
             setIsUploading(true);
 
             try {
-                // 1. 获取预签名上传 URL
-                const result = await getUploadUrlAction(file.name, file.type, { projectId });
-
-                if (!result.success || !result.data) {
-                    throw new Error(result.error || t('getUrlFailed'));
+                const form = new FormData();
+                form.append('file', file);
+                if (projectId) form.append('projectId', projectId);
+                const uploadJson = await uploadFileAction(form);
+                if (!uploadJson || !uploadJson.success || !uploadJson.data) {
+                    throw new Error((uploadJson as any)?.error || t('serverUploadFailed'));
                 }
-
-                const { data } = result;
-
-                // 2. 先尝试直接上传（浏览器直传）
-                let directOk = false;
-                try {
-                    const uploadResponse = await fetch(data.uploadUrl, {
-                        method: 'PUT',
-                        body: file,
-                        headers: {
-                            'Content-Type': file.type,
-                        },
-                        // mode/cors 由浏览器默认处理；若 CORS 拦截会抛出 TypeError
-                    });
-                    directOk = uploadResponse.ok;
-                    if (!uploadResponse.ok) {
-                        logger.warn(
-                            t('directUploadWarning'),
-                            uploadResponse.status,
-                            uploadResponse.statusText
-                        );
-                    }
-                } catch (err) {
-                    logger.warn(t('directUploadFailed'), err);
-                }
-
-                // 3. 回退：Server Action 直传（优先于 /api 代理）
-                if (!directOk) {
-                    const form = new FormData();
-                    form.append('file', file);
-                    if (projectId) form.append('projectId', projectId);
-                    const proxyJson = await uploadFileAction(form);
-                    if (!proxyJson || !proxyJson.success || !proxyJson.data) {
-                        throw new Error((proxyJson as any)?.error || t('serverUploadFailed'));
-                    }
-                    const proxyData = proxyJson.data as {
-                        fileName: string;
-                        originalName: string;
-                        fileUrl: string;
-                        contentType?: string;
-                        size?: number;
-                    };
-                    const fileInfo = {
-                        fileName: proxyData.fileName,
-                        originalName: proxyData.originalName,
-                        fileUrl: proxyData.fileUrl,
-                        contentType: proxyData.contentType || file.type,
-                        size: proxyData.size || file.size,
-                    };
-                    onUploadComplete(fileInfo);
-                    setUploadedFile(fileInfo);
-                    toast.success(t('uploadSuccess'));
-                    return;
-                }
-
-                logger.debug(t('uploadSuccess'));
+                const uploadData = uploadJson.data as {
+                    fileName: string;
+                    originalName: string;
+                    fileUrl: string;
+                    contentType?: string;
+                    size?: number;
+                };
                 const fileInfo = {
-                    fileName: data.fileName,
-                    originalName: data.originalName,
-                    fileUrl: data.fileUrl,
-                    contentType: file.type,
-                    size: file.size,
+                    fileName: uploadData.fileName,
+                    originalName: uploadData.originalName,
+                    fileUrl: uploadData.fileUrl,
+                    contentType: uploadData.contentType || file.type,
+                    size: uploadData.size || file.size,
                 };
                 onUploadComplete(fileInfo);
                 setUploadedFile(fileInfo);
@@ -210,7 +161,7 @@ export function FileUpload({
         onDropRejected,
         accept: acceptedFileTypes,
         maxFiles: 1,
-        maxSize: MAX_FILE_SIZE,
+        maxSize: MAX_UPLOAD_FILE_SIZE_BYTES,
         disabled: isUploading,
         // 允许点击选择文件
     });
