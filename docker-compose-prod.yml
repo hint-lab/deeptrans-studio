@@ -64,7 +64,10 @@ services:
             - app_local
 
     app:
-        image: registry.cn-hangzhou.aliyuncs.com/hintlab/deeptrans-studio
+        build:
+            context: .
+            dockerfile: Dockerfile
+        image: deeptrans-studio:latest
         container_name: deeptrans-app
         env_file:
             - .env
@@ -94,7 +97,10 @@ services:
         restart: unless-stopped
 
     app_worker:
-        image: registry.cn-hangzhou.aliyuncs.com/hintlab/deeptrans-studio-worker
+        build:
+            context: .
+            dockerfile: Dockerfile.worker
+        image: deeptrans-studio-worker:latest
         container_name: deeptrans-app_worker
         env_file:
             - .env
