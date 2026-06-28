@@ -27,6 +27,25 @@
   <em>DeepTrans Studio User Interface</em>
 </div>
 
+## 📝 Citation
+
+DeepTrans Studio is described in our CSCW '26 Companion Demo (CCF-A) paper. If you use this project in academic work, please cite:
+
+> Ziyang Lian, Qingya Zhang, Hao Wang, Huiwen Xiong, Qi Yang, Lingyi Meng, Xiaoyi Gu, and Rui Wang. 2026. DeepTrans Studio: Turning Expert Interventions into Shared Team Knowledge in Agentic Translation Workflows. In *Proceedings of Companion of the 2026 Computer-Supported Cooperative Work and Social Computing (CSCW '26 Demo, CCF-A)*. ACM, New York, NY, USA, 4 pages. DOI forthcoming.
+
+```bibtex
+@inproceedings{lian2026deeptrans,
+  title = {DeepTrans Studio: Turning Expert Interventions into Shared Team Knowledge in Agentic Translation Workflows},
+  author = {Lian, Ziyang and Zhang, Qingya and Wang, Hao and Xiong, Huiwen and Yang, Qi and Meng, Lingyi and Gu, Xiaoyi and Wang, Rui},
+  booktitle = {Proceedings of Companion of the 2026 Computer-Supported Cooperative Work and Social Computing (CSCW '26)},
+  publisher = {ACM},
+  address = {New York, NY, USA},
+  year = {2026},
+  pages = {4},
+  note = {Demo paper; DOI forthcoming}
+}
+```
+
 ## ✨ Key Features
 
 ### 🎯 Translation IDE
