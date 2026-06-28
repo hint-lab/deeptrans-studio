@@ -29,11 +29,27 @@
 
 ## 📝 Citation
 
-DeepTrans Studio is described in our CSCW '26 Companion Demo (CCF-A) paper. If you use this project in academic work, please cite:
+DeepTrans Studio and its document translation stack are described in our ACL '26 System Demonstrations and CSCW '26 Companion Demo papers. If you use this project in academic work, please cite:
+
+> Yang Qi, Xiangyao Ma, Xiao Wang, Hao Wang, and Rui Wang. 2026. [BabelDOC: Better Layout-Preserving PDF Translation via Intermediate Representation](https://aclanthology.org/2026.acl-demo.25/). In _Proceedings of the 64th Annual Meeting of the Association for Computational Linguistics (Volume 3: System Demonstrations)_, pages 253-262, San Diego, California, United States. Association for Computational Linguistics.
 
 > Ziyang Lian, Qingya Zhang, Hao Wang, Huiwen Xiong, Qi Yang, Lingyi Meng, Xiaoyi Gu, and Rui Wang. 2026. DeepTrans Studio: Turning Expert Interventions into Shared Team Knowledge in Agentic Translation Workflows. In _Proceedings of Companion of the 2026 Computer-Supported Cooperative Work and Social Computing (CSCW '26 Demo, CCF-A)_. ACM, New York, NY, USA, 4 pages. DOI forthcoming.
 
 ```bibtex
+@inproceedings{qi-etal-2026-babeldoc,
+  title = {{B}abel{DOC}: Better Layout-Preserving {PDF} Translation via Intermediate Representation},
+  author = {Qi, Yang and Ma, Xiangyao and Wang, Xiao and Wang, Hao and Wang, Rui},
+  editor = {Durrett, Greg and Jian, Ping},
+  booktitle = {Proceedings of the 64th Annual Meeting of the Association for Computational Linguistics (Volume 3: System Demonstrations)},
+  month = jul,
+  year = {2026},
+  address = {San Diego, California, United States},
+  publisher = {Association for Computational Linguistics},
+  url = {https://aclanthology.org/2026.acl-demo.25/},
+  pages = {253--262},
+  ISBN = {979-8-89176-392-0}
+}
+
 @inproceedings{lian2026deeptrans,
   title = {DeepTrans Studio: Turning Expert Interventions into Shared Team Knowledge in Agentic Translation Workflows},
   author = {Lian, Ziyang and Zhang, Qingya and Wang, Hao and Xiong, Huiwen and Yang, Qi and Meng, Lingyi and Gu, Xiaoyi and Wang, Rui},
@@ -173,7 +189,7 @@ STUDIO_HOST=localhost
 # GITHUB_SECRET=your-github-oauth-secret
 ```
 
-> 💡 **Security Note**: For production deployments, use dedicated instances for databases and properly secure all credentials.
+> 💡 **Production note**: The default database image is PostgreSQL 18 with pgvector and PGroonga. PGroonga is required for CJK keyword search. Production object storage uses Tencent COS; MinIO is only started by the local development compose file.
 
 ### Database Setup
 
@@ -223,15 +239,31 @@ Additional UIs:
 # Configure environment
 cp .env.example .env.production
 # Edit .env.production with production values
+#
+# Required object storage settings for production:
+# STORAGE_TYPE=cos
+# COS_SECRET_ID=AKIDxxxxxxxx
+# COS_SECRET_KEY=xxxxxxxx
+# COS_BUCKET=deeptrans-1250000000
+# COS_REGION=ap-guangzhou
 
-# Build images
-docker compose build app app_worker
+# Build images, including PostgreSQL 18 + pgvector + PGroonga
+docker compose -f docker-compose-prod.yml build db app app_worker
 
-# Deploy services
-docker compose up -d traefik app app_worker db valkey
+# Deploy production services. MinIO is intentionally not started in production.
+docker compose -f docker-compose-prod.yml up -d traefik app app_worker db valkey
 
 # Services will be available on configured domain with SSL via Traefik
 ```
+
+Production service set:
+
+- `db`: PostgreSQL 18 with pgvector and PGroonga
+- `valkey`: Redis-protocol cache and BullMQ runtime
+- `app`: DeepTrans Studio web application
+- `app_worker`: background worker
+- `traefik`: HTTPS reverse proxy
+- Tencent COS: external object storage configured through environment variables
 
 ## 📁 Project Structure
 

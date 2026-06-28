@@ -29,11 +29,27 @@
 
 ## 📝 论文引用
 
-DeepTrans Studio 已在 CSCW '26 Companion Demo（CCF-A）论文中介绍。如果你在学术工作中使用本项目，请引用：
+DeepTrans Studio 及其文档翻译技术栈已在 ACL '26 System Demonstrations 与 CSCW '26 Companion Demo 论文中介绍。如果你在学术工作中使用本项目，请引用：
+
+> Yang Qi, Xiangyao Ma, Xiao Wang, Hao Wang, and Rui Wang. 2026. [BabelDOC: Better Layout-Preserving PDF Translation via Intermediate Representation](https://aclanthology.org/2026.acl-demo.25/). In _Proceedings of the 64th Annual Meeting of the Association for Computational Linguistics (Volume 3: System Demonstrations)_, pages 253-262, San Diego, California, United States. Association for Computational Linguistics.
 
 > Ziyang Lian, Qingya Zhang, Hao Wang, Huiwen Xiong, Qi Yang, Lingyi Meng, Xiaoyi Gu, and Rui Wang. 2026. DeepTrans Studio: Turning Expert Interventions into Shared Team Knowledge in Agentic Translation Workflows. In _Proceedings of Companion of the 2026 Computer-Supported Cooperative Work and Social Computing (CSCW '26 Demo, CCF-A)_. ACM, New York, NY, USA, 4 pages. DOI forthcoming.
 
 ```bibtex
+@inproceedings{qi-etal-2026-babeldoc,
+  title = {{B}abel{DOC}: Better Layout-Preserving {PDF} Translation via Intermediate Representation},
+  author = {Qi, Yang and Ma, Xiangyao and Wang, Xiao and Wang, Hao and Wang, Rui},
+  editor = {Durrett, Greg and Jian, Ping},
+  booktitle = {Proceedings of the 64th Annual Meeting of the Association for Computational Linguistics (Volume 3: System Demonstrations)},
+  month = jul,
+  year = {2026},
+  address = {San Diego, California, United States},
+  publisher = {Association for Computational Linguistics},
+  url = {https://aclanthology.org/2026.acl-demo.25/},
+  pages = {253--262},
+  ISBN = {979-8-89176-392-0}
+}
+
 @inproceedings{lian2026deeptrans,
   title = {DeepTrans Studio: Turning Expert Interventions into Shared Team Knowledge in Agentic Translation Workflows},
   author = {Lian, Ziyang and Zhang, Qingya and Wang, Hao and Xiong, Huiwen and Yang, Qi and Meng, Lingyi and Gu, Xiaoyi and Wang, Rui},
@@ -173,7 +189,7 @@ STUDIO_HOST=localhost
 # GITHUB_SECRET=your-github-oauth-secret
 ```
 
-> 💡 **安全提示**：生产环境请使用专用数据库实例，并妥善保管所有凭据。
+> 💡 **生产提示**：默认数据库镜像是 PostgreSQL 18 + pgvector + PGroonga。PGroonga 是 CJK 关键词检索的必需能力。生产对象存储使用腾讯云 COS；MinIO 只由本地开发 compose 启动。
 
 ### 数据库初始化
 
@@ -223,15 +239,31 @@ yarn worker
 # 配置环境变量
 cp .env.example .env.production
 # 编辑 .env.production 填写生产环境配置
+#
+# 生产对象存储必填：
+# STORAGE_TYPE=cos
+# COS_SECRET_ID=AKIDxxxxxxxx
+# COS_SECRET_KEY=xxxxxxxx
+# COS_BUCKET=deeptrans-1250000000
+# COS_REGION=ap-guangzhou
 
-# 构建镜像
-docker compose build app app_worker
+# 构建镜像，包括 PostgreSQL 18 + pgvector + PGroonga
+docker compose -f docker-compose-prod.yml build db app app_worker
 
-# 部署服务
-docker compose up -d traefik app app_worker db valkey
+# 部署生产服务。生产环境不启动 MinIO。
+docker compose -f docker-compose-prod.yml up -d traefik app app_worker db valkey
 
 # 服务将在配置的域名上通过 Traefik 提供 SSL 访问
 ```
+
+生产服务集合：
+
+- `db`：PostgreSQL 18 + pgvector + PGroonga
+- `valkey`：Redis 协议缓存与 BullMQ 运行时
+- `app`：DeepTrans Studio Web 应用
+- `app_worker`：后台任务 worker
+- `traefik`：HTTPS 反向代理
+- 腾讯云 COS：通过环境变量配置的外部对象存储
 
 ## 📁 项目结构
 
