@@ -455,24 +455,25 @@ export default function InstantTranslatePage() {
     const showTranslationProgress = isTranslationQueued || isTranslating;
 
     return (
-        <div className="mx-auto w-full max-w-7xl p-6">
+        <div className="mx-auto w-full max-w-[1480px] px-6 py-6">
             <div className="mb-6">
-                <h1 className="mb-2 text-3xl font-bold text-gray-900 dark:text-white">
+                <h1 className="mb-2 text-3xl font-semibold text-gray-950 dark:text-white">
                     {t('title')}
                 </h1>
                 <p className="text-gray-600 dark:text-gray-400">{t('description')}</p>
             </div>
 
             {/* 语言选择和控制栏 */}
-            <div className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-lg bg-white p-4 dark:bg-gray-800">
-                <div className="flex flex-wrap items-end gap-4">
-                    <div className="space-y-1.5">
+            <div className="mb-6 rounded-md border border-gray-200 bg-white px-5 py-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+                <div className="grid grid-cols-1 items-end gap-5 xl:grid-cols-[minmax(0,1fr)_auto]">
+                    <div className="grid max-w-2xl grid-cols-[minmax(0,1fr)_40px_minmax(0,1fr)] items-end gap-3">
+                        <div className="space-y-1.5">
                         <Label className="text-xs text-gray-500">{t('sourceLanguage')}</Label>
                         <Select
                             value={sourceLanguage}
                             onValueChange={value => setSourceLanguage(value)}
                         >
-                            <SelectTrigger className="w-40 border-gray-300 bg-white text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                            <SelectTrigger className="h-11 w-full border-gray-300 bg-white text-base text-gray-900 dark:border-gray-600 dark:bg-gray-800 dark:text-white">
                                 <SelectValue placeholder={t('selectSourceLanguage')} />
                             </SelectTrigger>
                             <SelectContent className="border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-800">
@@ -487,14 +488,14 @@ export default function InstantTranslatePage() {
                                 ))}
                             </SelectContent>
                         </Select>
-                    </div>
+                        </div>
 
                     <Button
                         variant="ghost"
                         size="sm"
                         onClick={swapLanguages}
                         disabled={sourceLanguage === 'auto'}
-                        className="mb-0.5 p-2"
+                        className="mb-0.5 h-10 w-10 p-0"
                     >
                         <ArrowRightLeft className="h-4 w-4" />
                     </Button>
@@ -505,7 +506,7 @@ export default function InstantTranslatePage() {
                             value={targetLanguage}
                             onValueChange={value => setTargetLanguage(value)}
                         >
-                            <SelectTrigger className="w-40 border-gray-300 bg-white text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                            <SelectTrigger className="h-11 w-full border-gray-300 bg-white text-base text-gray-900 dark:border-gray-600 dark:bg-gray-800 dark:text-white">
                                 <SelectValue placeholder={t('selectTargetLanguage')} />
                             </SelectTrigger>
                             <SelectContent className="border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-800">
@@ -525,7 +526,7 @@ export default function InstantTranslatePage() {
                     </div>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-4">
+                <div className="flex flex-wrap items-end gap-4 xl:justify-end">
                     {/* 翻译风格选择 */}
                     <div className="space-y-1.5">
                         <Label className="text-xs text-gray-500">{t('translationStyle')}</Label>
@@ -533,7 +534,7 @@ export default function InstantTranslatePage() {
                             value={translationStyle}
                             onValueChange={value => setTranslationStyle(value)}
                         >
-                            <SelectTrigger className="w-32 border-gray-300 bg-white text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                            <SelectTrigger className="h-11 w-36 border-gray-300 bg-white text-base text-gray-900 dark:border-gray-600 dark:bg-gray-800 dark:text-white">
                                 <SelectValue placeholder={t('translationStyle')} />
                             </SelectTrigger>
                             <SelectContent className="border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-800">
@@ -553,7 +554,7 @@ export default function InstantTranslatePage() {
                     {/* 词库选择弹窗按钮 */}
                     <Dialog open={dictionaryDialogOpen} onOpenChange={setDictionaryDialogOpen}>
                         <DialogTrigger asChild>
-                            <Button variant="outline" className="flex items-center gap-2">
+                            <Button variant="outline" className="h-11 gap-2 px-4">
                                 <Globe className="h-4 w-4" />
                                 {t('dictionarySelection')}
                                 <Badge variant="secondary" className="ml-1">
@@ -883,7 +884,7 @@ export default function InstantTranslatePage() {
                         </DialogContent>
                     </Dialog>
 
-                    <div className="flex items-center space-x-2">
+                    <div className="flex h-11 items-center space-x-2">
                         <Switch
                             id="auto-translate"
                             checked={autoTranslate}
@@ -906,11 +907,12 @@ export default function InstantTranslatePage() {
                     )}
                 </div>
             </div>
+            </div>
 
             {/* 翻译区域（自定义样式容器） */}
             <div className="mb-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
                 {/* 原文 */}
-                <div className="h-100 rounded-lg border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
+                <div className="overflow-hidden rounded-md border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
                     <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
                         <div className="flex items-center justify-between">
                             <div>
@@ -944,13 +946,13 @@ export default function InstantTranslatePage() {
                             value={sourceText}
                             onChange={e => setSourceText(e.target.value)}
                             placeholder={t('enterTextPlaceholder')}
-                            className="h-80 resize-none border-0 text-lg shadow-none focus-visible:ring-0"
+                            className="h-[420px] resize-none border-0 text-lg shadow-none focus-visible:ring-0"
                         />
                     </div>
                 </div>
 
                 {/* 译文 */}
-                <div className="h-100 rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
+                <div className="overflow-hidden rounded-md border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
                     <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
                         <div className="flex items-center justify-between">
                             <div>
@@ -982,14 +984,14 @@ export default function InstantTranslatePage() {
                     <div className="p-4">
                         {showTranslationProgress ? (
                             <div
-                                className="flex h-80 flex-col gap-3 px-3 py-2"
+                                className="flex h-[420px] flex-col gap-3 px-3 py-2"
                                 aria-live="polite"
                                 aria-busy="true"
                             >
-                                <div className="h-5 w-10/12 animate-pulse rounded bg-gray-200 dark:bg-gray-800" />
-                                <div className="h-5 w-8/12 animate-pulse rounded bg-gray-200 dark:bg-gray-800" />
-                                <div className="h-5 w-11/12 animate-pulse rounded bg-gray-200 dark:bg-gray-800" />
-                                <div className="h-5 w-7/12 animate-pulse rounded bg-gray-200 dark:bg-gray-800" />
+                                <div className="h-5 w-10/12 animate-pulse rounded bg-gray-100 dark:bg-gray-800" />
+                                <div className="h-5 w-8/12 animate-pulse rounded bg-gray-100 dark:bg-gray-800" />
+                                <div className="h-5 w-11/12 animate-pulse rounded bg-gray-100 dark:bg-gray-800" />
+                                <div className="h-5 w-7/12 animate-pulse rounded bg-gray-100 dark:bg-gray-800" />
                                 {translatedText && (
                                     <div className="mt-2 overflow-hidden whitespace-pre-wrap text-lg text-gray-500">
                                         {translatedText}
@@ -1001,7 +1003,7 @@ export default function InstantTranslatePage() {
                                 value={translatedText}
                                 readOnly
                                 placeholder={t('resultPlaceholder')}
-                                className="h-80 resize-none border-0 text-lg shadow-none focus-visible:ring-0"
+                                className="h-[420px] resize-none border-0 text-lg shadow-none focus-visible:ring-0"
                             />
                         )}
                     </div>
