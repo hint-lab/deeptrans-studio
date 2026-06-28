@@ -1164,6 +1164,7 @@
         "rightSidebar": {
             "chat": "Chat",
             "preview": "Preview",
+            "about": "About",
             "settings": "Settings",
             "close": "Close",
             "previewPanel": "Preview Panel",

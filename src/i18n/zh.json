@@ -1166,6 +1166,7 @@
         "rightSidebar": {
             "chat": "对话",
             "preview": "预览",
+            "about": "关于",
             "settings": "设置",
             "close": "关闭",
             "previewPanel": "预览面板",

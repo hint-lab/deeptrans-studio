@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import React, { useState } from 'react';
 import {
     MailIcon,
@@ -11,13 +10,8 @@ import {
     Rows,
     Wand,
 } from 'lucide-react';
-import { type LucideProps } from 'lucide-react';
 import { useRightPanel } from '@/hooks/useRightPanel';
 import { useTranslations } from 'next-intl';
-interface SidebarItem {
-    Icon: React.ComponentType<LucideProps>;
-    path: string;
-}
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -31,17 +25,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { IdeSettingsModal } from './settings/ide-settings-modal';
 import { HelpCircle } from 'lucide-react';
-
-const sidebarBottomItems: SidebarItem[] = [
-    {
-        Icon: User,
-        path: '/about',
-    },
-    {
-        Icon: Settings,
-        path: '/settings',
-    },
-];
+import { AboutDialog } from './about-dialog';
 
 const RightSidebar: React.FC = () => {
     const t = useTranslations('IDE.rightSidebar');
@@ -50,6 +34,7 @@ const RightSidebar: React.FC = () => {
     const [contactTitle, setContactTitle] = useState('');
     const [contactMessage, setContactMessage] = useState('');
     const [isVertical, setIsVertical] = useState(true);
+    const [aboutOpen, setAboutOpen] = useState(false);
     const [settingsOpen, setSettingsOpen] = useState(false);
     return (
         <div className="flex size-full flex-col items-center justify-between bg-transparent">
@@ -120,23 +105,22 @@ const RightSidebar: React.FC = () => {
                 </div>
             </div>
             <div className="mb-4 flex flex-col gap-4">
-                {sidebarBottomItems.map(({ Icon, path }) => (
-                    <Link
-                        href={path}
-                        key={path}
-                        onClick={e => {
-                            if (path === '/settings') {
-                                e.preventDefault();
-                                setSettingsOpen(true);
-                            }
-                        }}
-                        passHref
-                    >
-                        <div className={''}>
-                            <Icon className="text-foreground" size="16" />
-                        </div>
-                    </Link>
-                ))}
+                <button
+                    type="button"
+                    aria-label={t('about')}
+                    className="rounded text-foreground hover:bg-muted/40"
+                    onClick={() => setAboutOpen(true)}
+                >
+                    <User className="text-foreground" size="16" />
+                </button>
+                <button
+                    type="button"
+                    aria-label={t('settings')}
+                    className="rounded text-foreground hover:bg-muted/40"
+                    onClick={() => setSettingsOpen(true)}
+                >
+                    <Settings className="text-foreground" size="16" />
+                </button>
             </div>
             <Dialog open={contactOpen} onOpenChange={setContactOpen}>
                 <DialogContent>
@@ -174,6 +158,7 @@ const RightSidebar: React.FC = () => {
                     </div>
                 </DialogContent>
             </Dialog>
+            <AboutDialog open={aboutOpen} onOpenChange={setAboutOpen} />
             <IdeSettingsModal open={settingsOpen} onOpenChange={setSettingsOpen} />
         </div>
     );
