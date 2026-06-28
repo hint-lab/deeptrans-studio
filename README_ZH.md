@@ -87,7 +87,7 @@ DeepTrans Studio 及其文档翻译技术栈已在 ACL '26 System Demonstrations
 
 - **队列处理**：基于 BullMQ 的异步任务处理
 - **批量操作**：批量翻译、评估和质量检查
-- **文档解析**：使用内置解析器处理 DOCX、PDF、TXT 与 Markdown
+- **文档解析**：使用 MinerU 在线解析 PDF，并处理 DOCX、TXT 与 Markdown
 - **状态追踪**：完整的翻译生命周期管理
 
 ### 🔌 可扩展性
@@ -116,15 +116,15 @@ graph TD
 
 ### 核心组件
 
-| 组件       | 技术栈                                           | 用途                                       |
-| ---------- | ------------------------------------------------ | ------------------------------------------ |
-| **Studio** | Next.js 15, React 19, TypeScript                 | 前端 UI、Server Actions、身份验证          |
-| **Worker** | Node.js, BullMQ                                  | 后台任务处理、批量操作                     |
-| **数据库** | PostgreSQL 18, pgvector, PGroonga, Prisma 6      | 关系型数据、向量检索、CJK 关键词检索与 ORM |
-| **缓存**   | Valkey                                           | Redis 协议缓存、任务队列                   |
-| **存储**   | StorageService 接口、MinIO、腾讯云 COS           | 文档和资源存储                             |
-| **解析器** | DOCX XML 解析器、pdf-parse、OCR 兜底、文本解析器 | 解析 DOCX、PDF、TXT 与 Markdown            |
-| **网关**   | Traefik                                          | 反向代理、SSL/TLS 终端                     |
+| 组件       | 技术栈                                              | 用途                                       |
+| ---------- | --------------------------------------------------- | ------------------------------------------ |
+| **Studio** | Next.js 15, React 19, TypeScript                    | 前端 UI、Server Actions、身份验证          |
+| **Worker** | Node.js, BullMQ                                     | 后台任务处理、批量操作                     |
+| **数据库** | PostgreSQL 18, pgvector, PGroonga, Prisma 6         | 关系型数据、向量检索、CJK 关键词检索与 ORM |
+| **缓存**   | Valkey                                              | Redis 协议缓存、任务队列                   |
+| **存储**   | StorageService 接口、MinIO、腾讯云 COS              | 文档和资源存储                             |
+| **解析器** | DOCX XML 解析器、MinerU 在线 PDF 解析器、文本解析器 | 解析 DOCX、PDF、TXT 与 Markdown            |
+| **网关**   | Traefik                                             | 反向代理、SSL/TLS 终端                     |
 
 ## 🚀 快速开始
 

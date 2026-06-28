@@ -87,7 +87,7 @@ DeepTrans Studio and its document translation stack are described in our ACL '26
 
 - **Queue-Based Processing**: BullMQ-driven asynchronous task processing
 - **Batch Operations**: Bulk translation, evaluation, and quality checks
-- **Document Parsing**: DOCX, PDF, TXT, and Markdown parsing with built-in parsers
+- **Document Parsing**: DOCX, PDF, TXT, and Markdown parsing with MinerU online PDF parsing
 - **Status Tracking**: Complete translation lifecycle management
 
 ### 🔌 Extensibility
@@ -116,15 +116,15 @@ graph TD
 
 ### Core Components
 
-| Component    | Technology                                            | Purpose                                                     |
-| ------------ | ----------------------------------------------------- | ----------------------------------------------------------- |
-| **Studio**   | Next.js 15, React 19, TypeScript                      | Frontend UI, Server Actions, Authentication                 |
-| **Worker**   | Node.js, BullMQ                                       | Background job processing, batch operations                 |
-| **Database** | PostgreSQL 18, pgvector, PGroonga, Prisma 6           | Relational data, vector search, CJK keyword search, and ORM |
-| **Cache**    | Valkey                                                | Redis-protocol cache, session state, task queues            |
-| **Storage**  | StorageService interface, MinIO, Tencent COS          | Document and asset storage                                  |
-| **Parser**   | DOCX XML parser, pdf-parse, OCR fallback, text parser | Document parsing for DOCX, PDF, TXT, and Markdown           |
-| **Gateway**  | Traefik                                               | Reverse proxy, SSL/TLS termination                          |
+| Component    | Technology                                             | Purpose                                                     |
+| ------------ | ------------------------------------------------------ | ----------------------------------------------------------- |
+| **Studio**   | Next.js 15, React 19, TypeScript                       | Frontend UI, Server Actions, Authentication                 |
+| **Worker**   | Node.js, BullMQ                                        | Background job processing, batch operations                 |
+| **Database** | PostgreSQL 18, pgvector, PGroonga, Prisma 6            | Relational data, vector search, CJK keyword search, and ORM |
+| **Cache**    | Valkey                                                 | Redis-protocol cache, session state, task queues            |
+| **Storage**  | StorageService interface, MinIO, Tencent COS           | Document and asset storage                                  |
+| **Parser**   | DOCX XML parser, MinerU online PDF parser, text parser | Document parsing for DOCX, PDF, TXT, and Markdown           |
+| **Gateway**  | Traefik                                                | Reverse proxy, SSL/TLS termination                          |
 
 ## 🚀 Quick Start
 
