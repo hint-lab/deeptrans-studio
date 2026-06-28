@@ -1,7 +1,6 @@
 'use client';
 import { useRightPanel } from '@/hooks/useRightPanel';
 import { useSidebar } from '@/hooks/useSidebar';
-import { createLogger } from '@/lib/logger';
 import { useSession } from 'next-auth/react';
 import { useTranslations } from 'next-intl';
 import { useParams } from 'next/navigation';
@@ -19,29 +18,17 @@ import PreviewCard from './components/preview';
 import RightSidebar from './components/right-sidebar';
 function IDELayout({ children }: { children: React.ReactNode }) {
     const t = useTranslations('IDE');
-    const { data: session, status, update } = useSession();
+    const { status, update } = useSession();
     const params = useParams();
     const { isSidebarOpen, toggleSidebar } = useSidebar();
     const { mode } = useRightPanel();
     const sidebarPanelRef = useRef<ImperativePanelHandle>(null);
-    const logger = createLogger({
-        type: 'client:ide-layout',
-    }, {
-        json: false,// 开启json格式输出
-        pretty: false, // 关闭开发环境美化输出
-        colors: true, // 仅当json：false时启用颜色输出可用
-        includeCaller: false, // 日志不包含调用者
-    });
-    useEffect(() => {
-        logger.debug('IDE Client session 状态:', status, "IDE Client session 当前时间:", new Date().toLocaleString(), "IDE Client session 过期时间:", session?.expires ? new Date(session.expires).toLocaleString() : "未设置");
-    }, [session, status]);
     useEffect(() => {
         const handleVisibilityChange = () => {
             if (document.visibilityState === 'visible') {
                 // 页面变为可见，检查session
                 if (status !== "authenticated") {
                     update();
-                    logger.debug('IDE Client session update状态:', status, "IDE Client session update过期时间:", session);
                 }
 
             }
@@ -52,7 +39,7 @@ function IDELayout({ children }: { children: React.ReactNode }) {
         return () => {
             document.removeEventListener('visibilitychange', handleVisibilityChange);
         };
-    }, [update]);
+    }, [status, update]);
     // 动态计算布局
     const getLayoutSizes = () => {
         if (mode === 'none') {

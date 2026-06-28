@@ -31,7 +31,7 @@
 
 DeepTrans Studio is described in our CSCW '26 Companion Demo (CCF-A) paper. If you use this project in academic work, please cite:
 
-> Ziyang Lian, Qingya Zhang, Hao Wang, Huiwen Xiong, Qi Yang, Lingyi Meng, Xiaoyi Gu, and Rui Wang. 2026. DeepTrans Studio: Turning Expert Interventions into Shared Team Knowledge in Agentic Translation Workflows. In *Proceedings of Companion of the 2026 Computer-Supported Cooperative Work and Social Computing (CSCW '26 Demo, CCF-A)*. ACM, New York, NY, USA, 4 pages. DOI forthcoming.
+> Ziyang Lian, Qingya Zhang, Hao Wang, Huiwen Xiong, Qi Yang, Lingyi Meng, Xiaoyi Gu, and Rui Wang. 2026. DeepTrans Studio: Turning Expert Interventions into Shared Team Knowledge in Agentic Translation Workflows. In _Proceedings of Companion of the 2026 Computer-Supported Cooperative Work and Social Computing (CSCW '26 Demo, CCF-A)_. ACM, New York, NY, USA, 4 pages. DOI forthcoming.
 
 ```bibtex
 @inproceedings{lian2026deeptrans,
@@ -49,30 +49,34 @@ DeepTrans Studio is described in our CSCW '26 Companion Demo (CCF-A) paper. If y
 ## ✨ Key Features
 
 ### 🎯 Translation IDE
+
 - **Intelligent Editor**: Segment-aligned parallel editing with version control and keyboard shortcuts
 - **Multi-Agent Collaboration**: Coordinate multiple AI agents for complex translation tasks
 - **Real-time Preview**: Instant document preview with formatting preservation
 
 ### 🤖 AI-Powered Translation
+
 - **Multi-Engine Support**: Integration with OpenAI and custom AI models
 - **Terminology Extraction**: Automated domain-specific term extraction
 - **Quality Assessment**: AI-driven grammar, syntax, and discourse evaluation
-- **Translation Memory**: Vector-based semantic search using Milvus
+- **Translation Memory**: Vector-based semantic search using PostgreSQL + pgvector
 
 ### 📚 Knowledge Management
+
 - **Project Dictionaries**: Project-specific terminology databases
 - **Translation Memory**: Import/export translation memory in TMX, CSV, XLSX formats
-- **Semantic Search**: Vector similarity search powered by Milvus
-- **Visual Management**: Attu UI for vector database inspection
+- **Semantic Search**: Vector similarity search powered by pgvector
 
 ### 🔄 Workflow Automation
+
 - **Queue-Based Processing**: BullMQ-driven asynchronous task processing
 - **Batch Operations**: Bulk translation, evaluation, and quality checks
-- **Document Parsing**: PDF, DOCX, XLSX document parsing with PDFMath service
+- **Document Parsing**: DOCX, PDF, TXT, and Markdown parsing with built-in parsers
 - **Status Tracking**: Complete translation lifecycle management
 
 ### 🔌 Extensibility
-- **Open Architecture**: Modular design with MinIO, Milvus, Redis integration
+
+- **Open Architecture**: Modular design with PostgreSQL, MinIO, Redis integration
 - **API Gateway**: RESTful APIs for external integration
 - **Custom Agents**: Extensible AI agent framework
 - **Plugin System**: Support for custom translation engines and processing pipelines
@@ -85,29 +89,26 @@ DeepTrans Studio adopts a modern full-stack architecture based on Next.js App Ro
 graph TD
     Browser[Web Browser] -->|HTTPS| Traefik[Traefik Proxy]
     Traefik -->|HTTP 3000| Studio[Next.js Studio]
-    Traefik --> Attu[Attu UI]
     Studio -->|Server Actions| Postgres[(PostgreSQL)]
     Studio -->|Task Queue| Redis[(Redis)]
-    Studio -->|API Calls| PDFMath[PDFMath Service]
+    Studio -->|Parse Requests| Parser[Built-in Parsers]
     Worker[Worker Service] -->|Consume Tasks| Redis
     Worker -->|ORM| Postgres
-    Worker -->|Vector Ops| Milvus[(Milvus)]
+    Worker -->|Vector Ops| Postgres
     Worker -->|Object Storage| MinIO[(MinIO)]
-    Milvus --> etcd[(etcd)]
 ```
 
 ### Core Components
 
-| Component | Technology | Purpose |
-|-----------|-----------|---------|
-| **Studio** | Next.js 15, React 19, TypeScript | Frontend UI, Server Actions, Authentication |
-| **Worker** | Node.js, BullMQ | Background job processing, batch operations |
-| **Database** | PostgreSQL, Prisma 6 | Relational data storage and ORM |
-| **Cache** | Redis | Session management, task queues |
-| **Vector DB** | Milvus + etcd | Semantic search, translation memory |
-| **Storage** | MinIO (S3-compatible) | Document and asset storage |
-| **Parser** | PDFMath Service | PDF and mathematical document parsing |
-| **Gateway** | Traefik | Reverse proxy, SSL/TLS termination |
+| Component    | Technology                                            | Purpose                                           |
+| ------------ | ----------------------------------------------------- | ------------------------------------------------- |
+| **Studio**   | Next.js 15, React 19, TypeScript                      | Frontend UI, Server Actions, Authentication       |
+| **Worker**   | Node.js, BullMQ                                       | Background job processing, batch operations       |
+| **Database** | PostgreSQL 18, pgvector, Prisma 6                     | Relational data, vector search, and ORM           |
+| **Cache**    | Redis                                                 | Session management, task queues                   |
+| **Storage**  | MinIO (S3-compatible)                                 | Document and asset storage                        |
+| **Parser**   | DOCX XML parser, pdf-parse, OCR fallback, text parser | Document parsing for DOCX, PDF, TXT, and Markdown |
+| **Gateway**  | Traefik                                               | Reverse proxy, SSL/TLS termination                |
 
 ## 🚀 Quick Start
 
@@ -181,8 +182,8 @@ yarn db:seed
 **Option 1: Using Docker Compose (Recommended)**
 
 ```bash
-# Start all services
-docker compose up -d db redis etcd milvus minio pdfmath worker
+# Start dependency services
+docker compose up -d db redis minio
 
 # Start Next.js development server
 yarn dev
@@ -197,12 +198,12 @@ yarn dev
 yarn dev
 
 # In another terminal, start worker
-yarn dev:worker
+yarn worker
 ```
 
 Additional UIs:
+
 - **Studio**: http://localhost:3000
-- **Attu (Milvus UI)**: http://localhost:8001
 - **Prisma Studio**: Run `yarn prisma studio`
 
 ### Production Deployment
@@ -213,10 +214,10 @@ cp .env.example .env.production
 # Edit .env.production with production values
 
 # Build images
-docker compose build studio worker pdfmath
+docker compose build app app_worker
 
 # Deploy services
-docker compose up -d traefik studio worker db redis milvus minio
+docker compose up -d traefik app app_worker db redis minio
 
 # Services will be available on configured domain with SSL via Traefik
 ```
@@ -251,22 +252,21 @@ deeptrans-studio/
 
 ## 🛠️ Available Scripts
 
-| Command | Description |
-|---------|-------------|
-| `yarn dev` | Start Next.js development server with hot reload |
-| `yarn dev:worker` | Start worker service locally (if not using Docker) |
-| `yarn build` | Build production Next.js application |
+| Command             | Description                                        |
+| ------------------- | -------------------------------------------------- |
+| `yarn dev`          | Start Next.js development server with hot reload   |
+| `yarn worker`       | Start worker service locally (if not using Docker) |
+| `yarn build`        | Build production Next.js application               |
 | `yarn build:worker` | Compile worker service (esbuild → dist/worker.cjs) |
-| `yarn start` | Start production Next.js server |
-| `yarn lint` | Run ESLint code quality checks |
-| `yarn type-check` | Run TypeScript type checking |
-| `yarn prisma studio` | Open Prisma Studio database GUI |
-| `yarn prisma generate` | Generate Prisma Client |
-| `yarn db:push` | Push schema changes to database |
-| `yarn db:seed` | Seed database with sample data |
-| `yarn test:segment` | Test segmentation parsing |
-| `yarn test:docx` | Test document parsing |
-| `yarn queue:ui` | Launch Bull Board queue monitoring |
+| `yarn start`        | Start production Next.js server                    |
+| `yarn lint`         | Run ESLint code quality checks                     |
+| `yarn type-check`   | Run TypeScript type checking                       |
+| `yarn db:studio`    | Open Prisma Studio database GUI                    |
+| `yarn db:migrate`   | Run database migrations                            |
+| `yarn db:push`      | Push schema changes to database                    |
+| `yarn db:seed`      | Seed database with sample data                     |
+| `yarn test:docx`    | Test document parsing                              |
+| `yarn queue:ui`     | Launch Bull Board queue monitoring                 |
 
 ## 🌍 Internationalization
 
@@ -283,6 +283,7 @@ When adding new translations, ensure all language files are updated consistently
 We welcome contributions! Please follow these guidelines:
 
 ### Branch Strategy
+
 - `feat/*` - New features
 - `fix/*` - Bug fixes
 - `chore/*` - Maintenance tasks
@@ -294,19 +295,20 @@ We welcome contributions! Please follow these guidelines:
 2. **Create Branch**: Create a feature branch from `main`
 3. **Code Changes**: Make your changes following our coding standards
 4. **Quality Checks**: Run linting and type checking
-   ```bash
-   yarn lint
-   yarn type-check
-   ```
+    ```bash
+    yarn lint
+    yarn type-check
+    ```
 5. **Commit**: Use [Conventional Commits](https://www.conventionalcommits.org/) format
-   ```
-   feat: add translation memory import
-   fix: resolve authentication bug
-   docs: update installation guide
-   ```
+    ```
+    feat: add translation memory import
+    fix: resolve authentication bug
+    docs: update installation guide
+    ```
 6. **Pull Request**: Submit PR with clear description
 
 ### Code Standards
+
 - Follow ESLint and Prettier configurations
 - Write TypeScript with proper types (avoid `any`)
 - Add JSDoc comments for complex functions
@@ -320,9 +322,10 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 🙏 Acknowledgments
 
 Built with modern technologies:
+
 - [Next.js](https://nextjs.org/) - React framework
 - [Prisma](https://www.prisma.io/) - Database ORM
-- [Milvus](https://milvus.io/) - Vector database
+- [pgvector](https://github.com/pgvector/pgvector) - PostgreSQL vector search
 - [BullMQ](https://docs.bullmq.io/) - Job queues
 - [MinIO](https://min.io/) - Object storage
 - [Traefik](https://traefik.io/) - Reverse proxy

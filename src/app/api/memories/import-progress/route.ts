@@ -1,7 +1,9 @@
 import { NextRequest } from 'next/server';
 import { importMemoryFromForm } from '@/actions/memories';
+import { requireUser } from '@/lib/guards';
 
 export async function POST(req: NextRequest) {
+    await requireUser();
     const encoder = new TextEncoder();
 
     const stream = new ReadableStream({
@@ -50,7 +52,7 @@ export async function POST(req: NextRequest) {
                                     stage:
                                         currentBatch < estimatedBatches * 0.8
                                             ? 'embedding'
-                                            : 'milvus',
+                                            : 'vector',
                                 })}\n\n`
                             )
                         );

@@ -1,22 +1,23 @@
 import { queryDictionaryEntriesExactByScope } from '@/actions/dictionary';
 import { uploadFileAction } from '@/actions/upload';
-import { auth } from '@/auth';
 import {
-    findDocumentsByProjectIdDB,
     updateDocumentStructuredDB
 } from '@/db/document';
+import { guardMessage, guardStatus, requireOwnedProject, requireWritableProject } from '@/lib/guards';
+import { readInitStructuredRaw, scopedProjectBatchId } from '@/lib/init-artifact-keys';
 import { getRedis } from '@/lib/redis';
 import { NextRequest, NextResponse } from 'next/server';
 
 async function handlePersist(only: any, batchId: string, projectIdFromParams: string) {
     const redis = await getRedis();
-    const [previewHtmlStored, docxStructStored] = await Promise.all([
-        redis.get(`init.${batchId}.previewHtml`),
-        redis.get(`init.${batchId}.docx.structured`),
+    const scopedBatchId = scopedProjectBatchId(projectIdFromParams, batchId);
+    const [previewHtmlStored, structuredStored] = await Promise.all([
+        redis.get(`init.${scopedBatchId}.previewHtml`),
+        readInitStructuredRaw(redis, scopedBatchId),
     ]);
     let structuredObj: any = undefined;
     try {
-        structuredObj = docxStructStored ? JSON.parse(String(docxStructStored)) : undefined;
+        structuredObj = structuredStored ? JSON.parse(String(structuredStored)) : undefined;
     } catch { }
     const htmlContent = String(previewHtmlStored || '');
     if (!structuredObj && !htmlContent) {
@@ -31,7 +32,7 @@ async function handlePersist(only: any, batchId: string, projectIdFromParams: st
     if (htmlContent) {
         const form = new FormData();
         form.set('file', new Blob([htmlContent], { type: 'text/html' }), `${stem}.preview.html`);
-        form.set('projectName', projectIdFromParams);
+        form.set('projectId', projectIdFromParams);
         const res = await uploadFileAction(form as unknown as FormData);
         if ((res as any)?.success) {
             htmlRes = { fileName: (res as any).data.fileName, fileUrl: (res as any).data.fileUrl };
@@ -46,7 +47,7 @@ async function handlePersist(only: any, batchId: string, projectIdFromParams: st
             new Blob([JSON.stringify(structuredObj, null, 2)], { type: 'application/json' }),
             `${stem}.structured.json`
         );
-        form.set('projectName', projectIdFromParams);
+        form.set('projectId', projectIdFromParams);
         const res = await uploadFileAction(form as unknown as FormData);
         if ((res as any)?.success) {
             jsonRes = { fileName: (res as any).data.fileName, fileUrl: (res as any).data.fileUrl };
@@ -87,10 +88,11 @@ export async function POST(req: NextRequest, ctx: any) {
             headChars: Number(q.get('headChars') || body?.segment?.headChars || 0) || undefined,
             preview: q.get('preview') === '1' ? true : body?.segment?.preview === true,
         } as { headChars?: number; preview?: boolean };
+        if (!projectIdFromParams) return NextResponse.json({ error: 'missing project id' }, { status: 400 });
         if (!batchId) return NextResponse.json({ error: 'missing batchId' }, { status: 400 });
 
-        const docs = await findDocumentsByProjectIdDB(projectIdFromParams);
-        const only = docs?.[0];
+        const project = await requireWritableProject(projectIdFromParams);
+        const only = project.documents?.[0];
         if (!only || !only.url)
             return NextResponse.json({ error: 'document not found' }, { status: 404 });
 
@@ -125,13 +127,14 @@ export async function POST(req: NextRequest, ctx: any) {
 
         return NextResponse.json({ error: 'bad mode' }, { status: 400 });
     } catch (e: any) {
-        return NextResponse.json({ error: e?.message || 'start failed' }, { status: 500 });
+        return NextResponse.json({ error: guardMessage(e) || 'start failed' }, { status: guardStatus(e) });
     }
 }
 
 export async function GET(req: NextRequest, ctx: any) {
     try {
-        await ctx?.params; // 仅为触发 Next.js 要求的 await；此处 GET 逻辑未直接使用 id
+        const { id: projectIdFromParams } = await (ctx?.params || {});
+        await requireOwnedProject(projectIdFromParams);
         const batchId = req.nextUrl.searchParams.get('batchId') || '';
         if (!batchId) return NextResponse.json({ error: 'missing batchId' }, { status: 400 });
         const redis = await getRedis();
@@ -143,7 +146,8 @@ export async function GET(req: NextRequest, ctx: any) {
         const lastTerms = Number(req.nextUrl.searchParams.get('lastTerms') || '-1');
         const previewMode = req.nextUrl.searchParams.get('preview') === '1';
         const showAll = req.nextUrl.searchParams.get('all') === '1';
-        const segBatch = previewMode ? `preview:${batchId}` : batchId;
+        const scopedBatchId = scopedProjectBatchId(projectIdFromParams, batchId);
+        const segBatch = previewMode ? `preview:${scopedBatchId}` : scopedBatchId;
 
         const toPct = (t: any, d: any) =>
             Number(t) > 0 ? Math.min(100, Math.round((Number(d) / Number(t)) * 100)) : 0;
@@ -158,17 +162,17 @@ export async function GET(req: NextRequest, ctx: any) {
                 termsJson,
                 previewHtmlStored,
                 segItemJson,
-                docxStruct,
+                structuredRaw,
             ] = await Promise.all([
                 redis.get(`seg.${segBatch}.total`),
                 redis.get(`seg.${segBatch}.done`),
-                redis.get(`docTerms.${batchId}.total`),
-                redis.get(`docTerms.${batchId}.done`),
-                redis.get(`init.${batchId}.preview`),
-                redis.get(`docTerms.${batchId}.item.terms.all`),
-                redis.get(`init.${batchId}.previewHtml`),
+                redis.get(`docTerms.${scopedBatchId}.total`),
+                redis.get(`docTerms.${scopedBatchId}.done`),
+                redis.get(`init.${scopedBatchId}.preview`),
+                redis.get(`docTerms.${scopedBatchId}.item.terms.all`),
+                redis.get(`init.${scopedBatchId}.previewHtml`),
                 redis.get(`seg.${segBatch}.item.seg.all`),
-                redis.get(`init.${batchId}.docx.structured`),
+                readInitStructuredRaw(redis, scopedBatchId),
             ]);
             const segProgress = toPct(segT, segD);
             const termsProgress = toPct(tT, tD);
@@ -215,7 +219,7 @@ export async function GET(req: NextRequest, ctx: any) {
             if (previewMode && Array.isArray(segments) && !showAll) {
                 segments = segments.slice(0, 20);
             }
-            const fullHtml = (await redis.get(`init.${batchId}.previewHtml`)) || '';
+            const fullHtml = (await redis.get(`init.${scopedBatchId}.previewHtml`)) || '';
             const limitHtml = (() => {
                 try {
                     const str = String(fullHtml);
@@ -229,8 +233,6 @@ export async function GET(req: NextRequest, ctx: any) {
             })();
             // 基于提取的术语做一次精确词典命中查询（限制前 20 个术语），用于前端高亮
             try {
-                const session = await auth();
-                const userId = session?.user?.id || undefined;
                 const uniqueTerms = Array.from(
                     new Set((terms || []).map(t => String(t?.term || '').trim()).filter(Boolean))
                 );
@@ -241,7 +243,7 @@ export async function GET(req: NextRequest, ctx: any) {
                     source?: string;
                 }> = [];
                 for (const t of uniqueTerms) {
-                    const r = await queryDictionaryEntriesExactByScope(t, { userId, limit: 10 });
+                    const r = await queryDictionaryEntriesExactByScope(t, { limit: 10 });
                     if (r?.success && Array.isArray(r.data) && r.data.length) {
                         for (const row of r.data as any[]) out.push(row);
                     }
@@ -251,7 +253,7 @@ export async function GET(req: NextRequest, ctx: any) {
 
             let docxStructured: any = undefined;
             try {
-                docxStructured = docxStruct ? JSON.parse(String(docxStruct)) : undefined;
+                docxStructured = structuredRaw ? JSON.parse(String(structuredRaw)) : undefined;
             } catch { }
             return {
                 segProgress,
@@ -272,8 +274,8 @@ export async function GET(req: NextRequest, ctx: any) {
                 const [segT, segD, tT, tD] = await Promise.all([
                     redis.get(`seg.${segBatch}.total`),
                     redis.get(`seg.${segBatch}.done`),
-                    redis.get(`docTerms.${batchId}.total`),
-                    redis.get(`docTerms.${batchId}.done`),
+                    redis.get(`docTerms.${scopedBatchId}.total`),
+                    redis.get(`docTerms.${scopedBatchId}.done`),
                 ]);
                 const curSeg = toPct(segT, segD);
                 const curTerms = toPct(tT, tD);
@@ -299,6 +301,6 @@ export async function GET(req: NextRequest, ctx: any) {
         const status = await readStatus();
         return NextResponse.json(status);
     } catch (e: any) {
-        return NextResponse.json({ error: e?.message || 'status failed' }, { status: 500 });
+        return NextResponse.json({ error: guardMessage(e) || 'status failed' }, { status: guardStatus(e) });
     }
 }

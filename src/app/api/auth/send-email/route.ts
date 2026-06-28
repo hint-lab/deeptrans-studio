@@ -19,7 +19,6 @@ export async function POST(request: NextRequest) {
         if (!mode) return NextResponse.json({ error: 'Email is required' }, { status: 400 });
         const isDev = process.env.NODE_ENV === 'development';
         const code = isDev ? '123456' : String(Math.floor(100000 + Math.random() * 900000));
-        logger.debug(`Generated verification code for ${email}: ${code}`);
 
         // 存储验证码
         const r = await createEmailVerificationCode(email, code);
@@ -31,14 +30,12 @@ export async function POST(request: NextRequest) {
         }
 
         // 返回发送结果
-        logger.debug('send code store in redis:', r);
         const info = await sendVerificationEmail(email, code);
-        logger.debug('Email sent:', info);
         if (!info || !info.accepted || info.accepted.length === 0) {
             return NextResponse.json({ error: 'Failed to send email' }, { status: 500 });
         }
         // 返回发送结果
-        logger.debug('Email sent successfully:', info);
+        logger.info('Verification email sent', { acceptedCount: (info as any)?.accepted?.length || 0 });
 
         return NextResponse.json({
             success: true,

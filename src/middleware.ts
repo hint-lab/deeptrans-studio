@@ -1,6 +1,6 @@
 // middleware.ts
-import { auth } from '@/auth';
 import { createLogger } from '@/lib/logger';
+import { getToken } from 'next-auth/jwt';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
@@ -20,24 +20,11 @@ export async function middleware(request: NextRequest) {
         colors: true, // 仅当json：false时启用颜色输出可用
         includeCaller: false, // 日志不包含调用者
     });
-    // 记录 Action Body (保持不变)
-    if (request.method === 'POST' && request.headers.get('next-action')) {
-        const cloned = request.clone();
-        const body = await cloned.text();
-        try {
-            const parsed = JSON.parse(body);
-            logger.debug(`解析后的Action Body参数:${parsed}`,);
-        } catch (e) {
-            // 可能是 FormData 或其他非 JSON body，仅记录错误
-            const b = body as any;
-            logger.debug('解析后的Action Body参数:', b);
-            logger.debug({ message: 'Action Body解析失败', error: e });
-        }
-    }
-
     // --- 2. 认证检查 ---
-    const session = await auth();
-    logger.debug("中间件拦截的session:", session, "当前时间:", new Date().toLocaleString());
+    const token = await getToken({
+        req: request,
+        secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET,
+    });
     const { pathname } = request.nextUrl;
 
     // 公共路径（无需认证，用于精确匹配）
@@ -49,8 +36,6 @@ export async function middleware(request: NextRequest) {
         '/api/auth/callback/github',
         '/api/auth/callback/google',
         '/api/auth/verify-email',
-        '/api/dictionary/lookup',
-        '/api/memories/hybrid-search',
         '/api/auth/send-email',
     ];
     // 认证相关路径（NextAuth 内部处理，但需要逻辑来处理重定向）
@@ -63,13 +48,13 @@ export async function middleware(request: NextRequest) {
         }
 
         // 2. 已登录用户尝试访问登录/注册页，重定向到仪表板
-        if (session && authPaths.includes(pathname)) {
+        if (token && authPaths.includes(pathname)) {
             logger.warn('已登录用户访问认证页，重定向到仪表板');
             return NextResponse.redirect(new URL('/dashboard', request.url));
         }
 
         // 3. 未登录用户检查
-        if (!session || !session.user) {
+        if (!token) {
             // 如果访问的是认证相关路径，放行（让 NextAuth 页面显示）
             if (authPaths.includes(pathname)) {
                 return NextResponse.next();
@@ -83,13 +68,13 @@ export async function middleware(request: NextRequest) {
         }
 
         // 4. 会话过期检查（仅作为辅助，NextAuth 应该在客户端或服务器端处理）
-        if (session.expires && new Date(session.expires) < new Date()) {
+        if (token.expires && Date.now() / 1000 > Number(token.expires)) {
             logger.error('会话已过期');
             return NextResponse.redirect(new URL('/auth/login', request.url));
         }
 
         // 5. 有效会话，通过
-        logger.debug(`会话有效，用户: ${session.user.email ?? 'N/A'}`);
+        logger.debug('Authenticated request', { userId: token.sub });
         return NextResponse.next();
     } catch (error) {
         logger.error({ message: 'Middleware error', error });

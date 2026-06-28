@@ -9,10 +9,9 @@ const nextConfig = {
     output: 'standalone',
     experimental: {
         serverActions: {
-            bodySizeLimit: '10mb'
+            bodySizeLimit: '10mb',
         },
     },
-    serverExternalPackages: ['@zilliz/milvus2-sdk-node'],
     images: {
         qualities: [25, 50, 75],
     },

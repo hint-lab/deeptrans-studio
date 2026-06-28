@@ -4,34 +4,55 @@ if (process.env.NODE_ENV !== 'production') {
         .then((dotenv: any) => {
             dotenv?.config?.();
         })
-        .catch(() => { });
+        .catch(() => {});
 }
 import { fetchDocumentItemNeedsMtReviewByIdDB, updateDocumentItemByIdDB } from '@/db/documentItem';
+import { prisma } from '@/lib/db';
 import { createLogger } from '@/lib/logger';
 import { TTL_BATCH, setJSONWithTTL } from '@/lib/redis-ttl';
+import { canWriteDocumentItemForOwner } from '@/server/document-item-access';
+import { embedBatchForOwner } from '@/server/embedding';
+import { runPreTranslateForOwner } from '@/server/pre-translate';
+import { extractDocumentTermsForOwner } from '@/server/project-init';
+import { runQualityAssureForOwner } from '@/server/quality-assure';
 import { Client as MinioClient } from 'minio';
-import { embedBatchAction } from '../actions/embedding';
-import { runPreTranslateAction } from '../actions/pre-translate';
-import { extractDocumentTermsAction } from '../actions/project-init';
-import { runQualityAssureAction } from '../actions/quality-assure';
-import { upsertVectors } from '../lib/vector/milvus';
-import { connection, createWorker } from './queue';
-const logger = createLogger({
-    type: 'worker',
-}, {
-    json: false,// 开启json格式输出
-    pretty: false, // 关闭开发环境美化输出
-    colors: true, // 仅当json：false时启用颜色输出可用
-    includeCaller: false, // 日志不包含调用者
-});
+import { upsertVectors } from '../lib/vector/postgres';
+import { createWorker, getQueueConnection } from './queue';
+const logger = createLogger(
+    {
+        type: 'worker',
+    },
+    {
+        json: false, // 开启json格式输出
+        pretty: false, // 关闭开发环境美化输出
+        colors: true, // 仅当json：false时启用颜色输出可用
+        includeCaller: false, // 日志不包含调用者
+    }
+);
+
+const connection = getQueueConnection();
+
+async function assertJobCanWriteItem(jobData: any) {
+    const itemId = String(jobData?.id || '');
+    const userId = String(jobData?.userId || '');
+    if (!itemId || !userId) throw new Error('MISSING_JOB_ITEM_OWNER');
+    const allowed = await canWriteDocumentItemForOwner(itemId, { userId });
+    if (!allowed) throw new Error('UNAUTHORIZED_JOB_ITEM');
+    return itemId;
+}
+
 // Pre-translate worker
 const preWorker = createWorker(
     'pretranslate',
     async job => {
-        const { id, text, sourceLanguage, targetLanguage, userId, batchId } = job.data as any;
+        const { id, text, sourceLanguage, targetLanguage, userId, tenantId, batchId } =
+            job.data as any;
         const cancel = await connection.get(`batch.${batchId}.cancel`);
         if (cancel === '1') throw new Error('JOB_CANCELED');
-        const res = await runPreTranslateAction(text, sourceLanguage, targetLanguage, { userId });
+        const res = await runPreTranslateForOwner(text, sourceLanguage, targetLanguage, {
+            userId,
+            tenantId,
+        });
         const translation = res?.translation || '';
         const terms = res?.terms || [];
         const dict = res?.dict || [];
@@ -63,30 +84,33 @@ preWorker.on('completed', async job => {
     try {
         const itemId = (job?.data as any)?.id;
         if (!itemId) return;
+        await assertJobCanWriteItem(job?.data);
         const needs = await fetchDocumentItemNeedsMtReviewByIdDB(itemId);
         const next = needs ? 'MT_REVIEW' : 'QA';
         await updateDocumentItemByIdDB(itemId, { status: next as any } as any);
-    } catch { }
+    } catch {}
 });
 preWorker.on('failed', async (job, err) => {
     logger.error(`[pre] failed job=${job?.id} error=${err?.message || err}`);
     try {
         const batchId = (job?.data as any)?.batchId;
         if (batchId) {
-            await connection.incr(`batch:${batchId}:failed`).catch(() => { });
+            await connection.incr(`batch:${batchId}:failed`).catch(() => {});
             await connection
                 .set(`batch:${batchId}:fail:${job?.id}`, String(err?.message || err))
-                .catch(() => { });
+                .catch(() => {});
         }
         // 标记段状态：ERROR 或 CANCELED
         try {
             const itemId = (job?.data as any)?.id;
-            if (itemId)
+            if (itemId) {
+                await assertJobCanWriteItem(job?.data);
                 await updateDocumentItemByIdDB(itemId, {
                     status: (err?.message === 'JOB_CANCELED' ? 'CANCELED' : 'ERROR') as any,
                 } as any);
-        } catch { }
-    } catch { }
+            }
+        } catch {}
+    } catch {}
 });
 preWorker.on('error', err => {
     logger.error(`[pre] worker error: ${err?.message || err}`);
@@ -96,14 +120,16 @@ preWorker.on('error', err => {
 const qaWorker = createWorker(
     'qa',
     async job => {
-        const { id, sourceText, targetText, targetLanguage, domain, tenantId, batchId } =
+        const { id, sourceText, targetText, targetLanguage, domain, tenantId, userId, batchId } =
             job.data as any;
         const cancel = await connection.get(`qa.${batchId}.cancel`);
         if (cancel === '1') throw new Error('JOB_CANCELED');
-        const res = await runQualityAssureAction(sourceText, targetText, {
-            targetLanguage,
-            domain,
-        });
+        const res = await runQualityAssureForOwner(
+            sourceText,
+            targetText,
+            { userId, tenantId },
+            { targetLanguage, domain }
+        );
         await connection.set(
             `qa.${batchId}.item.${id}`,
             JSON.stringify({
@@ -137,12 +163,12 @@ qaWorker.on('failed', async (job, err) => {
     try {
         const batchId = (job?.data as any)?.batchId;
         if (batchId) {
-            await connection.incr(`qa.${batchId}.failed`).catch(() => { });
+            await connection.incr(`qa.${batchId}.failed`).catch(() => {});
             await connection
                 .set(`qa.${batchId}.fail.${job?.id}`, String((err as Error)?.message || err))
-                .catch(() => { });
+                .catch(() => {});
         }
-    } catch { }
+    } catch {}
 });
 qaWorker.on('error', err => {
     logger.error(`[qa] worker error: ${err?.message || err}`);
@@ -156,12 +182,16 @@ const docTermsWorker = createWorker(
             job.data as any;
         const cancel = batchId ? await connection.get(`docTerms.${batchId}.cancel`) : null;
         if (cancel === '1') throw new Error('JOB_CANCELED');
-        const terms = await extractDocumentTermsAction(text, {
-            prompt,
-            maxTerms,
-            chunkSize,
-            overlap,
-        });
+        const terms = await extractDocumentTermsForOwner(
+            text,
+            { userId, tenantId },
+            {
+                prompt,
+                maxTerms,
+                chunkSize,
+                overlap,
+            }
+        );
         // 术语结果仅返回给上层，由服务层决定是否/如何持久化与应用范围
         if (batchId) {
             await setJSONWithTTL(
@@ -215,32 +245,32 @@ process.on('SIGINT', async () => {
     logger.info('[worker] SIGINT received, shutting down...');
     try {
         await preWorker.close();
-    } catch { }
+    } catch {}
     try {
         await qaWorker.close();
-    } catch { }
+    } catch {}
     try {
         await docTermsWorker.close();
-    } catch { }
+    } catch {}
     try {
         await connection.quit();
-    } catch { }
+    } catch {}
     process.exit(0);
 });
 process.on('SIGTERM', async () => {
     logger.info('[worker] SIGTERM received, shutting down...');
     try {
         await preWorker.close();
-    } catch { }
+    } catch {}
     try {
         await qaWorker.close();
-    } catch { }
+    } catch {}
     try {
         await docTermsWorker.close();
-    } catch { }
+    } catch {}
     try {
         await connection.quit();
-    } catch { }
+    } catch {}
     process.exit(0);
 });
 
@@ -252,6 +282,16 @@ const memoryImportWorker = createWorker(
     async job => {
         const { fileKey, fileType, memoryId, sourceLang, targetLang, tenantId, userId } =
             job.data as any;
+        if (!userId || !memoryId) throw new Error('MISSING_OWNER_OR_MEMORY');
+        if (!String(fileKey || '').startsWith(`users/${userId}/uploads/`)) {
+            throw new Error('UNAUTHORIZED_FILE_KEY');
+        }
+        const memory = await (prisma as any).translationMemory.findFirst({
+            where: { id: memoryId, userId },
+            select: { id: true },
+        });
+        if (!memory) throw new Error('UNAUTHORIZED_MEMORY');
+
         const minio = new MinioClient({
             endPoint: process.env.MINIO_ENDPOINT || '127.0.0.1',
             port: Number(process.env.MINIO_PORT || 9000),
@@ -284,10 +324,10 @@ const memoryImportWorker = createWorker(
                 const pick = (pref?: string) =>
                     pref
                         ? tuv.find((x: any) =>
-                            String(x?.['@_xml:lang'] || x?.['@_lang'] || '')
-                                .toLowerCase()
-                                .startsWith(pref.toLowerCase())
-                        )
+                              String(x?.['@_xml:lang'] || x?.['@_lang'] || '')
+                                  .toLowerCase()
+                                  .startsWith(pref.toLowerCase())
+                          )
                         : undefined;
                 let s = pick(sourceLang);
                 let t = pick(targetLang);
@@ -357,7 +397,25 @@ const memoryImportWorker = createWorker(
             return;
         }
 
-        // embed in batches and upsert to milvus
+        // write rows to DB first so vector ids match TranslationMemoryEntry ids
+        const created = await prisma.$transaction(
+            pairs.map(p =>
+                (prisma as any).translationMemoryEntry.create({
+                    data: {
+                        memoryId,
+                        sourceText: p.source,
+                        targetText: p.target,
+                        notes: p.notes ? p.notes : null,
+                        sourceLang,
+                        targetLang,
+                        createdById: userId,
+                        updatedById: userId,
+                    },
+                })
+            )
+        );
+
+        // embed in batches and upsert to Postgres pgvector
         const texts = pairs.map(p => `${p.source}\n${p.target}`);
         let vectors: number[][] = [];
         try {
@@ -369,7 +427,7 @@ const memoryImportWorker = createWorker(
                 logger.info(
                     `[WORKER_IMPORT] 处理第 ${i + 1}-${Math.min(i + batch.length, texts.length)} 条记录...`
                 );
-                const batchVectors = await embedBatchAction(batch);
+                const batchVectors = await embedBatchForOwner(batch, { userId, tenantId });
                 vectors.push(...batchVectors);
             }
 
@@ -381,45 +439,37 @@ const memoryImportWorker = createWorker(
         }
 
         const collection = 'TranslationMemory';
-        const points = pairs.map((p, i) => ({
-            id: `${memoryId}.${i}.${Date.now()}`,
-            text: `${p.source}\n${p.target}`,
+        const points = created.map((row: any, i: number) => ({
+            id: row.id,
+            text: `${row.sourceText}\n${row.targetText}`,
             vector: vectors[i] || [],
-            meta: { memoryId, sourceLang, targetLang },
+            meta: {
+                memoryId: row.memoryId,
+                sourceLang,
+                targetLang,
+                tenantId: tenantId || null,
+                userId,
+            },
         }));
-        const valid = points.filter(p => Array.isArray(p.vector) && p.vector.length);
+        const valid = points.filter(
+            (p: { vector: number[] }) => Array.isArray(p.vector) && p.vector.length
+        );
 
         logger.info(
-            `[WORKER_IMPORT] 准备写入 Milvus: ${valid.length}/${points.length} 条记录有有效向量`
+            `[WORKER_IMPORT] 准备写入 Postgres 向量索引: ${valid.length}/${points.length} 条记录有有效向量`
         );
 
         if (valid.length) {
             try {
                 await upsertVectors({ collection, points: valid });
-                logger.info(`[WORKER_IMPORT] 成功写入 Milvus: ${valid.length} 条记录`);
+                logger.info(`[WORKER_IMPORT] 成功写入 Postgres 向量索引: ${valid.length} 条记录`);
             } catch (error) {
-                logger.error(`[WORKER_IMPORT] Milvus 写入失败:`, error);
+                logger.error(`[WORKER_IMPORT] Postgres 向量索引写入失败:`, error);
                 throw error;
             }
         } else {
-            logger.warn(`[WORKER_IMPORT] 警告: 没有有效向量可写入 Milvus`);
+            logger.warn(`[WORKER_IMPORT] 警告: 没有有效向量可写入 Postgres 向量索引`);
         }
-
-        // write rows to DB
-        await prisma.$transaction(
-            pairs.map(p =>
-                (prisma as any).memoryEntry.create({
-                    data: {
-                        memoryId,
-                        sourceText: p.source,
-                        targetText: p.target,
-                        notes: p.notes ? p.notes : null,
-                        sourceLang,
-                        targetLang,
-                    },
-                })
-            )
-        );
         logger.info(`[WORKER_IMPORT] 导入成功，共写入 ${pairs.length} 条记忆数据`);
     },
     4

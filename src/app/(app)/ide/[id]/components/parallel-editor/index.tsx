@@ -125,9 +125,7 @@ export default function ParallelEditor({ className }: { className?: string }) {
             logger.debug('提取的术语:', termStrings);
             // 可按需使用已启用术语映射：preTermEnabled
             const termCandidates = termStrings.slice(0, 50).map(t => ({ term: t, score: 1.0 }));
-            const dict = await lookupDictionaryAction(termCandidates, {
-                userId: userId,
-            });
+            const dict = await lookupDictionaryAction(termCandidates);
 
             // 完成工作流事件: 词典查询
             setPreStep('term-embed-trans');
@@ -359,24 +357,19 @@ export default function ParallelEditor({ className }: { className?: string }) {
             // 1. 语篇查询
             setPeStep('discourse-query');
             logSystem('开始语篇查询');
-            const queryResult = await queryDiscourseAction(sourceText, {
-                tenantId: params?.id as string,
-            });
+            const queryResult = await queryDiscourseAction(sourceText);
 
             // 2. 语篇评估
             setPeStep('discourse-eval');
             logSystem('开始语篇评估');
             const evaluation = await evaluateDiscourseAction(sourceText, targetText, {
                 references: queryResult.hits,
-                tenantId: params?.id as string,
             });
 
             // 3. 语篇嵌入改写
             setPeStep('discourse-embed-trans');
             logSystem('开始语篇嵌入改写');
-            const rewrite = await embedDiscourseAction(sourceText, targetText, queryResult.hits, {
-                tenantId: params?.id as string,
-            });
+            const rewrite = await embedDiscourseAction(sourceText, targetText, queryResult.hits);
 
             // 更新状态
             setPosteditOutputs({

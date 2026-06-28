@@ -100,7 +100,7 @@ export default function DictionariesPage() {
 
             // 私有词库（需登录）
             if (session?.user?.id) {
-                const privateResult = await fetchDictionariesAction('private', session.user.id);
+                const privateResult = await fetchDictionariesAction('private');
                 if (privateResult.success && privateResult.data) {
                     const privateDicts: UIDictionary[] = privateResult.data.map((dict: any) => ({
                         id: dict.id,

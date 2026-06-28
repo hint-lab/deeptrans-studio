@@ -219,15 +219,14 @@ export function ActionSection() {
                     const termCandidates = termList
                         .slice(0, 50)
                         .map(term => ({ term, score: 1.0 }));
-                    dict = await lookupDictionaryAction(termCandidates, { userId });
+                    dict = await lookupDictionaryAction(termCandidates);
                 } else {
                     const tokens = currentText
                         .split(/[\s,.;，。；、]+/)
                         .filter(Boolean)
                         .slice(0, 10);
                     dict = await lookupDictionaryAction(
-                        tokens.map((x: any) => ({ term: x, score: 1.0 })),
-                        { userId }
+                        tokens.map((x: any) => ({ term: x, score: 1.0 }))
                     );
                 }
                 setPreOutputs({ dict });

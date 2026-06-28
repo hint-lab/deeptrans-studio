@@ -71,7 +71,7 @@
             },
             {
                 "name": "Translation Memory",
-                "description": "Translation memory import/export, Milvus vector retrieval, and visualization",
+                "description": "Translation memory import/export, pgvector retrieval, and visualization",
                 "features": [
                     {
                         "title": "Memory Management",

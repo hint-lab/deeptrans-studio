@@ -71,7 +71,7 @@
             },
             {
                 "name": "翻译记忆库",
-                "description": "翻译记忆导入导出、Milvus 向量检索及可视化",
+                "description": "翻译记忆导入导出、pgvector 向量检索及可视化",
                 "features": [
                     {
                         "title": "记忆库管理",

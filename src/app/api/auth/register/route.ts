@@ -1,5 +1,6 @@
 import { createLogger } from '@/lib/logger';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '@/lib/db';
+import { ensureUserTenant } from '@/lib/user-tenant';
 import { hash } from 'bcryptjs';
 import { NextResponse } from 'next/server';
 const logger = createLogger({
@@ -10,8 +11,6 @@ const logger = createLogger({
     colors: true, // 仅当json：false时启用颜色输出可用
     includeCaller: false, // 日志不包含调用者
 });
-const prisma = new PrismaClient();
-
 export async function POST(request: Request) {
     try {
         const body = await request.json();
@@ -41,12 +40,14 @@ export async function POST(request: Request) {
                 name: name || email.split('@')[0],
             },
         });
+        const tenantId = await ensureUserTenant(user.id);
 
         return NextResponse.json({
             user: {
                 id: user.id,
                 email: user.email,
                 name: user.name,
+                tenantId,
             },
         });
     } catch (error) {

@@ -23,7 +23,7 @@
                     "description": "缓存和任务队列，用于存储临时数据和 BullMQ 任务队列"
                 },
                 {
-                    "name": "Milvus",
+                    "name": "pgvector",
                     "description": "向量数据库，用于翻译记忆的向量检索和语义搜索"
                 },
                 {

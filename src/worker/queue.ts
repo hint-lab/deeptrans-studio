@@ -6,17 +6,24 @@ if (typeof window !== 'undefined') {
 }
 
 const redisUrl = process.env.REDIS_URL ?? 'redis://127.0.0.1:6379';
-export const connection = new IORedis(redisUrl, {
-    // BullMQ 要求：阻塞命令需将 maxRetriesPerRequest 设为 null
-    maxRetriesPerRequest: null,
-    // 避免就绪检查导致的延时/错误
-    enableReadyCheck: false,
-});
+let connection: IORedis | null = null;
+
+export function getQueueConnection() {
+    if (!connection) {
+        connection = new IORedis(redisUrl, {
+            // BullMQ 要求：阻塞命令需将 maxRetriesPerRequest 设为 null
+            maxRetriesPerRequest: null,
+            // 避免就绪检查导致的延时/错误
+            enableReadyCheck: false,
+        });
+    }
+    return connection;
+}
 
 export const queues: Record<string, Queue> = {};
 export function getQueue(name: string) {
     if (!queues[name]) {
-        queues[name] = new Queue(name, { connection });
+        queues[name] = new Queue(name, { connection: getQueueConnection() });
     }
     return queues[name];
 }
@@ -26,7 +33,7 @@ export function createWorker(
     processor: (job: Job) => Promise<void>,
     concurrency = 10
 ) {
-    return new Worker(name, processor, { connection, concurrency });
+    return new Worker(name, processor, { connection: getQueueConnection(), concurrency });
 }
 
 export const defaultJobOpts: JobsOptions = {

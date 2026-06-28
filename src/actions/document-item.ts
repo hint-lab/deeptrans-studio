@@ -1,7 +1,7 @@
 'use server';
 
-import { findDocumentByIdDB } from '@/db/document';
 import { findDocumentItemByIdDB, updateDocumentItemByIdDB } from '@/db/documentItem';
+import { requireOwnedDocumentItem, requireWritableDocumentItem } from '@/lib/guards';
 import { createLogger } from '@/lib/logger';
 import type { TranslationStage } from '@prisma/client';
 const logger = createLogger({
@@ -36,6 +36,7 @@ type Metadata = {
 // 更新文档项原文
 export async function updateOriginalTextAction(itemId: string, sourceText: string) {
     try {
+        await requireWritableDocumentItem(itemId);
         return await updateDocumentItemByIdDB(itemId, { sourceText });
     } catch (error) {
         logger.error('更新原文失败:', error);
@@ -44,6 +45,7 @@ export async function updateOriginalTextAction(itemId: string, sourceText: strin
 }
 export async function updateTranslationAction(itemId: string, targetText: string) {
     try {
+        await requireWritableDocumentItem(itemId);
         return await updateDocumentItemByIdDB(itemId, { targetText });
     } catch (error) {
         logger.error('更新译文失败:', error);
@@ -54,6 +56,7 @@ export async function updateTranslationAction(itemId: string, targetText: string
 // 更新文档项状态（Server Action）
 export async function updateDocItemStatusAction(itemId: string, status: TranslationStage | string) {
     try {
+        await requireWritableDocumentItem(itemId);
         const s = status as TranslationStage;
         const updated = await updateDocumentItemByIdDB(itemId, { status: s });
 
@@ -67,6 +70,7 @@ export async function updateDocItemStatusAction(itemId: string, status: Translat
 // 根据内容ID获取详细内容
 export const getContentByIdAction = async (id: string) => {
     try {
+        await requireOwnedDocumentItem(id);
         const documentItem = await findDocumentItemByIdDB(id);
 
         // 确保返回的数据包含预期的字段
@@ -91,9 +95,8 @@ export const getContentByIdAction = async (id: string) => {
 // Server Action: 通过分段ID获取所属文档的云端预览信息
 export async function getDocumentPreviewByItemIdAction(itemId: string) {
     try {
-        const item = await findDocumentItemByIdDB(itemId);
-        if (!item || !item.documentId) return null;
-        const doc = await findDocumentByIdDB(item.documentId);
+        const item = await requireOwnedDocumentItem(itemId);
+        const doc = item.document;
         if (!doc) return null;
         return { documentId: doc.id, url: doc.url, mimeType: doc.mimeType, name: doc.originalName };
     } catch (error) {

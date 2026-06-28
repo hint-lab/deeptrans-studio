@@ -9,6 +9,12 @@ const logger = createLogger({
     colors: true, // 仅当json：false时启用颜色输出可用
     includeCaller: false, // 日志不包含调用者
 });
+function getJwtSecret() {
+    const secret = process.env.JWT_SECRET || process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET;
+    if (!secret) throw new Error('JWT_SECRET or AUTH_SECRET is required');
+    return secret;
+}
+
 interface JWTPayload {
     id: string;
     phone?: string;
@@ -22,8 +28,7 @@ interface JWTPayload {
  * @returns 生成的JWT Token
  */
 export const generateJwtToken = (payload: JWTPayload): string => {
-    const secret = process.env.JWT_SECRET || 'your-secret-key';
-    return jwt.sign(payload, secret, { expiresIn: '1d' });
+    return jwt.sign(payload, getJwtSecret(), { expiresIn: '1d' });
 };
 
 /**
@@ -33,9 +38,7 @@ export const generateJwtToken = (payload: JWTPayload): string => {
  */
 export const verifyJwtToken = (token: string): JWTPayload | null => {
     try {
-        const secret = process.env.JWT_SECRET || 'your-secret-key';
-        logger.debug('JWT验证通过:', secret);
-        return jwt.verify(token, secret) as JWTPayload;
+        return jwt.verify(token, getJwtSecret()) as JWTPayload;
     } catch (error) {
         logger.error('JWT验证失败:', error);
         return null;

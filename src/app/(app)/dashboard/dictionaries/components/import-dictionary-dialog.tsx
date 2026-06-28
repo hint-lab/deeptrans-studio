@@ -137,7 +137,6 @@ export function ImportDictionaryDialog({
                 description: isProject ? '项目共享词库' : '私有项目词库',
                 domain: 'general',
                 visibility: isProject ? 'PROJECT' : 'PRIVATE',
-                userId: isProject ? undefined : userId,
             });
             if (!createRes?.success || !createRes?.data?.id) throw new Error('创建词库失败');
             const dictionaryId = createRes.data.id as string;

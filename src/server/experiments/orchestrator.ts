@@ -1,5 +1,8 @@
 import { runExperimentPipeline } from './pipeline';
 import { ExperimentConfig, ExperimentStatus, ExperimentResult } from '@/server/experiments/types';
+import { createLogger } from '@/lib/logger';
+
+const logger = createLogger({ type: 'server:experiments:orchestrator' });
 
 // 内存存储实验状态（生产环境建议用Redis或数据库）
 const experimentStore = new Map<
@@ -10,10 +13,15 @@ const experimentStore = new Map<
         result?: ExperimentResult;
         startTime: number;
         endTime?: number;
+        userId: string;
+        tenantId?: string | null;
     }
 >();
 
-export async function startExperimentJob(config: ExperimentConfig): Promise<string> {
+export async function startExperimentJob(
+    config: ExperimentConfig,
+    owner: { userId: string; tenantId?: string | null }
+): Promise<string> {
     const jobId = `exp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
     // 初始化实验状态
@@ -27,6 +35,8 @@ export async function startExperimentJob(config: ExperimentConfig): Promise<stri
         },
         config,
         startTime: Date.now(),
+        userId: owner.userId,
+        tenantId: owner.tenantId || null,
     });
 
     // 异步执行实验
@@ -34,7 +44,7 @@ export async function startExperimentJob(config: ExperimentConfig): Promise<stri
         try {
             await runExperimentPipeline(jobId, config);
         } catch (error) {
-            console.error(`Experiment ${jobId} failed:`, error);
+            logger.error('Experiment failed', { jobId, error });
             const experiment = experimentStore.get(jobId);
             if (experiment) {
                 experiment.status = {
@@ -49,20 +59,40 @@ export async function startExperimentJob(config: ExperimentConfig): Promise<stri
     return jobId;
 }
 
-export async function getExperimentStatus(jobId: string): Promise<ExperimentStatus | null> {
+function canAccessExperiment(
+    experiment: { userId: string; tenantId?: string | null } | undefined,
+    owner: { userId: string; tenantId?: string | null }
+) {
+    if (!experiment) return false;
+    return experiment.userId === owner.userId;
+}
+
+export async function getExperimentStatus(
+    jobId: string,
+    owner: { userId: string; tenantId?: string | null }
+): Promise<ExperimentStatus | null> {
     const experiment = experimentStore.get(jobId);
+    if (!canAccessExperiment(experiment, owner)) return null;
     return experiment?.status || null;
 }
 
-export async function getExperimentResult(jobId: string): Promise<ExperimentResult | null> {
+export async function getExperimentResult(
+    jobId: string,
+    owner: { userId: string; tenantId?: string | null }
+): Promise<ExperimentResult | null> {
     const experiment = experimentStore.get(jobId);
+    if (!canAccessExperiment(experiment, owner)) return null;
     return experiment?.result || null;
 }
 
-export async function cancelExperiment(jobId: string): Promise<boolean> {
+export async function cancelExperiment(
+    jobId: string,
+    owner: { userId: string; tenantId?: string | null }
+): Promise<boolean> {
     const experiment = experimentStore.get(jobId);
     if (
         !experiment ||
+        !canAccessExperiment(experiment, owner) ||
         experiment.status.status === 'completed' ||
         experiment.status.status === 'failed'
     ) {

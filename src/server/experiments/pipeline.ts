@@ -1,5 +1,8 @@
 import { ExperimentConfig, ExperimentResult } from '@/server/experiments/types';
 import { updateExperimentStatus, setExperimentResult } from './orchestrator';
+import { createLogger } from '@/lib/logger';
+
+const logger = createLogger({ type: 'server:experiments:pipeline' });
 
 export async function runExperimentPipeline(
     jobId: string,
@@ -80,7 +83,7 @@ export async function runExperimentPipeline(
         // 完成实验
         setExperimentResult(jobId, result);
     } catch (error) {
-        console.error(`Experiment ${jobId} failed:`, error);
+        logger.error('Experiment failed', { jobId, error });
         updateExperimentStatus(jobId, {
             status: 'failed',
             message: error instanceof Error ? error.message : 'Unknown error',

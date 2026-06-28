@@ -26,7 +26,11 @@ export async function chatText(
     options?: { model?: string; temperature?: number; maxTokens?: number }
 ): Promise<string> {
     const openai = getOpenAI();
-    logger.debug('使用的模型:', options?.model || getModelName(), '发送的Prompt:', JSON.stringify(messages, null, 2));
+    logger.debug('LLM request', {
+        model: options?.model || getModelName(),
+        messageCount: messages.length,
+        inputChars: messages.reduce((sum, msg) => sum + msg.content.length, 0),
+    });
     const result = await generateText({
         model: openai.chat(options?.model || getModelName()),
         messages,

@@ -52,4 +52,4 @@ docker run -d \
   -e POSTGRES_PASSWORD="$DB_PASSWORD" \
   -e POSTGRES_DB=deeptrans \
   -p "$DB_PORT":5432 \
-  postgres:13 && echo "Database container '$DB_CONTAINER_NAME' was successfully created"
+  pgvector/pgvector:0.8.3-pg18 && echo "Database container '$DB_CONTAINER_NAME' was successfully created"

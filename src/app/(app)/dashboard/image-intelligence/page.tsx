@@ -2,7 +2,7 @@
 import { fetchDictionariesAction, fetchDictionaryEntriesAction } from '@/actions/dictionary';
 import { runPreTranslateAction } from '@/actions/pre-translate';
 import { fetchTextFromImg } from '@/actions/translate-image';
-import { FileUpload } from '@/components/file-upload';
+import { FileUpload, IMAGE_ACCEPTED_FILE_TYPES } from '@/components/file-upload';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -193,16 +193,12 @@ export default function ImageIntelligencePage() {
             const translationParams = {
                 sourceText: combinedText || '',
                 sourceLanguage: sourceLanguage,
-                targetLanguage: targetLanguage,
-                options: {
-                    userId: session.user.id
-                }
+                targetLanguage: targetLanguage
             };
             // 调用翻译API
             const res = await runPreTranslateAction(translationParams.sourceText,
                 translationParams.sourceLanguage,
-                translationParams.targetLanguage,
-                translationParams.options);
+                translationParams.targetLanguage);
             const result = {
                 success: true,
                 data: {
@@ -252,7 +248,7 @@ export default function ImageIntelligencePage() {
                 const [pubRes, privRes] = await Promise.all([
                     fetchDictionariesAction('public'),
                     session?.user?.id
-                        ? fetchDictionariesAction('private', session.user.id)
+                        ? fetchDictionariesAction('private')
                         : Promise.resolve({ success: true, data: [] as DictionarySummary[] }),
                 ]);
                 if (pubRes.success && pubRes.data) {
@@ -733,6 +729,7 @@ export default function ImageIntelligencePage() {
                                 onUploadComplete={handleUploadComplete}
                                 projectName={t('temporaryImage')}
                                 elementName="Dashboard.ImageTranslate"
+                                acceptedFileTypes={IMAGE_ACCEPTED_FILE_TYPES}
                             />
                             {uploadedFile && (
                                 <div className="mt-4 rounded-lg border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-900/20">

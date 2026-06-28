@@ -23,8 +23,6 @@ export class DictionaryTool {
     async lookup(terms: TermCandidate[], options?: any): Promise<DictEntry[]> {
         logger.debug('DictionaryTool.lookup 开始:', {
             termsCount: terms?.length,
-            terms: terms?.map(t => t.term).slice(0, 10),
-            options,
             apiBase: this.apiBase,
         });
 
@@ -36,11 +34,38 @@ export class DictionaryTool {
         const isServer = typeof window === 'undefined';
         logger.debug('Dictionary lookup 环境:', { isServer, apiBase: this.apiBase });
 
-        // 服务端必须使用绝对 URL；客户端可用相对 URL
-        if (isServer && !this.apiBase) {
-            logger.warn('Dictionary lookup: Missing DICTIONARY_API_URL on server');
-            return [];
+        if (isServer) {
+            const { queryDictionaryEntriesExactWithOwner } = await import('@/server/dictionary');
+            const unique: Record<string, DictEntry> = {};
+            for (const candidate of terms) {
+                const term = String(candidate.term || '').trim();
+                if (!term) continue;
+                if (!options?.owner) continue;
+                const result = await queryDictionaryEntriesExactWithOwner(term, options.owner, {
+                    limit: 20,
+                });
+                const rows = result?.success && Array.isArray(result.data) ? result.data : [];
+                for (const item of rows as any[]) {
+                    const entry: DictEntry = {
+                        term: item.term ?? item.sourceText ?? '',
+                        translation: item.translation ?? item.targetText ?? '',
+                        notes: item.notes ?? undefined,
+                        source: item.source ?? undefined,
+                        dictionaryId: item.dictionaryId ?? undefined,
+                        id: item.id ?? undefined,
+                    };
+                    if (!entry.term) continue;
+                    unique[`${entry.term}::${entry.translation}`] = entry;
+                }
+            }
+            const results = Object.values(unique);
+            logger.debug('Dictionary lookup: Found entries via server service', {
+                resultCount: results.length,
+            });
+            return results;
         }
+
+        // 服务端必须使用绝对 URL；客户端可用相对 URL
         const baseUrl = this.apiBase || '';
 
         logger.debug(
@@ -58,11 +83,9 @@ export class DictionaryTool {
                     ? new URL('/api/dictionary/lookup', baseUrl)
                     : new URL('/api/dictionary/lookup', 'http://localhost');
                 urlObj.searchParams.set('q', term);
-                if (options?.tenantId) urlObj.searchParams.set('tenantId', options.tenantId ?? '');
-                if (options?.userId) urlObj.searchParams.set('userId', options.userId ?? '');
                 const url = baseUrl ? urlObj.toString() : `${urlObj.pathname}${urlObj.search}`;
 
-                logger.debug(`Dictionary lookup: Querying "${term}" at URL: ${url}`);
+                logger.debug('Dictionary lookup: Querying term', { termLength: term.length });
 
                 const response = await fetch(url, {
                     method: 'GET',
@@ -77,9 +100,8 @@ export class DictionaryTool {
                 }
 
                 const data = await response.json();
-                logger.debug(`Dictionary lookup: Response for "${term}":`, data);
                 const rows = Array.isArray(data?.data) ? data.data : [];
-                logger.debug(`Dictionary lookup: Found ${rows.length} entries for "${term}"`);
+                logger.debug('Dictionary lookup: Found entries for term', { count: rows.length });
 
                 for (const item of rows) {
                     const entry: DictEntry = {

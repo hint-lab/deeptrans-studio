@@ -23,7 +23,7 @@
                     "description": "Cache and task queue for storing temporary data and BullMQ task queues"
                 },
                 {
-                    "name": "Milvus",
+                    "name": "pgvector",
                     "description": "Vector database for vector retrieval and semantic search of translation memories"
                 },
                 {

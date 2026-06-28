@@ -52,6 +52,12 @@ export const deleteTranslationStageRecordByIdDB = async (
     return prisma.translationStageRecord.delete({ where: { id } });
 };
 
+export const deleteTranslationStageRecordsByDocumentItemIdDB = async (
+    documentItemId: string
+): Promise<{ count: number }> => {
+    return prisma.translationStageRecord.deleteMany({ where: { documentItemId } });
+};
+
 export const updateTranslationStageRecordFinishByIdDB = async (
     id: string,
     status: TranslationProcessStepStatus = TranslationProcessStepStatus.SUCCESS,

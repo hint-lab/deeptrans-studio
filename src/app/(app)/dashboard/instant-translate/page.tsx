@@ -269,7 +269,7 @@ export default function InstantTranslatePage() {
                 const [pubRes, privRes] = await Promise.all([
                     fetchDictionariesAction('public'),
                     session?.user?.id
-                        ? fetchDictionariesAction('private', session.user.id)
+                        ? fetchDictionariesAction('private')
                         : Promise.resolve({ success: true, data: [] as DictionarySummary[] }),
                 ]);
 

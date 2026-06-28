@@ -2,6 +2,7 @@
 import { findAccountByUserIdDB } from '@/db/account';
 import { prisma } from '@/lib/db';
 import { createLogger } from '@/lib/logger';
+import { ensureUserTenant } from '@/lib/user-tenant';
 import { PrismaAdapter } from '@auth/prisma-adapter';
 import { type PrismaClient, type UserRole } from '@prisma/client';
 import NextAuth from 'next-auth';
@@ -11,7 +12,6 @@ import Github from 'next-auth/providers/github';
 import Google from 'next-auth/providers/google';
 
 import { findUserByEmailDB, findUserByIdDB, updateUserByIdDB } from './db/user';
-import { getVerificationCodeByEmail, getVerificationCodeByPhone } from './db/verificationCode';
 // 直接将配置内联在此文件中，不再依赖外部 authConfig
 const MAX_AGE = Number(process.env.AUTH_SESSION_MAX_AGE ?? 3600);
 const logger = createLogger({
@@ -53,6 +53,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                     }
                 } else {
                     if (email) {
+                        const { getVerificationCodeByEmail } = await import('./db/verificationCode');
                         const record = await getVerificationCodeByEmail(email as string);
                         if (!record || record.code !== code) {
                             return null;
@@ -61,6 +62,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                         return user || null;
                     }
                     if (phone) {
+                        const { getVerificationCodeByPhone } = await import('./db/verificationCode');
                         const record = await getVerificationCodeByPhone(phone as string);
                         if (!record || record.code !== code) {
                             return null;
@@ -85,12 +87,17 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     },
 
     events: {
-        signIn({ user, account, profile, isNewUser }) {
-            logger.info('User: ', user, 'Account: ', account, 'Profile: ', profile, 'isNewUser: ', isNewUser);
+        signIn({ user, account, isNewUser }) {
+            logger.info('User signed in', {
+                userId: user.id,
+                provider: account?.provider,
+                isNewUser,
+            });
         },
 
         async linkAccount({ user }) {
             if (user.id) {
+                await ensureUserTenant(user.id);
                 await updateUserByIdDB(user.id, {
                     emailVerified: new Date(),
                 });
@@ -100,24 +107,25 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
     callbacks: {
         async signIn({ user, account }) {
+            if (user.id) await ensureUserTenant(user.id);
             if (account?.provider !== 'credentials') {
                 return true;
             }
             return true;
         },
 
-        async jwt({ token, account, user, profile, trigger, session }) {
-            if (account) {
-                token.accessToken = account.access_token;
-                token.id = profile?.id;
-                logger.debug('JWT token:', token);
-            }
+        async jwt({ token, user, trigger, session }) {
             // 用户首次登录时，将用户信息存入 token
             if (user) {
                 token.id = user.id;
                 token.name = user.name;
                 token.email = user.email;
                 token.isOAuth = !!(await findAccountByUserIdDB(token.id as string));
+            }
+            if (token.id) {
+                const freshUser = await findUserByIdDB(token.id as string);
+                token.role = freshUser?.role;
+                token.tenantId = freshUser?.tenantId;
             }
             token.expires = Math.floor(Date.now() / 1000) + MAX_AGE; // ← 统一变量
             // 当用户更新个人信息时，刷新 token
@@ -135,9 +143,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         async session({ session, token }) {
             if (token.sub) session.user.id = token.sub;
             if (token.role) session.user.role = token.role as UserRole;
+            if (token.tenantId) (session.user as any).tenantId = token.tenantId as string;
             if (token.name) session.user.name = token.name;
             if (token.email) session.user.email = token.email as string;
-            //session.accessToken = token.accessToken as string;
             /* 统一过期字段 */
             (session as any).expires = token.expires
                 ? new Date((token.expires as number) * 1000).toLocaleString()

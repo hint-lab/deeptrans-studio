@@ -1,12 +1,12 @@
 import { BaseAgent, type AgentRunContext } from '../base';
 import { dictionaryTool } from '../tools/dictionary';
 import { DictEntry, TermCandidate } from '@/types/terms';
+import type { AuthContext } from '@/lib/guards';
 
 export class DictLookupAgent extends BaseAgent<
     {
         terms: TermCandidate[];
-        tenantId?: string;
-        userId?: string;
+        owner?: AuthContext;
         locale?: string;
         domain?: string;
     },
@@ -23,12 +23,11 @@ export class DictLookupAgent extends BaseAgent<
     }
 
     async execute(
-        input: { terms: TermCandidate[]; tenantId?: string; userId?: string; locale?: string },
+        input: { terms: TermCandidate[]; owner?: AuthContext; locale?: string },
         _ctx?: AgentRunContext
     ): Promise<DictEntry[]> {
         return dictionaryTool.lookup(input.terms, {
-            tenantId: input.tenantId,
-            userId: input.userId,
+            owner: input.owner,
         });
     }
 }

@@ -39,7 +39,7 @@ export async function extractDocxFromUrl(
         } else {
             const res = await fetch(url, { signal: controller.signal });
             if (!res.ok) {
-                return { text: '', contentType: res.headers.get('content-type') || '' };
+                throw new Error(`DOCX fetch failed: ${res.status} ${res.statusText}`);
             }
             contentType = (res.headers.get('content-type') || '').toLowerCase();
             const arrayBuf = await res.arrayBuffer();
@@ -56,10 +56,12 @@ export async function extractDocxFromUrl(
                 const { text: _t, html: _h, ...rest } = parsed as any;
                 structured = rest;
             }
-        } catch {}
+        } catch (err) {
+            throw new Error(`DOCX structure parse failed: ${(err as Error)?.message || err}`);
+        }
         return { text, html, contentType, structured };
-    } catch {
-        return { text: '', contentType: '' };
+    } catch (err) {
+        throw new Error(`DOCX parse failed: ${(err as Error)?.message || err}`);
     } finally {
         clearTimeout(timer);
     }

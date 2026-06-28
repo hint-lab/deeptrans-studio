@@ -67,7 +67,6 @@ export function CreateDictionaryDialog({
                 description: formData.description,
                 domain: formData.domain,
                 visibility: 'PRIVATE',
-                userId: userId,
             });
 
             if (result.success && result.data) {

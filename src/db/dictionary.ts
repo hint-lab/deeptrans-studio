@@ -155,7 +155,7 @@ export const deleteDictionaryByIdDB = async (id: string): Promise<Dictionary | n
 
 export const findOrCreateDictionaryDB = async (
     projectId: string,
-    opts?: { scope?: 'PROJECT' | 'PRIVATE'; userId?: string }
+    opts?: { scope?: 'PROJECT' | 'PRIVATE'; userId?: string; tenantId?: string }
 ) => {
     const scope = (opts?.scope || 'PROJECT') as 'PROJECT' | 'PRIVATE';
 
@@ -176,6 +176,8 @@ export const findOrCreateDictionaryDB = async (
     // 2. 直接为项目创建专属词典
     let projectName = '';
     let projectDomain = 'general';
+    let projectTenantId: string | null = null;
+    let projectUserId: string | null = null;
 
     try {
         const project = await prisma.project.findUnique({
@@ -183,12 +185,16 @@ export const findOrCreateDictionaryDB = async (
             select: {
                 name: true,
                 domain: true,
+                tenantId: true,
+                userId: true,
             },
         });
 
         if (project) {
             projectName = project.name?.trim() || '';
             projectDomain = project.domain || 'general';
+            projectTenantId = project.tenantId;
+            projectUserId = project.userId;
         }
     } catch (error) {
         logger.error('获取项目信息失败:', error);
@@ -205,10 +211,11 @@ export const findOrCreateDictionaryDB = async (
         description: `项目 ${projectName || projectId} 的专属术语词典`,
         domain: projectDomain, // 使用项目的领域
         visibility: scope as any,
+        tenantId: opts?.tenantId || projectTenantId || undefined,
     };
 
-    if (scope === 'PRIVATE' && opts?.userId) {
-        data.userId = opts.userId;
+    if (opts?.userId || projectUserId) {
+        data.userId = opts?.userId || projectUserId || undefined;
     }
 
     try {

@@ -9,47 +9,47 @@ datasource db {
 }
 
 model User {
-  id            String        @id @default(cuid())
+  id            String    @id @default(cuid())
   name          String?
-  email         String?       @unique
+  email         String?   @unique
   emailVerified DateTime?
   avatar        String?
   password      String?
-  role          UserRole      @default(USER)
+  role          UserRole  @default(USER)
   tenantId      String?
-  tenant        Tenant?       @relation(fields: [tenantId], references: [id], onDelete: SetNull)
-  image String? @db.VarChar(500) 
+  tenant        Tenant?   @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  image         String?   @db.VarChar(500)
   accounts      Account[]
 
   // Projects & Documents
-  projects      Project[]     @relation("ProjectCreatedBy")
-  documents     Document[]    @relation("DocumentCreatedBy")
+  projects      Project[]      @relation("ProjectCreatedBy")
+  documents     Document[]     @relation("DocumentCreatedBy")
   documentItems DocumentItem[] @relation("DocumentItemCreatedBy")
 
   // Lexical Resources
-  dictionaries  Dictionary[]  @relation("DictionaryCreatedBy")
+  dictionaries             Dictionary[]      @relation("DictionaryCreatedBy")
   dictionaryEntriesCreated DictionaryEntry[] @relation("DictionaryEntryCreatedBy")
   dictionaryEntriesUpdated DictionaryEntry[] @relation("DictionaryEntryUpdatedBy")
 
   // Translation Memory
-  translationMemories   TranslationMemory[]      @relation("TranslationMemoryCreatedBy")
-  translationMemoriesUpdated TranslationMemory[] @relation("TranslationMemoryUpdatedBy")
-  memoryEntriesCreated  TranslationMemoryEntry[] @relation("MemoryEntryCreatedBy")
-  memoryEntriesUpdated  TranslationMemoryEntry[] @relation("MemoryEntryUpdatedBy")
+  translationMemories        TranslationMemory[]      @relation("TranslationMemoryCreatedBy")
+  translationMemoriesUpdated TranslationMemory[]      @relation("TranslationMemoryUpdatedBy")
+  memoryEntriesCreated       TranslationMemoryEntry[] @relation("MemoryEntryCreatedBy")
+  memoryEntriesUpdated       TranslationMemoryEntry[] @relation("MemoryEntryUpdatedBy")
 
   // Timeline
-  translationStageRecords TranslationStageRecord[] @relation("TranslationStageRecordCreatedBy") 
+  translationStageRecords TranslationStageRecord[] @relation("TranslationStageRecordCreatedBy")
 
   @@index([email])
   @@index([tenantId])
 }
 
 model Tenant {
-  id          String              @id @default(cuid())
+  id          String   @id @default(cuid())
   name        String
   description String?
-  createdAt   DateTime            @default(now())
-  updatedAt   DateTime            @updatedAt
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   users               User[]
   projects            Project[]
@@ -73,13 +73,13 @@ model Account {
   scope             String?
   session_state     String?
 
-  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
 }
 
 model Project {
-  id             String     @id @default(cuid())
+  id             String   @id @default(cuid())
   name           String
   domain         String
   sourceLanguage String
@@ -88,10 +88,10 @@ model Project {
   tenantId       String?
   userId         String?
 
-  tenant         Tenant?    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  user           User?      @relation("ProjectCreatedBy", fields: [userId], references: [id], onDelete: Cascade)
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User?   @relation("ProjectCreatedBy", fields: [userId], references: [id], onDelete: Cascade)
 
-  documents      Document[]
+  documents           Document[]
   projectDictionaries ProjectDictionary[]
   projectMemories     ProjectMemory[]
 
@@ -100,20 +100,20 @@ model Project {
 }
 
 model Document {
-  id            String      @id @default(cuid())
-  name          String
-  originalName  String
-  url           String
-  mimeType      String
-  size          Int
-  projectId     String
-  uploadedAt    DateTime    @default(now())
-  status        DocumentStatus @default(WAITING)
-  userId        String? 
-  structured    Json?
+  id           String         @id @default(cuid())
+  name         String
+  originalName String
+  url          String
+  mimeType     String
+  size         Int
+  projectId    String
+  uploadedAt   DateTime       @default(now())
+  status       DocumentStatus @default(WAITING)
+  userId       String?
+  structured   Json?
 
-  project       Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  user          User?       @relation("DocumentCreatedBy", fields: [userId], references: [id], onDelete: SetNull)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User?   @relation("DocumentCreatedBy", fields: [userId], references: [id], onDelete: SetNull)
 
   documentItems DocumentItem[] @relation("DocumentBelongTo")
 
@@ -122,30 +122,30 @@ model Document {
 }
 
 model DocumentItem {
-  id           String         @id @default(cuid())
-  documentId   String
-  order        Int
-  sourceText   String
-  targetText   String?
-  status       TranslationStage  @default(NOT_STARTED)
-  type         String         @default("TEXT")
-  metadata     Json?
-  preTranslateTerms    Json?
-  preTranslateDict     Json?
-  preTranslateEmbedded Json?
-  qualityAssureBiTerm  Json?
-  qualityAssureSyntax  Json?
+  id                          String           @id @default(cuid())
+  documentId                  String
+  order                       Int
+  sourceText                  String
+  targetText                  String?
+  status                      TranslationStage @default(NOT_STARTED)
+  type                        String           @default("TEXT")
+  metadata                    Json?
+  preTranslateTerms           Json?
+  preTranslateDict            Json?
+  preTranslateEmbedded        Json?
+  qualityAssureBiTerm         Json?
+  qualityAssureSyntax         Json?
   qualityAssureSyntaxEmbedded Json?
-  postEditDiscourse   Json?
-  postEditEmbedded    Json?
-  userId       String?
-  needsReview  Boolean        @default(false)
-  locked       Boolean        @default(false)
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
+  postEditDiscourse           Json?
+  postEditEmbedded            Json?
+  userId                      String?
+  needsReview                 Boolean          @default(false)
+  locked                      Boolean          @default(false)
+  createdAt                   DateTime         @default(now())
+  updatedAt                   DateTime         @updatedAt
 
-  document     Document       @relation("DocumentBelongTo", fields: [documentId], references: [id], onDelete: Cascade)
-  user         User?          @relation("DocumentItemCreatedBy", fields: [userId], references: [id], onDelete: SetNull)
+  document Document @relation("DocumentBelongTo", fields: [documentId], references: [id], onDelete: Cascade)
+  user     User?    @relation("DocumentItemCreatedBy", fields: [userId], references: [id], onDelete: SetNull)
 
   translationStageTimelines TranslationStageRecord[] @relation("TranslationStageRecordDocumentItem")
 
@@ -153,20 +153,20 @@ model DocumentItem {
 }
 
 model Dictionary {
-  id          String       @id @default(cuid())
+  id          String               @id @default(cuid())
   name        String
   description String?
   domain      String
-  visibility  DictionaryVisibility   @default(PRIVATE)
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  visibility  DictionaryVisibility @default(PRIVATE)
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
   tenantId    String?
   userId      String?
 
-  tenant      Tenant?      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  user        User?        @relation("DictionaryCreatedBy", fields: [userId], references: [id], onDelete: SetNull)
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User?   @relation("DictionaryCreatedBy", fields: [userId], references: [id], onDelete: SetNull)
 
-  entries     DictionaryEntry[]
+  entries         DictionaryEntry[]
   projectBindings ProjectDictionary[]
 
   @@index([userId])
@@ -175,45 +175,45 @@ model Dictionary {
 }
 
 model DictionaryEntry {
-  id           String     @id @default(cuid())
+  id           String   @id @default(cuid())
   sourceText   String
   targetText   String
   explanation  String?
   context      String?
   notes        String?
   origin       String?
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
   createdById  String?
   updatedById  String?
   dictionaryId String
-  enabled      Boolean    @default(true)
+  enabled      Boolean  @default(true)
 
-  dictionary   Dictionary @relation(fields: [dictionaryId], references: [id], onDelete: Cascade)
-  createdBy    User?      @relation("DictionaryEntryCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  updatedBy    User?      @relation("DictionaryEntryUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  dictionary Dictionary @relation(fields: [dictionaryId], references: [id], onDelete: Cascade)
+  createdBy  User?      @relation("DictionaryEntryCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy  User?      @relation("DictionaryEntryUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
 
   @@index([dictionaryId])
   @@index([sourceText])
 }
 
 model TranslationMemory {
-  id          String        @id @default(cuid())
-  name        String        
-  sourceText   String       @default("auto") 
-  targetText   String       @default("auto")
+  id          String   @id @default(cuid())
+  name        String
+  sourceText  String   @default("auto")
+  targetText  String   @default("auto")
   description String?
   tenantId    String?
-  userId      String?      // 创建者
-  updatedById String?      // 最后更新人
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt 
+  userId      String? // 创建者
+  updatedById String? // 最后更新人
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  tenant      Tenant?       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  user        User?         @relation("TranslationMemoryCreatedBy", fields: [userId], references: [id], onDelete: SetNull)
-  updatedBy   User?         @relation("TranslationMemoryUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  tenant    Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user      User?   @relation("TranslationMemoryCreatedBy", fields: [userId], references: [id], onDelete: SetNull)
+  updatedBy User?   @relation("TranslationMemoryUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
 
-  entries     TranslationMemoryEntry[]
+  entries         TranslationMemoryEntry[]
   projectBindings ProjectMemory[]
 
   @@index([userId])
@@ -221,28 +221,29 @@ model TranslationMemory {
 }
 
 model TranslationMemoryEntry {
-  id         String            @id @default(cuid())
-  memoryId   String
-  sourceText String
-  targetText String
-  sourceLang String?
-  targetLang String?
-  notes      String?
-  createdAt  DateTime          @default(now())
-  updatedAt  DateTime          @updatedAt
+  id          String                       @id @default(cuid())
+  memoryId    String
+  sourceText  String
+  targetText  String
+  embedding   Unsupported("vector(1536)")?
+  sourceLang  String?
+  targetLang  String?
+  notes       String?
+  createdAt   DateTime                     @default(now())
+  updatedAt   DateTime                     @updatedAt
   createdById String?
   updatedById String?
 
-  memory     TranslationMemory @relation(fields: [memoryId], references: [id], onDelete: Cascade)
-  createdBy  User?             @relation("MemoryEntryCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  updatedBy  User?             @relation("MemoryEntryUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  memory    TranslationMemory @relation(fields: [memoryId], references: [id], onDelete: Cascade)
+  createdBy User?             @relation("MemoryEntryCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy User?             @relation("MemoryEntryUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
 
   @@index([memoryId])
   @@index([sourceLang, targetLang])
 }
 
 model TranslationStageRecord {
-  id             String             @id @default(cuid())
+  id             String                       @id @default(cuid())
   documentItemId String?
   stepKey        TranslationStage
   actorType      TranslationProcessActorType  @default(AGENT)
@@ -250,13 +251,13 @@ model TranslationStageRecord {
   userId         String?
   model          String?
   status         TranslationProcessStepStatus @default(STARTED)
-  startedAt      DateTime           @default(now())
+  startedAt      DateTime                     @default(now())
   finishedAt     DateTime?
   metadata       Json?
-  createdAt      DateTime           @default(now())
+  createdAt      DateTime                     @default(now())
 
-  documentItem   DocumentItem?      @relation("TranslationStageRecordDocumentItem", fields: [documentItemId], references: [id], onDelete: SetNull)
-  user           User?              @relation("TranslationStageRecordCreatedBy", fields: [userId], references: [id], onDelete: SetNull)
+  documentItem DocumentItem? @relation("TranslationStageRecordDocumentItem", fields: [documentItemId], references: [id], onDelete: SetNull)
+  user         User?         @relation("TranslationStageRecordCreatedBy", fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([documentItemId])
   @@index([documentItemId, stepKey, status])
@@ -307,19 +308,19 @@ enum DocumentStatus {
   PREPROCESSED
   TRANSLATING
   COMPLETED
-  ERROR 
+  ERROR
 }
 
 // —— Project Bindings ——
 
 model ProjectDictionary {
-  id           String     @id @default(cuid())
+  id           String   @id @default(cuid())
   projectId    String
   dictionaryId String
-  createdAt    DateTime   @default(now())
+  createdAt    DateTime @default(now())
 
-  project      Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  dictionary   Dictionary @relation(fields: [dictionaryId], references: [id], onDelete: Cascade)
+  project    Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  dictionary Dictionary @relation(fields: [dictionaryId], references: [id], onDelete: Cascade)
 
   @@unique([projectId, dictionaryId])
   @@index([projectId])
@@ -327,16 +328,15 @@ model ProjectDictionary {
 }
 
 model ProjectMemory {
-  id         String             @id @default(cuid())
-  projectId  String
-  memoryId   String
-  createdAt  DateTime           @default(now())
+  id        String   @id @default(cuid())
+  projectId String
+  memoryId  String
+  createdAt DateTime @default(now())
 
-  project    Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  memory     TranslationMemory  @relation(fields: [memoryId], references: [id], onDelete: Cascade)
+  project Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  memory  TranslationMemory @relation(fields: [memoryId], references: [id], onDelete: Cascade)
 
   @@unique([projectId, memoryId])
   @@index([projectId])
   @@index([memoryId])
 }
-

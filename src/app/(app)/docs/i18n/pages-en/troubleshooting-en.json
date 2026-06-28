@@ -166,9 +166,9 @@
                             "Task status remains PENDING"
                         ],
                         "solutions": [
-                            "View Worker logs: `docker compose logs worker`",
+                            "View Worker logs: `docker compose logs app_worker`",
                             "Check if task data format is correct",
-                            "Verify related services (Milvus, MinIO, PDFMath) are normal",
+                            "Verify related services (pgvector, MinIO, Redis, and optional OCR) are normal",
                             "Check if API keys and configuration are correct",
                             "View failed tasks in Redis: `redis-cli KEYS 'bull:*:failed'`"
                         ]
@@ -176,22 +176,22 @@
                 ]
             },
             {
-                "name": "Milvus Vector Database Issues",
-                "description": "Milvus vector database related issues",
+                "name": "PostgreSQL Vector Store Issues",
+                "description": "PostgreSQL vector store related issues",
                 "issues": [
                     {
-                        "title": "Milvus Connection Failure",
+                        "title": "pgvector Connection Failure",
                         "Problems": [
                             "Translation memory search failure",
                             "Vector write failure",
-                            "Milvus service cannot be accessed"
+                            "pgvector service cannot be accessed"
                         ],
                         "solutions": [
-                            "Check if Milvus and etcd services are running: `docker compose ps milvus etcd`",
-                            "Verify Milvus connection configuration",
-                            "View Milvus logs: `docker compose logs milvus`",
-                            "Check etcd status: `docker compose logs etcd`",
-                            "Access Attu UI (http://localhost:8001) to check Milvus status"
+                            "Check if pgvector is running: `docker compose ps pgvector`",
+                            "Verify pgvector connection configuration",
+                            "View pgvector logs: `docker compose logs pgvector`",
+                            "Check the embedded etcd status through pgvector logs",
+                            "Access Prisma Studio (http://localhost:8001) to check pgvector status"
                         ]
                     },
                     {
@@ -202,7 +202,7 @@
                         ],
                         "solutions": [
                             "Check if collection is created",
-                            "View collection list in Attu UI",
+                            "View collection list in Prisma Studio",
                             "Reinitialize collection (application will auto-create)",
                             "Check if collection name is correct"
                         ]
@@ -222,21 +222,21 @@
                 ]
             },
             {
-                "name": "PDFMath Service Issues",
-                "description": "PDF parsing service related issues",
+                "name": "PDF Parsing Issues",
+                "description": "PDF parser and optional OCR fallback issues",
                 "issues": [
                     {
-                        "title": "PDFMath Service Cannot Be Accessed",
+                        "title": "PDF Parsing Fails",
                         "Problems": [
                             "Document parsing failure",
                             "PDF files cannot be processed after upload",
                             "Parsing tasks remain in PENDING status"
                         ],
                         "solutions": [
-                            "Check if PDFMath service is running: `docker compose ps pdfmath`",
-                            "View PDFMath logs: `docker compose logs pdfmath`",
-                            "Verify PDFMath service URL configuration",
-                            "Test service connection: `curl http://localhost:8000/health` (if health check is configured)",
+                            "Check application logs: `docker compose logs app`",
+                            "For text-based PDFs, verify the PDF is not corrupted and contains extractable text",
+                            "For scanned PDFs, configure OCR_AUTH_URL and OCR_BASE_URL",
+                            "If OCR is configured, verify the token credentials and service URL",
                             "Check if PDF file is corrupted or format is not supported"
                         ]
                     },
@@ -249,7 +249,7 @@
                         "solutions": [
                             "Check file size (recommended not exceeding 100MB)",
                             "Increase timeout configuration",
-                            "Check PDFMath service resource usage",
+                            "Check application or OCR service resource usage",
                             "Consider splitting large files into multiple smaller files"
                         ]
                     }
@@ -299,13 +299,13 @@
                         "title": "Worker Cannot Start",
                         "Problems": [
                             "docker compose up worker fails",
-                            "Local yarn dev:worker reports errors",
+                            "Local yarn worker reports errors",
                             "Worker process exits immediately"
                         ],
                         "solutions": [
                             "Check environment variable configuration",
                             "Verify Redis connection",
-                            "View Worker logs: `docker compose logs worker`",
+                            "View Worker logs: `docker compose logs app_worker`",
                             "Check Node.js version",
                             "Verify dependencies are correctly installed",
                             "Check build artifacts: `yarn build:worker`"

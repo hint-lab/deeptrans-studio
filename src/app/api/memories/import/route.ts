@@ -1,9 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getQueue } from '@/worker/queue';
 import { prisma } from '@/lib/db';
+import { guardMessage, guardStatus, requireOwnedMemory, requireUser, userOwnedWhere } from '@/lib/guards';
+
+function assertUserUploadObject(fileKey: string, userId: string) {
+    if (fileKey.startsWith(`users/${userId}/uploads/`)) return;
+    throw new Error('无权访问文件');
+}
 
 export async function POST(req: NextRequest) {
     try {
+        const authCtx = await requireUser();
         const contentType = req.headers.get('content-type') || '';
         let payload: any = {};
         if (contentType.includes('application/json')) {
@@ -25,26 +32,30 @@ export async function POST(req: NextRequest) {
         const memoryIdFromReq = String(payload.memoryId || '').trim() || undefined;
         const sourceLang = (payload.sourceLang && String(payload.sourceLang)) || undefined;
         const targetLang = (payload.targetLang && String(payload.targetLang)) || undefined;
-        const tenantId = (payload.tenantId && String(payload.tenantId)) || undefined;
-        const userId = (payload.userId && String(payload.userId)) || undefined;
         if (!fileKey)
             return NextResponse.json({ success: false, error: 'missing fileKey' }, { status: 400 });
+        assertUserUploadObject(fileKey, authCtx.userId);
 
         // ensure memory exists
         let memoryId = memoryIdFromReq;
         if (!memoryId) {
-            const mem = await (prisma as any).translationMemory.upsert({
-                where: { id: 'global-memory' },
-                update: {},
-                create: {
-                    id: 'global-memory',
-                    name: '全局记忆库',
-                    description: '默认导入',
-                    tenantId: tenantId || null,
-                    userId: userId || null,
-                },
+            const existing = await (prisma as any).translationMemory.findFirst({
+                where: { name: '默认记忆库', ...userOwnedWhere(authCtx) },
+                orderBy: { createdAt: 'asc' },
             });
+            const mem =
+                existing ??
+                (await (prisma as any).translationMemory.create({
+                    data: {
+                        name: '默认记忆库',
+                        description: '默认导入',
+                        tenantId: authCtx.tenantId || null,
+                        userId: authCtx.userId,
+                    },
+                }));
             memoryId = mem.id;
+        } else {
+            await requireOwnedMemory(memoryId, authCtx);
         }
 
         const queue = getQueue('memory-import');
@@ -54,8 +65,8 @@ export async function POST(req: NextRequest) {
             memoryId,
             sourceLang,
             targetLang,
-            tenantId,
-            userId,
+            tenantId: authCtx.tenantId || null,
+            userId: authCtx.userId,
         });
         return NextResponse.json({
             success: true,
@@ -63,8 +74,8 @@ export async function POST(req: NextRequest) {
         });
     } catch (e: any) {
         return NextResponse.json(
-            { success: false, error: e?.message || String(e) },
-            { status: 500 }
+            { success: false, error: guardMessage(e) || String(e) },
+            { status: guardStatus(e) }
         );
     }
 }

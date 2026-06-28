@@ -8,6 +8,10 @@ export interface DocumentItemTab {
     id: string;
     name: string;
     status?: string;
+    type?: string;
+    sourceText?: string;
+    order?: number;
+    metadata?: Record<string, unknown> | null;
 }
 
 export interface DocumentTab {

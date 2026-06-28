@@ -20,6 +20,51 @@ interface LoggerOptions {
     disableDebugForTypes?: string[]; // 要禁用debug的type数组
 }
 
+const SENSITIVE_KEY = /(token|secret|password|authorization|cookie|code|session|profile|account|uploadurl|fileurl|apikey|api_key|clientsecret|credential)/i;
+const MAX_LOG_STRING_LENGTH = 500;
+
+function sanitizeString(value: string): string {
+    let output = value;
+    try {
+        const url = new URL(value);
+        if (url.search) {
+            url.search = '?[redacted]';
+            output = url.toString();
+        }
+    } catch { }
+    return output.length > MAX_LOG_STRING_LENGTH
+        ? `${output.slice(0, MAX_LOG_STRING_LENGTH)}...[truncated ${output.length - MAX_LOG_STRING_LENGTH} chars]`
+        : output;
+}
+
+function sanitizeForLog(value: any, key = '', depth = 0): any {
+    if (SENSITIVE_KEY.test(key)) return '[REDACTED]';
+    if (value === null || value === undefined) return value;
+    if (typeof value === 'string') return sanitizeString(value);
+    if (typeof value === 'number' || typeof value === 'boolean') return value;
+    if (value instanceof Error) {
+        return {
+            name: value.name,
+            message: sanitizeString(value.message),
+            stack: process.env.NODE_ENV !== 'production' ? sanitizeString(value.stack || '') : undefined,
+        };
+    }
+    if (depth >= 4) return '[MaxDepth]';
+    if (Array.isArray(value)) return value.slice(0, 20).map(item => sanitizeForLog(item, key, depth + 1));
+    if (typeof value === 'object') {
+        const out: Record<string, any> = {};
+        for (const [childKey, childValue] of Object.entries(value)) {
+            out[childKey] = sanitizeForLog(childValue, childKey, depth + 1);
+        }
+        return out;
+    }
+    return String(value);
+}
+
+function isDebugEnabled() {
+    return process.env.NODE_ENV !== 'production' && process.env.LOGGER_ENABLE_DEBUG === 'true';
+}
+
 class JsonLogger {
     private context: LoggerContext = {};
     private options: LoggerOptions;
@@ -185,6 +230,8 @@ class JsonLogger {
         }
 
         // 处理输入参数
+        input = sanitizeForLog(input);
+
         if (typeof input === 'string') {
             // 如果是字符串，作为 message
             logEntry.message = input;
@@ -204,7 +251,7 @@ class JsonLogger {
             // 合并其他字段
             Object.keys(input).forEach(key => {
                 if (!['level', 'timestamp', 'message', 'msg'].includes(key)) {
-                    logEntry[key] = input[key];
+                    logEntry[key] = sanitizeForLog(input[key], key);
                 }
             });
         }
@@ -269,12 +316,12 @@ class JsonLogger {
                 else if (value === undefined) valueStr = 'undefined';
                 else if (typeof value === 'object') {
                     try {
-                        valueStr = JSON.stringify(value);
+                        valueStr = JSON.stringify(sanitizeForLog(value, key));
                     } catch {
                         valueStr = String(value);
                     }
                 } else {
-                    valueStr = String(value);
+                    valueStr = sanitizeString(String(value));
                 }
 
                 return `${key}=${valueStr}`;
@@ -296,7 +343,7 @@ class JsonLogger {
                 console.error(message);
                 break;
             case 'debug':
-                if (process.env.NODE_ENV !== 'production') {
+                if (isDebugEnabled()) {
                     console.debug(message);
                 }
                 break;
@@ -317,7 +364,7 @@ class JsonLogger {
             if (typeof args[0] === 'string') {
                 logData.message = args[0];
             } else if (typeof args[0] === 'object' && args[0] !== null) {
-                logData = args[0];
+                    logData = sanitizeForLog(args[0]);
 
                 // 特殊处理 Error 对象
                 if (args[0] instanceof Error) {
@@ -335,17 +382,17 @@ class JsonLogger {
         } else if (args.length === 2) {
             // 两个参数：通常是 (message, data)
             if (typeof args[0] === 'string' && typeof args[1] === 'object' && args[1] !== null) {
-                logData = { ...args[1], message: args[0] };
+                logData = { ...sanitizeForLog(args[1]), message: args[0] };
             } else {
                 // 其他情况合并为字符串
                 logData.message = args.map(arg =>
-                    typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
+                    typeof arg === 'object' ? JSON.stringify(sanitizeForLog(arg)) : sanitizeString(String(arg))
                 ).join(' ');
             }
         } else if (args.length > 2) {
             // 多个参数：合并成字符串消息
             logData.message = args.map(arg =>
-                typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
+                typeof arg === 'object' ? JSON.stringify(sanitizeForLog(arg)) : sanitizeString(String(arg))
             ).join(' ');
         }
 
@@ -358,8 +405,8 @@ class JsonLogger {
         // 如果是 error 级别且包含 Error 对象，输出堆栈
         if (level === 'error') {
             const error = args.find(arg => arg instanceof Error);
-            if (error?.stack && process.env.NODE_ENV !== 'production') {
-                console.error('\x1b[31m%s\x1b[0m', error.stack);
+            if (error?.stack && isDebugEnabled()) {
+                console.error('\x1b[31m%s\x1b[0m', sanitizeString(error.stack));
             }
         }
 
@@ -386,7 +433,7 @@ class JsonLogger {
     }
 
     debug(...args: any[]): LogEntry {
-        if (process.env.NODE_ENV !== 'production') {
+        if (isDebugEnabled()) {
             // 检查当前logger的type是否在禁用列表中
             const currentType = this.context.type;
             if (currentType && JsonLogger.debugDisabledTypes.has(currentType)) {
@@ -403,8 +450,8 @@ class JsonLogger {
      */
     json(data: any): void {
         const output = this.options.pretty
-            ? JSON.stringify(data, null, 2)
-            : JSON.stringify(data);
+            ? JSON.stringify(sanitizeForLog(data), null, 2)
+            : JSON.stringify(sanitizeForLog(data));
         console.log(output);
     }
 

@@ -1,6 +1,7 @@
 'use server';
 
 import { clearDocumentItemIntermediateResultsDB, fetchDocumentItemIntermediateResultsDB, findDocumentItemMetadataByIdDB, updateDocumentItemByIdDB } from '@/db/documentItem';
+import { requireOwnedDocumentItem, requireWritableDocumentItem } from '@/lib/guards';
 import { createLogger } from '@/lib/logger';
 const logger = createLogger({
     type: 'actions:intermediate-results',
@@ -21,6 +22,7 @@ export async function savePreTranslateResultsAction(
     }
 ) {
     try {
+        await requireOwnedDocumentItem(id);
         return await updateDocumentItemByIdDB(id, {
             preTranslateTerms: results.terms as any,
             preTranslateDict: results.dict as any,
@@ -44,6 +46,7 @@ export async function saveQualityAssureResultsAction(
     }
 ) {
     try {
+        await requireWritableDocumentItem(id);
         const meta = await findDocumentItemMetadataByIdDB(id);
         return await updateDocumentItemByIdDB(id, {
             qualityAssureBiTerm: results.biTerm as any,
@@ -70,6 +73,7 @@ export async function savePostEditResultsAction(
     }
 ) {
     try {
+        await requireWritableDocumentItem(id);
         return await updateDocumentItemByIdDB(id, {
             postEditQuery: results.query as any,
             postEditEvaluation: results.evaluation as any,
@@ -84,6 +88,7 @@ export async function savePostEditResultsAction(
 // 获取文档项的中间结果
 export async function getDocumentItemIntermediateResultsAction(id: string) {
     try {
+        await requireWritableDocumentItem(id);
         const item = await fetchDocumentItemIntermediateResultsDB(id);
         if (!item) return null;
 
@@ -117,6 +122,7 @@ export async function getDocumentItemIntermediateResultsAction(id: string) {
 // 清空文档项的中间结果
 export async function clearDocumentItemIntermediateResultsAction(id: string) {
     try {
+        await requireWritableDocumentItem(id);
         return await clearDocumentItemIntermediateResultsDB(id);
     } catch (error) {
         logger.error('清空中间结果失败:', error);

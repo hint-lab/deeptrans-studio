@@ -116,7 +116,7 @@ const TextTranslationTable = () => {
                 <div className="flex flex-col border-r">
                     <Textarea
                         value={sourceText}
-                        placeholder="使用我们的文档翻译器拖放翻译PDF、Word（.docx）和PowerPoint（.pptx）文件。
+                        placeholder="使用我们的文档翻译器拖放翻译 PDF、Word（.docx）、TXT 或 Markdown 文件。
 请点击麦克风图标来翻译语音。"
                         onChange={e => setSourceTranslationText(e.target.value)}
                         className="min-h-[300px] flex-1 resize-none rounded-none border-none bg-card p-4 focus-visible:ring-0 focus-visible:ring-offset-0"

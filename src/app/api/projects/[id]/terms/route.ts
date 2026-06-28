@@ -1,7 +1,8 @@
 import { findProjectDictionaryAction } from '@/actions/dictionary';
-import { auth } from '@/auth';
-import { findDocumentsByProjectIdDB, updateDocumentStatusDB } from '@/db/document';
+import { updateDocumentStatusDB } from '@/db/document';
 import { extractTextFromUrl } from '@/lib/file-parser';
+import { guardMessage, guardStatus, requireUser, requireWritableProject } from '@/lib/guards';
+import { scopedProjectBatchId } from '@/lib/init-artifact-keys';
 import { createLogger } from '@/lib/logger';
 import { getRedis } from '@/lib/redis';
 import { TTL_PROGRESS, setTextWithTTL } from '@/lib/redis-ttl';
@@ -17,6 +18,7 @@ const logger = createLogger({
     includeCaller: false, // 日志不包含调用者
 });
 export async function POST(req: NextRequest, ctx: any) {
+    let ownedDocumentId = '';
     try {
         const redis = await getRedis();
         const { id: projectId } = await (ctx?.params || {});
@@ -30,19 +32,19 @@ export async function POST(req: NextRequest, ctx: any) {
         const terms = body?.terms || undefined;
         if (!projectId) return NextResponse.json({ error: 'missing project id' }, { status: 400 });
         if (!batchId) return NextResponse.json({ error: 'missing batchId' }, { status: 400 });
-
-        const session = await auth();
-        const userId = session?.user?.id;
+        const authCtx = await requireUser();
+        const project = await requireWritableProject(projectId, authCtx);
+        const scopedBatchId = scopedProjectBatchId(projectId, batchId);
 
         // 确保项目词库存在（PROJECT 范围）
         try {
             await findProjectDictionaryAction(projectId);
         } catch { }
 
-        const docs = await findDocumentsByProjectIdDB(projectId);
-        const only = docs?.[0];
+        const only = project.documents?.[0];
         if (!only || !only.url)
             return NextResponse.json({ error: 'document not found' }, { status: 404 });
+        ownedDocumentId = only.id;
         try {
             await updateDocumentStatusDB(only.id, DocumentStatus.TERMS_EXTRACTING as any);
         } catch { }
@@ -54,35 +56,22 @@ export async function POST(req: NextRequest, ctx: any) {
         } catch { }
         if (!bodyText) return NextResponse.json({ error: 'empty content' }, { status: 400 });
 
-        await setTextWithTTL(redis, `docTerms.${batchId}.total`, '1', TTL_PROGRESS);
-        await setTextWithTTL(redis, `docTerms.${batchId}.done`, '0', TTL_PROGRESS);
+        await setTextWithTTL(redis, `docTerms.${scopedBatchId}.total`, '1', TTL_PROGRESS);
+        await setTextWithTTL(redis, `docTerms.${scopedBatchId}.done`, '0', TTL_PROGRESS);
         await getQueue('doc-terms').add(
             'doc-terms',
-            { id: 'terms.all', text: bodyText, batchId, userId, projectId, ...terms },
-            { jobId: `docTerms.${batchId}.all` }
+            { id: 'terms.all', text: bodyText, batchId: scopedBatchId, userId: authCtx.userId, tenantId: authCtx.tenantId || undefined, projectId, ...terms },
+            { jobId: `docTerms.${scopedBatchId}.all` }
         );
-        logger.debug(`getQueue: docTerms.${batchId}.item.terms.all`)
+        logger.debug(`getQueue: docTerms.${scopedBatchId}.item.terms.all`)
         return NextResponse.json({ ok: true, step: 'terms' });
     } catch (e: any) {
-        // 构建详细的错误对象
-        const detailedError = {
-            name: e.name,
-            message: e.message,
-            stack: e.stack,
-            code: e.code, // Redis 或其他库的错误代码
-            cause: e.cause, // 如果有的话
-        };
-        try {
-            const { id: projectId } = await ctx.params;
-            const docs = await findDocumentsByProjectIdDB(projectId);
-            const only = docs?.[0];
-            if (only?.id) {
-                try {
-                    await updateDocumentStatusDB(only.id, DocumentStatus.ERROR as any);
-                } catch { }
-            }
-        } catch { }
-        logger.error(`[terms start error] ${JSON.stringify(detailedError, null, 2)}`);
-        return NextResponse.json({ error: e?.message || 'terms start failed' }, { status: 500 });
+        if (ownedDocumentId) {
+            try {
+                await updateDocumentStatusDB(ownedDocumentId, DocumentStatus.ERROR as any);
+            } catch { }
+        }
+        logger.error('[terms start error]', e);
+        return NextResponse.json({ error: guardMessage(e) }, { status: guardStatus(e) });
     }
 }

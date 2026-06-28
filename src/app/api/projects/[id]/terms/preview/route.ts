@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getRedis } from '@/lib/redis';
 import { extractMonolingualTermsAction } from '@/actions/pre-translate';
-import { findDocumentsByProjectIdDB } from '@/db/document';
 import { extractTextFromUrl } from '@/lib/file-parser';
+import { guardMessage, guardStatus, requireOwnedProject } from '@/lib/guards';
+import { scopedProjectBatchId } from '@/lib/init-artifact-keys';
 
 export async function POST(req: NextRequest, context: any) {
     try {
@@ -13,13 +14,14 @@ export async function POST(req: NextRequest, context: any) {
         };
         const redis = await getRedis();
         let text = '';
+        const { id: projectId } = await (context?.params || {});
+        const project = await requireOwnedProject(projectId);
         if (batchId) {
-            const preview = await redis.get(`init.${batchId}.preview`);
+            const preview = await redis.get(`init.${scopedProjectBatchId(projectId, batchId)}.preview`);
             if (typeof preview === 'string' && preview.trim()) text = preview;
         }
         if (!text) {
-            const docs = await findDocumentsByProjectIdDB(context?.params?.id);
-            const only = docs?.[0];
+            const only = project.documents?.[0];
             if (only?.url) {
                 const { text: full } = await extractTextFromUrl(only.url);
                 text = String(full || '').slice(0, 2000);
@@ -37,6 +39,6 @@ export async function POST(req: NextRequest, context: any) {
         }
         return NextResponse.json({ terms: Array.from(uniq.values()).slice(0, limit) });
     } catch (e: any) {
-        return NextResponse.json({ error: e?.message || 'preview failed' }, { status: 500 });
+        return NextResponse.json({ error: guardMessage(e) || 'preview failed' }, { status: guardStatus(e) });
     }
 }

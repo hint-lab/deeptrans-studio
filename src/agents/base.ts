@@ -72,14 +72,20 @@ export abstract class BaseAgent<TInput, TOutput> {
         messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
         opts?: { maxTokens?: number }
     ): Promise<T> {
-        logger.debug('发送的json消息:', JSON.stringify(messages, null, 2));
+        logger.debug('发送的json消息', {
+            messageCount: messages.length,
+            inputChars: messages.reduce((sum, msg) => sum + String(msg.content || '').length, 0),
+        });
         return chatJSON<T>(messages as any, opts);
     }
     protected async text(
         messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
         opts?: { maxTokens?: number }
     ): Promise<string> {
-        logger.debug('发送的text消息:', JSON.stringify(messages, null, 2));
+        logger.debug('发送的text消息', {
+            messageCount: messages.length,
+            inputChars: messages.reduce((sum, msg) => sum + String(msg.content || '').length, 0),
+        });
         return chatText(messages as any, opts);
     }
 
@@ -101,7 +107,7 @@ export abstract class BaseAgent<TInput, TOutput> {
         const formalityText = i18n.getFormality(this.formality);
 
         let prompt = i18n.getSystemPrompt('base', { role: roleText });
-        logger.debug('初始发送的消息:', JSON.stringify(prompt, null, 2));
+        logger.debug('初始发送的消息', { promptChars: prompt.length });
         // 添加领域信息
         if (this.domain !== 'general') {
             prompt += i18n.getSystemPrompt('domain', { domain: domainText });
@@ -130,7 +136,7 @@ export abstract class BaseAgent<TInput, TOutput> {
         if (constraints?.length) {
             prompt += `\n${i18n.getSystemPrompt('requirements')}\n${constraints.map((c, i) => `${i + 1}) ${c}`).join('\n')}`;
         }
-        logger.debug('返回的发送的消息:', JSON.stringify(prompt, null, 2));
+        logger.debug('返回的发送的消息', { promptChars: prompt.length });
         return prompt;
     }
 

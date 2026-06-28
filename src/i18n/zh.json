@@ -154,7 +154,7 @@
             "noTerms": "暂无术语",
             "documentUpload": "文档上传",
             "temporaryDocument": "临时文档",
-            "supportedFileTypes": "支持的文件类型：doc、pdf、xlsx、ppt",
+            "supportedFileTypes": "支持的文件类型：DOCX",
             "advancedOptions": "高级选项",
             "translationStyle": "翻译风格：",
             "qualityLevel": "质量等级：",
@@ -196,7 +196,7 @@
             "fileType": "类型",
             "openFile": "打开文件",
             "uploadingText": "正在上传...",
-            "supportedFormats": "支持 DOC、PDF、XLSX、PPT 文档格式，最大 10MB",
+            "supportedFormats": "支持 DOCX 文档格式，最大 10MB",
             "loadEntriesFailed": "加载词条失败"
         },
         "ImageTranslate": {
@@ -380,7 +380,7 @@
                 "open": "导入词条",
                 "title": "导入翻译记忆",
                 "embedding": "嵌入生成中…",
-                "milvus": "向量入库中…",
+                "vector": "写入 PostgreSQL 向量索引中…",
                 "complete": "导入完成",
                 "fileAndMappingSettings": "文件与字段映射设置",
                 "targetMemoryOptional": "目标记忆库（可选）",
@@ -410,6 +410,8 @@
             "exportAll": "导出全部",
             "searchMemories": "搜索记忆库...",
             "searchPlaceholder": "搜索记忆库名称或描述...",
+            "gridView": "网格视图",
+            "listView": "列表视图",
             "newMemoryName": "新记忆库名称",
             "create": "创建",
             "cancel": "取消",
@@ -538,7 +540,7 @@
             "targetLanguage": "目标语言",
             "selectTargetLanguage": "选择目标语言",
             "uploadFile": "上传文件",
-            "supportedFormats": "支持的文件格式：TXT、PDF、DOC",
+            "supportedFormats": "支持的文件格式：DOCX、PDF、TXT、Markdown",
             "cancel": "取消",
             "creating": "创建中...",
             "createProject": "创建项目",
@@ -768,7 +770,7 @@
         "originalName": "原始名称",
         "fileType": "类型",
         "openFile": "打开文件",
-        "supportedFormats": "支持 TXT、PDF、DOC 文件，最大 10MB",
+        "supportedFormats": "支持 DOCX、PDF、TXT、Markdown 文件，最大 10MB",
         "uploadingText": "正在上传..."
     },
     "Agents": {
@@ -1288,7 +1290,13 @@
             "dataLoadFailed": "获取数据失败",
             "welcomePage": "欢迎页",
             "project": "项目",
-            "segment": "第{index}段"
+            "segment": "第{index}段",
+            "renameFile": "重命名文件",
+            "saveRename": "保存文件名",
+            "cancelRename": "取消重命名",
+            "renameSaved": "文件名已更新",
+            "renameFailed": "重命名失败",
+            "fileNameRequired": "文件名不能为空"
         },
         "previewError": "预览加载失败",
         "noPreviewContent": "暂无可预览内容",

@@ -1,14 +1,21 @@
 import { findDocumentItemsLiteByIdsDB, updateDocumentItemByIdDB } from '@/db/documentItem';
-import { auth } from '@/auth';
+import { GuardError, requireWritableDocumentItem, requireUser } from '@/lib/guards';
 // 延迟导入队列相关，避免在客户端构建时解析到 Node-only 依赖
+
+async function requireBatchOwner(connection: any, batchId: string) {
+    const authCtx = await requireUser();
+    const ownerId = await connection.get(`qa.${batchId}.userId`);
+    if (!ownerId || ownerId !== authCtx.userId) throw new GuardError(401, '未授权');
+    return authCtx;
+}
 
 export async function startBatchQAAction(
     itemIds: string[],
-    opts: { targetLanguage?: string; domain?: string; tenantId?: string }
+    opts: { targetLanguage?: string; domain?: string }
 ) {
-    const session = await auth();
-    if (!session?.user?.id) throw new Error('未授权');
+    const authCtx = await requireUser();
     if (!Array.isArray(itemIds) || !itemIds.length) return { batchId: undefined, total: 0 };
+    await Promise.all(itemIds.map(id => requireWritableDocumentItem(id, authCtx)));
 
     const { getQueue, defaultJobOpts } = await import('@/worker/queue');
     const { getRedis } = await import('@/lib/redis');
@@ -29,6 +36,7 @@ export async function startBatchQAAction(
     await connection.set(`qa.${batchId}.done`, '0');
     await connection.set(`qa.${batchId}.failed`, '0');
     await connection.set(`qa.${batchId}.cancel`, '0');
+    await connection.set(`qa.${batchId}.userId`, authCtx.userId);
     const queue = getQueue('qa');
     await queue.addBulk(
         items.map(it => ({
@@ -40,7 +48,8 @@ export async function startBatchQAAction(
                 targetText: it.targetText || '',
                 targetLanguage: opts.targetLanguage,
                 domain: opts.domain,
-                tenantId: opts.tenantId,
+                userId: authCtx.userId,
+                tenantId: authCtx.tenantId || undefined,
             },
             opts: defaultJobOpts,
         }))
@@ -51,6 +60,7 @@ export async function startBatchQAAction(
 export async function getBatchQAProgressAction(batchId: string) {
     const { getRedis } = await import('@/lib/redis');
     const connection = await getRedis();
+    await requireBatchOwner(connection, batchId);
     const total = Number(await connection.get(`qa.${batchId}.total`)) || 0;
     const done = Number(await connection.get(`qa.${batchId}.done`)) || 0;
     const failed = Number(await connection.get(`qa.${batchId}.failed`)) || 0;
@@ -61,16 +71,16 @@ export async function getBatchQAProgressAction(batchId: string) {
 export async function cancelBatchQAAction(batchId: string) {
     const { getRedis } = await import('@/lib/redis');
     const connection = await getRedis();
+    await requireBatchOwner(connection, batchId);
     await connection.set(`qa.${batchId}.cancel`, '1');
     return { ok: true };
 }
 
 // 在批处理完成后，将 Redis 中的 QA 结果一次性落库，并清理缓存
 export async function persistBatchQAResultsAction(batchId: string) {
-    const session = await auth();
-    if (!session?.user?.id) throw new Error('未授权');
     const { getRedis } = await import('@/lib/redis');
     const connection = await getRedis();
+    const authCtx = await requireBatchOwner(connection, batchId);
     const total = Number(await connection.get(`qa.${batchId}.total`)) || 0;
     if (!total) return { updated: 0 };
 
@@ -87,6 +97,7 @@ export async function persistBatchQAResultsAction(batchId: string) {
                 qualityAssureSyntaxEmbedded?: any;
             };
             if (!data?.id) continue;
+            await requireWritableDocumentItem(data.id, authCtx);
             await updateDocumentItemByIdDB(data.id, {
                 qualityAssureBiTerm: data.qualityAssureBiTerm as any,
                 qualityAssureSyntax: data.qualityAssureSyntax as any,
@@ -100,7 +111,8 @@ export async function persistBatchQAResultsAction(batchId: string) {
         `qa.${batchId}.total`,
         `qa.${batchId}.done`,
         `qa.${batchId}.failed`,
-        `qa.${batchId}.cancel`
+        `qa.${batchId}.cancel`,
+        `qa.${batchId}.userId`
     );
     if (keys.length) await connection.del(...keys);
     return { updated };

@@ -2,6 +2,7 @@
 'use server';
 
 import { createLogger } from '@/lib/logger';
+import { requireUser } from '@/lib/guards';
 import { extractDocxFromUrl } from '@/lib/parsers/docx-parser';
 const logger = createLogger({
     type: 'actions:parse-docs',
@@ -13,6 +14,7 @@ const logger = createLogger({
 });
 export async function parseDocxAction(url: string) {
     try {
+        await requireUser();
         // 验证输入
         if (!url || typeof url !== 'string') {
             throw new Error('Invalid URL provided');

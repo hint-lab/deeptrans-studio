@@ -47,7 +47,7 @@ export function ImportMemoryDialog({ onCompleted }: { onCompleted?: () => void }
     const [progress, setProgress] = useState(0);
     const [currentBatch, setCurrentBatch] = useState(0);
     const [totalBatches, setTotalBatches] = useState(0);
-    const [stage, setStage] = useState<'embedding' | 'milvus' | 'complete'>('embedding');
+    const [stage, setStage] = useState<'embedding' | 'vector' | 'complete'>('embedding');
 
     // 打开对话框时加载记忆库列表
     useEffect(() => {
@@ -254,7 +254,7 @@ export function ImportMemoryDialog({ onCompleted }: { onCompleted?: () => void }
                                     <Loader2 className="h-4 w-4 animate-spin text-amber-600" />
                                     <span className="text-amber-800">
                                         {stage === 'embedding' && t('embedding')}
-                                        {stage === 'milvus' && t('milvus')}
+                                        {stage === 'vector' && t('vector')}
                                         {stage === 'complete' && t('complete')}
                                     </span>
                                 </div>

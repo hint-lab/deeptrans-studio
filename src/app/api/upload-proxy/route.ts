@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { guardMessage, guardStatus, requireUser, requireWritableProject } from '@/lib/guards';
 import { createStorageService } from '@/lib/storage/factory';
 
 const storageConfig = {
@@ -16,6 +17,7 @@ const storageService = createStorageService(storageConfig);
 
 export async function POST(req: NextRequest) {
     try {
+        const authCtx = await requireUser();
         const contentType = req.headers.get('content-type') || '';
         if (!contentType.includes('multipart/form-data')) {
             return NextResponse.json(
@@ -26,19 +28,19 @@ export async function POST(req: NextRequest) {
 
         const form = await req.formData();
         const file = form.get('file') as File | null;
-        const projectName = String(form.get('projectName') || '').trim();
+        const projectId = String(form.get('projectId') || '').trim();
 
         if (!file) {
             return NextResponse.json({ success: false, error: '缺少文件' }, { status: 400 });
         }
-        if (!projectName) {
-            return NextResponse.json({ success: false, error: '缺少项目名称' }, { status: 400 });
-        }
+        const namespace = projectId
+            ? `projects/${(await requireWritableProject(projectId, authCtx)).id}`
+            : `users/${authCtx.userId}/uploads`;
 
         const getUrl = await storageService.getUploadUrl(
             file.name,
             file.type || 'application/octet-stream',
-            projectName
+            namespace
         );
 
         const arrayBuffer = await file.arrayBuffer();
@@ -74,8 +76,8 @@ export async function POST(req: NextRequest) {
         });
     } catch (e: any) {
         return NextResponse.json(
-            { success: false, error: e?.message || '上传代理失败' },
-            { status: 500 }
+            { success: false, error: guardMessage(e) || '上传代理失败' },
+            { status: guardStatus(e) }
         );
     }
 }

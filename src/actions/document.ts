@@ -1,9 +1,8 @@
 'use server';
 
 import {
-    findDocumentByIdDB,
-    findDocumentsByProjectIdDB,
     findDocumentWithItemsByIdDB,
+    updateDocumentByIdDB,
     updateDocumentStatusDB,
 } from '@/db/document';
 import {
@@ -12,15 +11,19 @@ import {
     type DocumentItem,
 } from '@/db/documentItem';
 import { createLogger } from '@/lib/logger';
+import { requireOwnedDocument, requireOwnedProject, requireWritableDocument } from '@/lib/guards';
 import { DocumentStatus } from '@/types/enums';
-const logger = createLogger({
-    type: 'actions:document',
-}, {
-    json: false,// 开启json格式输出
-    pretty: false, // 关闭开发环境美化输出
-    colors: true, // 仅当json：false时启用颜色输出可用
-    includeCaller: false, // 日志不包含调用者
-});
+const logger = createLogger(
+    {
+        type: 'actions:document',
+    },
+    {
+        json: false, // 开启json格式输出
+        pretty: false, // 关闭开发环境美化输出
+        colors: true, // 仅当json：false时启用颜色输出可用
+        includeCaller: false, // 日志不包含调用者
+    }
+);
 export type ContentIDType = {
     id: string;
     name: string;
@@ -45,6 +48,7 @@ export type PreviewSegmentItem = {
 // 预览改由队列实现，移除 previewSegmentAction
 
 export async function applySegmentAction(documentId: string, items: PreviewSegmentItem[]) {
+    await requireWritableDocument(documentId);
     const doc = await findDocumentWithItemsByIdDB(documentId);
     if (!doc) throw new Error('未找到文档');
     // 清空旧分段
@@ -70,8 +74,8 @@ export async function applySegmentAction(documentId: string, items: PreviewSegme
             const typeToPersist = styleName
                 ? String(styleName)
                 : typeof lvl === 'number'
-                    ? `HEADING-${lvl}`
-                    : rawType || normalizedType;
+                  ? `HEADING-${lvl}`
+                  : rawType || normalizedType;
             return {
                 documentId,
                 order: idx + 1,
@@ -89,7 +93,7 @@ export async function applySegmentAction(documentId: string, items: PreviewSegme
     // 适配新数据结构：不再写入 segment* 字段，状态流转统一使用 Document.status
     try {
         await updateDocumentStatusDB(documentId, DocumentStatus.SEGMENTING as any);
-    } catch { }
+    } catch {}
     return { count: normalized.length, projectId: doc.projectId } as {
         count: number;
         projectId: string;
@@ -107,13 +111,14 @@ type Metadata = {
 // 获取项目下的所有文档，并转换为标签页格式
 export async function fetchProjectTabsAction(projectId: string): Promise<TabType[]> {
     try {
-        const documents = await findDocumentsByProjectIdDB(projectId);
+        const project = await requireOwnedProject(projectId);
+        const documents = project.documents;
         if (!documents) return [{ id: '0', name: '欢迎页' }];
         if (!documents?.length) {
             return [{ id: '0', name: '欢迎页' }];
         }
 
-        return documents?.map(doc => ({
+        return documents?.map((doc: { id: string; originalName: string }) => ({
             id: doc.id,
             name: doc.originalName,
             active: false,
@@ -131,6 +136,7 @@ export async function fetchDocumentStructureAction(documentId: string): Promise<
     }
 
     try {
+        await requireOwnedDocument(documentId);
         const document = await findDocumentWithItemsByIdDB(documentId);
         if (!document) {
             logger.error('获取文档结构失败:', '未找到文档');
@@ -208,6 +214,7 @@ export async function fetchDocumentAction(documentId: string) {
     }
 
     try {
+        await requireOwnedDocument(documentId);
         return await findDocumentWithItemsByIdDB(documentId);
     } catch (error) {
         logger.error('获取文档内容失败:', error);
@@ -215,9 +222,23 @@ export async function fetchDocumentAction(documentId: string) {
     }
 }
 
+export async function renameDocumentAction(documentId: string, name: string) {
+    await requireWritableDocument(documentId);
+
+    const nextName = String(name || '')
+        .replace(/[\\/]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    if (!nextName) throw new Error('文件名不能为空');
+
+    await updateDocumentByIdDB(documentId, { originalName: nextName });
+    return { id: documentId, name: nextName };
+}
+
 // 查询项目最近文档解析状态（用于进度轮询）
 export async function getLatestDocumentStatusForProjectAction(projectId: string) {
-    const docs = await findDocumentsByProjectIdDB(projectId);
+    const project = await requireOwnedProject(projectId);
+    const docs = project.documents;
     if (!docs) return null;
     const latest: any = docs?.[0] ?? null;
     if (!latest) return null;
@@ -227,13 +248,13 @@ export async function getLatestDocumentStatusForProjectAction(projectId: string)
 // Server Action: 通过doc ID获取所属文档的云端预览信息
 export async function fetchDocumentPreviewByDocIdAction(docId: string) {
     try {
-        const doc = await findDocumentByIdDB(docId);
+        const doc = await requireOwnedDocument(docId);
         if (!doc) return null;
         return {
             documentId: doc?.id,
             url: doc?.url,
             mimeType: doc?.mimeType,
-            name: doc?.name,
+            name: doc?.originalName || doc?.name,
         };
     } catch (error) {
         logger.error('获取预览信息失败:', error);
@@ -247,6 +268,7 @@ export async function updateDocumentStatusByIdAction(
     status: keyof typeof DocumentStatus
 ) {
     if (!documentId) return false;
+    await requireWritableDocument(documentId);
     await updateDocumentStatusDB(documentId, DocumentStatus[status] as any);
     return true;
 }

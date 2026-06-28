@@ -1,8 +1,9 @@
 'use server';
-import { DocumentTermExtractAgent } from '@/agents/preprocess/DocumentTermExtractAgent';
 import { DocumentTermTranslateAgent } from '@/agents/preprocess/DocumentTermTranslateAgent';
+import { requireUser } from '@/lib/guards';
 import { createLogger } from '@/lib/logger';
 import type { DocumentTerm } from '@/lib/terms/types';
+import { extractDocumentTermsForOwner } from '@/server/project-init';
 import { DocumentTermExtractOptions } from '@/types/documentTermExtractOptions';
 const logger = createLogger({
     type: 'actions:project-init',
@@ -20,10 +21,8 @@ export async function extractDocumentTermsAction(
     options?: DocumentTermExtractOptions
 ): Promise<DocumentTerm[]> {
     try {
-        const agent = new DocumentTermExtractAgent();
-        const result = await agent.execute({ text, options });
-        logger.info("文档术语提取成功:", result)
-        return result;
+        const authCtx = await requireUser();
+        return extractDocumentTermsForOwner(text, authCtx, options);
     } catch (error) {
         logger.error('文档术语提取失败:', error);
         throw new Error('文档术语提取失败');
@@ -39,6 +38,7 @@ export async function translateTermsBatchAction(
     targetLanguage?: string,
     options?: { domain?: string }
 ): Promise<Array<{ term: string; translation: string }>> {
+    await requireUser();
     const agent = new DocumentTermTranslateAgent();
     const out = await agent.execute({
         terms,

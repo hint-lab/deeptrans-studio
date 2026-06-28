@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getExperimentStatus } from '@/server/experiments/orchestrator';
+import { guardMessage, guardStatus, requireUser } from '@/lib/guards';
 
 export async function GET(req: NextRequest) {
     try {
+        const authCtx = await requireUser();
         const { searchParams } = new URL(req.url);
         const jobId = searchParams.get('jobId');
 
@@ -13,7 +15,7 @@ export async function GET(req: NextRequest) {
             );
         }
 
-        const status = await getExperimentStatus(jobId);
+        const status = await getExperimentStatus(jobId, authCtx);
 
         if (!status) {
             return NextResponse.json(
@@ -27,10 +29,9 @@ export async function GET(req: NextRequest) {
             status,
         });
     } catch (error) {
-        console.error('Failed to get experiment status:', error);
         return NextResponse.json(
-            { success: false, error: 'Failed to get experiment status' },
-            { status: 500 }
+            { success: false, error: guardMessage(error) || 'Failed to get experiment status' },
+            { status: guardStatus(error) }
         );
     }
 }

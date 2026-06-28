@@ -1,5 +1,5 @@
-import { auth } from '@/auth';
 import { prisma } from '@/lib/db';
+import { guardMessage, guardStatus, requireWritableProject } from '@/lib/guards';
 import { createLogger } from '@/lib/logger';
 import { Prisma } from '@prisma/client';
 import { NextRequest } from 'next/server';
@@ -16,16 +16,11 @@ export async function DELETE(
     context: { params: Promise<{ id: string }> } // ✅ 正确：params 是 Promise
 ) {
     try {
-        const session = await auth();
-        if (!session?.user?.id) {
-            return Response.json({ error: '未授权' }, { status: 401 });
-        }
-
         const { id: projectId } = await context.params;
         const { deleteDictionaries = true } = await req.json();
 
-        // 验证项目所有权
-        const project = await prisma.project.findUnique({
+        await requireWritableProject(projectId);
+        const project = await prisma.project.findUniqueOrThrow({
             where: { id: projectId },
             include: {
                 projectDictionaries: {
@@ -39,14 +34,6 @@ export async function DELETE(
                 },
             },
         });
-
-        if (!project) {
-            return Response.json({ error: '项目不存在' }, { status: 404 });
-        }
-
-        if (project.userId && project.userId !== session.user.id) {
-            return Response.json({ error: '无权操作' }, { status: 403 });
-        }
 
         // 执行删除
         await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
@@ -81,8 +68,8 @@ export async function DELETE(
     } catch (error) {
         logger.error('删除项目失败:', error);
         return Response.json(
-            { error: '删除失败', details: error instanceof Error ? error.message : '未知错误' },
-            { status: 500 }
+            { error: guardMessage(error) || '删除失败' },
+            { status: guardStatus(error) }
         );
     }
 }

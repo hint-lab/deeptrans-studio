@@ -2,7 +2,7 @@
 import { fetchDictionariesAction, fetchDictionaryEntriesAction } from '@/actions/dictionary';
 import { parseDocxAction } from '@/actions/parse-docx';
 import { runPreTranslateAction } from '@/actions/pre-translate';
-import { FileUpload } from '@/components/file-upload';
+import { DOCX_ACCEPTED_FILE_TYPES, FileUpload } from '@/components/file-upload';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -177,16 +177,12 @@ export default function DocumentIntelligencePage() {
             const translationParams = {
                 sourceText: data?.text || '',
                 sourceLanguage: sourceLanguage,
-                targetLanguage: targetLanguage,
-                options: {
-                    userId: session.user.id
-                }
+                targetLanguage: targetLanguage
             };
             // 调用翻译API
             const res = await runPreTranslateAction(translationParams.sourceText,
                 translationParams.sourceLanguage,
-                translationParams.targetLanguage,
-                translationParams.options);
+                translationParams.targetLanguage);
             const result = {
                 success: true,
                 data: {
@@ -236,7 +232,7 @@ export default function DocumentIntelligencePage() {
                 const [pubRes, privRes] = await Promise.all([
                     fetchDictionariesAction('public'),
                     session?.user?.id
-                        ? fetchDictionariesAction('private', session.user.id)
+                        ? fetchDictionariesAction('private')
                         : Promise.resolve({ success: true, data: [] as DictionarySummary[] }),
                 ]);
                 if (pubRes.success && pubRes.data) {
@@ -717,6 +713,7 @@ export default function DocumentIntelligencePage() {
                                 onUploadComplete={handleUploadComplete}
                                 projectName={t('temporaryDocument')}
                                 elementName="Dashboard.DocumentTranslate"
+                                acceptedFileTypes={DOCX_ACCEPTED_FILE_TYPES}
                             />
                             {uploadedFile && (
                                 <div className="mt-4 rounded-lg border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-900/20">

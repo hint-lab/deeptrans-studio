@@ -21,7 +21,18 @@ import {
     findExistingDictionaryEntriesMapDB,
     updateDictionaryEntryByIdDB
 } from '@/db/dictionaryEntry';
+import { prisma } from '@/lib/db';
+import {
+    type AuthContext,
+    ownedWhere,
+    requireAccessibleDictionary,
+    requireOwnedProject,
+    requireUser,
+    requireWritableDictionary,
+    requireWritableProject,
+} from '@/lib/guards';
 import { createLogger } from '@/lib/logger';
+import { queryDictionaryEntriesExactWithOwner } from '@/server/dictionary';
 import { XMLParser } from 'fast-xml-parser';
 import { revalidatePath } from 'next/cache';
 import * as XLSX from 'xlsx';
@@ -33,23 +44,23 @@ const logger = createLogger({
     colors: true, // 仅当json：false时启用颜色输出可用
     includeCaller: false, // 日志不包含调用者
 });
+
 // 创建词典
 export async function createDictionaryAction(data: {
     name: string;
     description?: string;
     domain: string;
     visibility?: 'PUBLIC' | 'PROJECT' | 'PRIVATE';
-    userId?: string;
-    tenantId?: string;
 }) {
     try {
+        const authCtx = await requireUser();
         const dictionary = await createDictionaryDB({
             name: data.name,
             description: data.description,
             domain: data.domain,
             visibility: data.visibility,
-            userId: data.userId,
-            tenantId: data.tenantId,
+            userId: authCtx.userId,
+            tenantId: authCtx.tenantId || undefined,
         });
 
         revalidatePath('/dashboard/dictionaries');
@@ -63,7 +74,19 @@ export async function createDictionaryAction(data: {
 // 获取所有词典
 export async function getAllDictionariesAction() {
     try {
-        const dictionaries = await findAllDictionariesDB();
+        const authCtx = await requireUser();
+        const dictionaries = await prisma.dictionary.findMany({
+            where: {
+                OR: [
+                    { visibility: 'PUBLIC' },
+                    { userId: authCtx.userId },
+                    ...(authCtx.tenantId ? [{ tenantId: authCtx.tenantId }] : []),
+                    { projectBindings: { some: { project: ownedWhere(authCtx) } } },
+                ],
+            },
+            select: { id: true, name: true },
+            orderBy: { createdAt: 'desc' },
+        });
         return { success: true, data: dictionaries };
     } catch (error) {
         logger.error('获取词典失败:', error);
@@ -74,7 +97,22 @@ export async function getAllDictionariesAction() {
 // 轻量列表（给设置选项用）
 export async function getAllDictionariesLiteAction() {
     try {
-        const dictionaries = await findAllDictionariesWithEntriesDB();
+        const authCtx = await requireUser();
+        const dictionaries = await prisma.dictionary.findMany({
+            where: {
+                OR: [
+                    { visibility: 'PUBLIC' },
+                    { userId: authCtx.userId },
+                    ...(authCtx.tenantId ? [{ tenantId: authCtx.tenantId }] : []),
+                    { projectBindings: { some: { project: ownedWhere(authCtx) } } },
+                ],
+            },
+            include: {
+                entries: true,
+                user: { select: { id: true, name: true } },
+            },
+            orderBy: { createdAt: 'desc' },
+        });
         return { success: true, data: dictionaries };
     } catch (error) {
         logger.error('获取词典列表失败:', error);
@@ -83,20 +121,28 @@ export async function getAllDictionariesLiteAction() {
 }
 
 // 获取公共词典
-export async function fetchDictionariesAction(
-    visibility: 'public' | 'private' | 'project',
-    userId?: string
-) {
+export async function fetchDictionariesAction(visibility: 'public' | 'private' | 'project') {
     try {
+        const authCtx = await requireUser();
         let dictionaries;
-        if (visibility === 'private' && userId) {
-            dictionaries = await findDictionariesGivenVisibilityDB('PRIVATE', 'desc', userId);
+        if (visibility === 'private') {
+            dictionaries = await findDictionariesGivenVisibilityDB('PRIVATE', 'desc', authCtx.userId);
         } else if (visibility === 'project') {
-            dictionaries = await findDictionariesGivenVisibilityDB('PROJECT', 'desc');
+            dictionaries = await prisma.dictionary.findMany({
+                where: {
+                    visibility: 'PROJECT',
+                    OR: [
+                        ...(authCtx.tenantId ? [{ tenantId: authCtx.tenantId }] : []),
+                        { projectBindings: { some: { project: ownedWhere(authCtx) } } },
+                    ],
+                },
+                orderBy: { createdAt: 'desc' },
+                include: { _count: { select: { entries: true } } },
+            });
         } else {
             dictionaries = await findDictionariesGivenVisibilityDB('PUBLIC');
         }
-        logger.debug('获取词典列表:', dictionaries);
+        logger.debug('获取词典列表:', { count: dictionaries?.length || 0 });
         return { success: true, data: dictionaries };
     } catch (error) {
         logger.error('获取公共词典失败:', error);
@@ -107,7 +153,7 @@ export async function fetchDictionariesAction(
 // 获取词典详情
 export async function fetchDictionaryByIdAction(id: string) {
     try {
-        const dictionary = await findDictionaryByIdDB(id);
+        const dictionary = await requireAccessibleDictionary(id);
 
         return { success: true, data: dictionary };
     } catch (error) {
@@ -119,7 +165,7 @@ export async function fetchDictionaryByIdAction(id: string) {
 // 仅获取词典元信息（更快，避免一次性返回大量 entries）
 export async function fetchDictionaryMetaByIdAction(dictionaryId: string) {
     try {
-        const dictionary = await findDictionaryByIdDB(dictionaryId);
+        const dictionary = await requireAccessibleDictionary(dictionaryId);
         return { success: true, data: dictionary };
     } catch (error) {
         logger.error('获取词典元信息失败:', error);
@@ -129,6 +175,7 @@ export async function fetchDictionaryMetaByIdAction(dictionaryId: string) {
 // 仅获取词典元信息（更快，避免一次性返回大量 entries）
 export async function fetchDictionaryMetaByProjectIdAction(projectId: string) {
     try {
+        await requireOwnedProject(projectId);
         const dictionary = await findDictionaryByProjectIdDB(projectId);
         return { success: true, data: dictionary };
     } catch (error) {
@@ -147,6 +194,7 @@ export async function updateDictionaryAction(
     }
 ) {
     try {
+        await requireWritableDictionary(id);
         const dictionary = await updateDictionaryByIdDB(id, data);
 
         revalidatePath('/dashboard/dictionaries');
@@ -160,6 +208,15 @@ export async function updateDictionaryAction(
 // 删除词典
 export async function deleteDictionaryAction(id: string) {
     try {
+        await requireWritableDictionary(id);
+        const bindings = await prisma.projectDictionary.findMany({
+            where: { dictionaryId: id },
+            select: { projectId: true },
+            take: 2,
+        });
+        if (bindings.length > 1) {
+            return { success: false, error: '词典已被多个项目绑定，不能直接删除' };
+        }
         await deleteDictionaryByIdDB(id);
         revalidatePath('/dashboard/dictionaries');
         return { success: true };
@@ -176,17 +233,18 @@ export async function createDictionaryEntryAction(data: {
     notes?: string;
     dictionaryId: string;
     origin?: string;
-    userId?: string;
 }) {
     try {
+        const authCtx = await requireUser();
+        await requireWritableDictionary(data.dictionaryId, authCtx);
         const entry = await createDictionaryEntryDB({
             dictionaryId: data.dictionaryId,
             sourceText: data.sourceText,
             targetText: data.targetText,
             notes: data.notes,
             origin: data.origin ?? 'manual',
-            createdById: data.userId,
-            updatedById: data.userId,
+            createdById: authCtx.userId,
+            updatedById: authCtx.userId,
         });
 
         revalidatePath('/dashboard/dictionaries');
@@ -209,12 +267,19 @@ export async function updateDictionaryEntryAction(
     }
 ) {
     try {
+        const authCtx = await requireUser();
+        const existing = await prisma.dictionaryEntry.findUnique({
+            where: { id },
+            select: { dictionaryId: true },
+        });
+        if (!existing) throw new Error('词条不存在');
+        await requireWritableDictionary(existing.dictionaryId, authCtx);
         const entry = await updateDictionaryEntryByIdDB(id, {
             sourceText: data.sourceText,
             targetText: data.targetText,
             notes: data.notes,
             enabled: data.enabled,
-            updatedById: data.userId,
+            updatedById: authCtx.userId,
         });
 
         revalidatePath('/dashboard/dictionaries');
@@ -228,6 +293,13 @@ export async function updateDictionaryEntryAction(
 // 删除词典条目
 export async function deleteDictionaryEntryAction(id: string) {
     try {
+        const authCtx = await requireUser();
+        const existing = await prisma.dictionaryEntry.findUnique({
+            where: { id },
+            select: { dictionaryId: true },
+        });
+        if (!existing) throw new Error('词条不存在');
+        await requireWritableDictionary(existing.dictionaryId, authCtx);
         await deleteDictionaryEntryByIdDB(id);
 
         revalidatePath('/dashboard/dictionaries');
@@ -241,6 +313,7 @@ export async function deleteDictionaryEntryAction(id: string) {
 // 获取词典的所有条目
 export async function fetchDictionaryEntriesAction(dictionaryId: string, limit: number = 0) {
     try {
+        await requireAccessibleDictionary(dictionaryId);
         const entries = await findDictionaryEntriesDB(dictionaryId, limit);
 
         return { success: true, data: entries };
@@ -259,6 +332,7 @@ export async function fetchDictionaryEntriesPagedAction(
     originFilter?: string
 ) {
     try {
+        await requireAccessibleDictionary(dictionaryId);
         const where: any = { dictionaryId };
         if (searchTerm && searchTerm.trim()) {
             where.OR = [
@@ -289,6 +363,7 @@ export async function fetchDictionaryEntriesPagedAction(
 // 搜索词典条目
 export async function searchDictionaryEntriesAction(dictionaryId: string, searchTerm: string) {
     try {
+        await requireAccessibleDictionary(dictionaryId);
         const where: any = {
             dictionaryId,
             OR: [
@@ -313,6 +388,8 @@ export async function importDictionaryFromXlsxAction(
     mapping?: { sourceKey?: string; targetKey?: string; notesKey?: string }
 ) {
     try {
+        const authCtx = await requireUser();
+        await requireWritableDictionary(dictionaryId, authCtx);
         const XLSX = await import('xlsx');
         const wb = XLSX.read(fileBuffer, { type: 'buffer' });
         const first =
@@ -350,6 +427,8 @@ export async function importDictionaryFromXlsxAction(
                 sourceText: e.sourceText,
                 targetText: e.targetText,
                 notes: e.notes ?? null,
+                createdById: authCtx.userId,
+                updatedById: authCtx.userId,
             }))
         );
         revalidatePath('/dashboard/dictionaries');
@@ -363,6 +442,8 @@ export async function importDictionaryFromXlsxAction(
 // 导入：TBX（简化版：提取 termEntry > langSet 与 tig 的 term）
 export async function importDictionaryFromTbxAction(dictionaryId: string, xmlText: string) {
     try {
+        const authCtx = await requireUser();
+        await requireWritableDictionary(dictionaryId, authCtx);
         const { XMLParser } = await import('fast-xml-parser');
         const parser = new XMLParser({
             ignoreAttributes: false,
@@ -392,7 +473,13 @@ export async function importDictionaryFromTbxAction(dictionaryId: string, xmlTex
         if (!entries.length) return { success: false, error: 'TBX 未检测到可导入的词条' };
         await createDictionaryEntriesBulkDB(
             dictionaryId,
-            entries.map(e => ({ sourceText: e.sourceText, targetText: e.targetText, notes: null }))
+            entries.map(e => ({
+                sourceText: e.sourceText,
+                targetText: e.targetText,
+                notes: null,
+                createdById: authCtx.userId,
+                updatedById: authCtx.userId,
+            }))
         );
         revalidatePath('/dashboard/dictionaries');
         return { success: true, count: entries.length };
@@ -408,6 +495,8 @@ export async function bulkImportDictionaryEntriesAction(
     entries: Array<{ sourceText: string; targetText: string; notes?: string }>
 ) {
     try {
+        const authCtx = await requireUser();
+        await requireWritableDictionary(dictionaryId, authCtx);
         if (!Array.isArray(entries) || entries.length === 0) {
             return { success: true, count: 0 };
         }
@@ -418,6 +507,8 @@ export async function bulkImportDictionaryEntriesAction(
                 sourceText: e.sourceText,
                 targetText: e.targetText,
                 notes: e.notes ?? null,
+                createdById: authCtx.userId,
+                updatedById: authCtx.userId,
             }))
         );
 
@@ -551,7 +642,8 @@ function parseTBXToEntries(
 async function importEntries(
     dictionaryId: string,
     entries: ParsedEntry[],
-    mode: 'append' | 'overwrite' | 'upsert'
+    mode: 'append' | 'overwrite' | 'upsert',
+    userId?: string
 ) {
     let inserted = 0;
     let updated = 0;
@@ -566,8 +658,8 @@ async function importEntries(
                 targetText: e.targetText,
                 notes: e.notes ?? null,
                 origin: 'apply:copied',
-                createdById: undefined,
-                updatedById: undefined,
+                createdById: userId,
+                updatedById: userId,
             });
             inserted += 1;
         }
@@ -581,8 +673,8 @@ async function importEntries(
                 targetText: e.targetText,
                 notes: e.notes ?? null,
                 origin: 'apply:copied',
-                createdById: undefined,
-                updatedById: undefined,
+                createdById: userId,
+                updatedById: userId,
             });
             inserted += 1;
         }
@@ -598,6 +690,7 @@ async function importEntries(
             await updateDictionaryEntryByIdDB(id, {
                 targetText: e.targetText,
                 notes: e.notes ?? null,
+                updatedById: userId,
             });
             updated += 1;
         } else {
@@ -607,8 +700,8 @@ async function importEntries(
                 targetText: e.targetText,
                 notes: e.notes ?? null,
                 origin: 'apply:copied',
-                createdById: undefined,
-                updatedById: undefined,
+                createdById: userId,
+                updatedById: userId,
             });
             inserted += 1;
         }
@@ -626,6 +719,8 @@ export async function importDictionaryAction(input: {
     targetKey?: string;
     notesKey?: string;
 }) {
+    const authCtx = await requireUser();
+    await requireWritableDictionary(input.dictionaryId, authCtx);
     const {
         dictionaryId,
         mode = 'upsert',
@@ -648,7 +743,7 @@ export async function importDictionaryAction(input: {
     } else {
         return { success: false, error: '不支持的文件类型，仅支持 .xlsx/.xls/.csv/.tbx' };
     }
-    const { inserted, updated, skipped } = await importEntries(dictionaryId, entries, mode);
+    const { inserted, updated, skipped } = await importEntries(dictionaryId, entries, mode, authCtx.userId);
     revalidatePath('/dashboard/dictionaries');
     return { success: true, data: { inserted, updated, skipped, total: entries.length } };
 }
@@ -656,9 +751,10 @@ export async function importDictionaryAction(input: {
 // 统一的词典查询（按可见范围：PUBLIC / PROJECT(projectId) / PRIVATE(userId)）
 export async function queryDictionaryEntriesByScopeAction(
     term: string,
-    opts?: { tenantId?: string; userId?: string; limit?: number }
+    opts?: { limit?: number }
 ) {
     try {
+        const authCtx = await requireUser();
         const limit = Math.max(1, Math.min(200, opts?.limit ?? 50));
         if (!term || !term.trim())
             return {
@@ -666,11 +762,14 @@ export async function queryDictionaryEntriesByScopeAction(
                 data: [] as Array<{ term: string; translation: string; notes?: string }>,
             };
         const orScopes: any[] = [{ visibility: 'PUBLIC' as any }];
-        // PROJECT 范围：按 projectId 过滤；若无特定 projectId 场景，这里保持为所有 PROJECT 词典
-        // 保留租户参数以兼容未来多租户扩展，但不再作为 TEAM
-        if (opts?.tenantId) orScopes.push({ visibility: 'PROJECT' as any });
-        else orScopes.push({ visibility: 'PROJECT' as any });
-        if (opts?.userId) orScopes.push({ visibility: 'PRIVATE' as any, userId: opts.userId });
+        orScopes.push({
+            visibility: 'PROJECT' as any,
+            OR: [
+                ...(authCtx.tenantId ? [{ tenantId: authCtx.tenantId }] : []),
+                { projectBindings: { some: { project: ownedWhere(authCtx) } } },
+            ],
+        });
+        orScopes.push({ visibility: 'PRIVATE' as any, userId: authCtx.userId });
 
         const rows = await (
             await import('@/db/dictionaryEntry')
@@ -700,60 +799,22 @@ export async function queryDictionaryEntriesByScopeAction(
 // 精确匹配：仅按源文精确等值匹配，减少“包含”带来的噪声
 export async function queryDictionaryEntriesExactByScope(
     term: string,
-    opts?: { tenantId?: string; userId?: string; limit?: number }
+    opts?: { limit?: number }
 ) {
-    try {
-        const limit = Math.max(1, Math.min(200, opts?.limit ?? 50));
-        if (!term || !term.trim())
-            return {
-                success: true,
-                data: [] as Array<{ term: string; translation: string; notes?: string }>,
-            };
-        const orScopes: any[] = [{ visibility: 'PUBLIC' as any }];
-        if (opts?.tenantId) orScopes.push({ visibility: 'PROJECT' as any });
-        else orScopes.push({ visibility: 'PROJECT' as any });
-        if (opts?.userId) orScopes.push({ visibility: 'PRIVATE' as any, userId: opts.userId });
-
-        const rows = await (
-            await import('@/db/dictionaryEntry')
-        ).findExactByScopeDB(term, orScopes, limit);
-        if (!rows)
-            return {
-                success: true,
-                data: [] as Array<{
-                    id: string;
-                    dictionaryId: string;
-                    term: string;
-                    translation: string;
-                    notes?: string;
-                    origin?: string;
-                    source?: string;
-                }>,
-            };
-        const visMap: Record<string, string> = { PUBLIC: '公共', PROJECT: '项目', PRIVATE: '私有' };
-        return {
-            success: true,
-            data: rows.map((r: any) => ({
-                id: r.id,
-                dictionaryId: r.dictionaryId,
-                term: r.sourceText,
-                translation: r.targetText,
-                notes: r.notes || undefined,
-                origin: r.origin || undefined,
-                source: r?.dictionary
-                    ? `${visMap[r.dictionary.visibility as string] || r.dictionary.visibility} · ${r.dictionary.name}`
-                    : undefined,
-            })),
-        };
-    } catch (e) {
-        return { success: false, error: (e as any)?.message || '查询失败' };
-    }
+    const authCtx = await requireUser();
+    return queryDictionaryEntriesExactWithOwner(term, authCtx, opts);
 }
 
 // 查找/创建：项目 + 用户 的私有词典
 export async function findDictionaryByProjectUserAction(projectId: string, userId: string) {
     try {
-        const res = await findOrCreateDictionaryDB(projectId, { scope: 'PRIVATE', userId });
+        const authCtx = await requireUser();
+        const project = await requireWritableProject(projectId, authCtx);
+        const res = await findOrCreateDictionaryDB(project.id, {
+            scope: 'PRIVATE',
+            userId: authCtx.userId,
+            tenantId: authCtx.tenantId || undefined,
+        });
         try {
             revalidatePath('/dashboard/dictionaries');
         } catch { }
@@ -767,7 +828,13 @@ export async function findDictionaryByProjectUserAction(projectId: string, userI
 // 查找/创建：项目级词典（PROJECT 可见性，不绑定 userId）
 export async function findProjectDictionaryAction(projectId: string) {
     try {
-        const res = await findOrCreateDictionaryDB(projectId, { scope: 'PROJECT' });
+        const authCtx = await requireUser();
+        const project = await requireWritableProject(projectId, authCtx);
+        const res = await findOrCreateDictionaryDB(project.id, {
+            scope: 'PROJECT',
+            tenantId: authCtx.tenantId || undefined,
+            userId: authCtx.userId,
+        });
         try {
             revalidatePath('/dashboard/dictionaries');
         } catch { }
@@ -782,15 +849,17 @@ export async function findProjectDictionaryAction(projectId: string) {
 export async function bulkUpsertEntriesAction(input: {
     dictionaryId: string;
     projectId: string;
-    userId?: string;
     terms: string[];
     mode?: 'append' | 'overwrite' | 'upsert';
     copyFromOthers?: boolean;
 }) {
     try {
+        const authCtx = await requireUser();
         const dictionaryId = input.dictionaryId;
         const projectId = input.projectId;
-        const userId = input.userId;
+        const userId = authCtx.userId;
+        await requireWritableProject(projectId, authCtx);
+        await requireWritableDictionary(dictionaryId, authCtx);
         const copyFromOthers = input.copyFromOthers === true;
         const mode = (input.mode || 'upsert') as 'append' | 'overwrite' | 'upsert';
         const unique = Array.from(
@@ -884,6 +953,7 @@ export async function bulkUpsertEntriesAction(input: {
 export async function importDictionaryFromFormAction(form: FormData) {
     'use server';
     try {
+        await requireUser();
         const dictionaryId = String(form.get('dictionaryId') || '').trim();
         const mode = String(form.get('mode') || 'upsert')
             .trim()

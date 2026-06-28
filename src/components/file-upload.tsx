@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { createLogger } from '@/lib/logger';
 import { useTranslations } from 'next-intl';
 import { useCallback, useState } from 'react';
-import { FileRejection, useDropzone } from 'react-dropzone';
+import { type Accept, FileRejection, useDropzone } from 'react-dropzone';
 import { toast } from 'sonner';
 const logger = createLogger({
     type: 'components:file-upload',
@@ -21,26 +21,28 @@ interface FileUploadProps {
         contentType: string;
         size: number;
     }) => void;
-    projectName: string;
+    projectName?: string;
+    projectId?: string;
     elementName: string;
+    acceptedFileTypes?: Accept;
 }
 
-const ACCEPTED_FILE_TYPES = {
-    /* 图片 */
+export const PROJECT_DOCUMENT_ACCEPTED_FILE_TYPES: Accept = {
+    'application/pdf': ['.pdf'],
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+    'text/plain': ['.txt'],
+    'text/markdown': ['.md', '.markdown'],
+    'application/octet-stream': ['.md', '.markdown'],
+};
+
+export const DOCX_ACCEPTED_FILE_TYPES: Accept = {
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+};
+
+export const IMAGE_ACCEPTED_FILE_TYPES: Accept = {
     'image/jpeg': ['.jpg', '.jpeg'],
     'image/png': ['.png'],
     'image/webp': ['.webp'],
-
-    /* 文档 */
-    'application/pdf': ['.pdf'],
-    'application/msword': ['.doc'],
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
-    'application/vnd.ms-powerpoint': ['.ppt'],
-    'application/vnd.openxmlformats-officedocument.presentationml.presentation': ['.pptx'],
-
-    /* 文本 */
-    'text/plain': ['.txt'],
 };
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
@@ -48,7 +50,9 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 export function FileUpload({
     onUploadComplete,
     projectName,
+    projectId,
     elementName = 'FileUpload',
+    acceptedFileTypes = PROJECT_DOCUMENT_ACCEPTED_FILE_TYPES,
 }: FileUploadProps) {
     const t = useTranslations(elementName);
     const [isUploading, setIsUploading] = useState(false);
@@ -74,7 +78,7 @@ export function FileUpload({
                 name: file.name,
                 type: file.type,
                 size: file.size,
-                projectName,
+                projectId,
             });
 
             // 检查文件大小
@@ -83,7 +87,7 @@ export function FileUpload({
                 return;
             }
 
-            if (!projectName.trim()) {
+            if (projectName !== undefined && !projectName.trim()) {
                 toast.error(t('projectNameRequired'));
                 return;
             }
@@ -92,8 +96,7 @@ export function FileUpload({
 
             try {
                 // 1. 获取预签名上传 URL
-                const result = await getUploadUrlAction(file.name, file.type, projectName.trim());
-                logger.debug(t('getUrlResult'), result);
+                const result = await getUploadUrlAction(file.name, file.type, { projectId });
 
                 if (!result.success || !result.data) {
                     throw new Error(result.error || t('getUrlFailed'));
@@ -102,7 +105,6 @@ export function FileUpload({
                 const { data } = result;
 
                 // 2. 先尝试直接上传（浏览器直传）
-                logger.debug(t('uploadingToStorage'), data.uploadUrl);
                 let directOk = false;
                 try {
                     const uploadResponse = await fetch(data.uploadUrl, {
@@ -129,7 +131,7 @@ export function FileUpload({
                 if (!directOk) {
                     const form = new FormData();
                     form.append('file', file);
-                    form.append('projectName', projectName.trim());
+                    if (projectId) form.append('projectId', projectId);
                     const proxyJson = await uploadFileAction(form);
                     if (!proxyJson || !proxyJson.success || !proxyJson.data) {
                         throw new Error((proxyJson as any)?.error || t('serverUploadFailed'));
@@ -173,7 +175,7 @@ export function FileUpload({
                 setIsUploading(false);
             }
         },
-        [onUploadComplete, projectName, t]
+        [onUploadComplete, projectId, projectName, t]
     );
 
     const onDrop = useCallback(
@@ -206,7 +208,7 @@ export function FileUpload({
     const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
         onDrop,
         onDropRejected,
-        accept: ACCEPTED_FILE_TYPES,
+        accept: acceptedFileTypes,
         maxFiles: 1,
         maxSize: MAX_FILE_SIZE,
         disabled: isUploading,

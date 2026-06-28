@@ -1,6 +1,7 @@
 export const runtime = 'nodejs';
 import { NextResponse } from 'next/server';
 import { findDocumentItemTextPairsByDocumentIdDB } from '@/db/documentItem';
+import { guardMessage, guardStatus, requireOwnedDocument } from '@/lib/guards';
 
 export async function GET(req: Request) {
     try {
@@ -11,6 +12,7 @@ export async function GET(req: Request) {
         if (!documentId)
             return NextResponse.json({ ok: false, error: '缺少 documentId' }, { status: 400 });
 
+        await requireOwnedDocument(documentId);
         const items = await findDocumentItemTextPairsByDocumentIdDB(documentId);
 
         const lines: string[] = [];
@@ -48,6 +50,9 @@ export async function GET(req: Request) {
             },
         });
     } catch (e: any) {
-        return NextResponse.json({ ok: false, error: e?.message || String(e) }, { status: 500 });
+        return NextResponse.json(
+            { ok: false, error: guardMessage(e) },
+            { status: guardStatus(e) }
+        );
     }
 }

@@ -77,7 +77,6 @@ export function AddPublicDictionaryDialog({
                 description: formData.description,
                 domain: formData.domain,
                 visibility: 'PUBLIC',
-                userId: undefined,
             });
 
             if (result.success && result.data) {

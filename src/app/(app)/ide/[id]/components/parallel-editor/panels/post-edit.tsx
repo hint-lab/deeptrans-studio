@@ -201,12 +201,7 @@ export default function PostEditPanel() {
             const rewritten = await embedDiscourseAction(
                 sourceTextToUse,
                 String(targetText),
-                refs as any,
-                {
-                    tenantId:
-                        (activeDocumentItem as any)?.projectId ||
-                        (activeDocumentItem as any)?.tenantId,
-                }
+                refs as any
             );
             setPosteditOutputs({
                 memos: posteditMemos,

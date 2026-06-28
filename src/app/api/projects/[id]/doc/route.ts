@@ -1,13 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { findDocumentsByProjectIdDB } from '@/db/document';
+import { guardMessage, guardStatus, requireOwnedProject } from '@/lib/guards';
 
 export async function GET(req: NextRequest, context: any) {
     try {
-        const docs = await findDocumentsByProjectIdDB(context?.params?.id);
-        const only = docs?.[0];
+        const { id } = (await context?.params) || {};
+        const project = await requireOwnedProject(id);
+        const only = project.documents?.sort(
+            (a: any, b: any) => Number(b.uploadedAt) - Number(a.uploadedAt)
+        )?.[0];
         if (!only) return NextResponse.json({ error: 'not found' }, { status: 404 });
         return NextResponse.json({ documentId: (only as any).id });
     } catch (e: any) {
-        return NextResponse.json({ error: e?.message || 'failed' }, { status: 500 });
+        return NextResponse.json({ error: guardMessage(e) }, { status: guardStatus(e) });
     }
 }

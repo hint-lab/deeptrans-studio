@@ -1,16 +1,23 @@
 'use server';
 
 import { findDocumentItemsLiteByIdsDB } from '@/db/documentItem';
-import { auth } from '@/auth';
+import { GuardError, requireWritableDocumentItem, requireUser } from '@/lib/guards';
 // 延迟导入队列相关，避免在客户端构建时解析到 Node-only 依赖
+
+async function requireBatchOwner(connection: any, batchId: string) {
+    const authCtx = await requireUser();
+    const ownerId = await connection.get(`batch.${batchId}.userId`);
+    if (!ownerId || ownerId !== authCtx.userId) throw new GuardError(401, '未授权');
+    return authCtx;
+}
 
 export async function startBatchPreTranslateAction(
     itemIds: string[],
     opts: { sourceLanguage?: string; targetLanguage?: string }
 ) {
-    const session = await auth();
-    const userId = session?.user?.id;
+    const authCtx = await requireUser();
     if (!Array.isArray(itemIds) || itemIds.length === 0) return { success: 0, failed: 0 } as any;
+    await Promise.all(itemIds.map(id => requireWritableDocumentItem(id, authCtx)));
 
     const { getQueue, defaultJobOpts } = await import('@/worker/queue');
     const { getRedis } = await import('@/lib/redis');
@@ -30,6 +37,7 @@ export async function startBatchPreTranslateAction(
     await connection.set(`batch.${batchId}.done`, '0');
     await connection.set(`batch.${batchId}.failed`, '0');
     await connection.set(`batch.${batchId}.cancel`, '0');
+    await connection.set(`batch.${batchId}.userId`, authCtx.userId);
 
     // 使用 BullMQ 入队
     const queue = getQueue('pretranslate');
@@ -42,7 +50,8 @@ export async function startBatchPreTranslateAction(
                 text: it.text,
                 sourceLanguage: opts.sourceLanguage,
                 targetLanguage: opts.targetLanguage,
-                userId,
+                userId: authCtx.userId,
+                tenantId: authCtx.tenantId,
             },
             opts: defaultJobOpts,
         }))
@@ -53,6 +62,7 @@ export async function startBatchPreTranslateAction(
 export async function getBatchPreTranslateProgressAction(batchId: string) {
     const { getRedis } = await import('@/lib/redis');
     const connection = await getRedis();
+    await requireBatchOwner(connection, batchId);
     const total = Number(await connection.get(`batch.${batchId}.total`)) || 0;
     const done = Number(await connection.get(`batch.${batchId}.done`)) || 0;
     const failed = Number(await connection.get(`batch.${batchId}.failed`)) || 0;
@@ -63,16 +73,16 @@ export async function getBatchPreTranslateProgressAction(batchId: string) {
 export async function cancelBatchPreTranslateAction(batchId: string) {
     const { getRedis } = await import('@/lib/redis');
     const connection = await getRedis();
+    await requireBatchOwner(connection, batchId);
     await connection.set(`batch.${batchId}.cancel`, '1');
     return { ok: true };
 }
 
 // 在批处理完成后，将 Redis 中的结果一次性落库，并清理缓存
 export async function persistBatchPreTranslateResultsAction(batchId: string) {
-    const session = await auth();
-    if (!session?.user?.id) throw new Error('未授权');
     const { getRedis } = await import('@/lib/redis');
     const connection = await getRedis();
+    const authCtx = await requireBatchOwner(connection, batchId);
     const total = Number(await connection.get(`batch.${batchId}.total`)) || 0;
     if (!total) return { updated: 0 };
 
@@ -89,6 +99,7 @@ export async function persistBatchPreTranslateResultsAction(batchId: string) {
                 dict?: any;
             };
             if (!data?.id) continue;
+            await requireWritableDocumentItem(data.id, authCtx);
             const { updateDocumentItemByIdDB } = await import('@/db/documentItem');
             await updateDocumentItemByIdDB(data.id, {
                 targetText: data.translation as any,
@@ -105,7 +116,8 @@ export async function persistBatchPreTranslateResultsAction(batchId: string) {
         `batch.${batchId}.total`,
         `batch.${batchId}.done`,
         `batch.${batchId}.failed`,
-        `batch.${batchId}.cancel`
+        `batch.${batchId}.cancel`,
+        `batch.${batchId}.userId`
     );
     if (keys.length) await connection.del(...keys);
     return { updated };

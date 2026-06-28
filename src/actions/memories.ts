@@ -2,19 +2,25 @@
 
 import { embedBatchAction, embedTextAction } from '@/actions/embedding';
 import { prisma } from '@/lib/db';
+import { type AuthContext, requireOwnedMemory, requireUser, userOwnedWhere } from '@/lib/guards';
 import { createLogger } from '@/lib/logger';
-import { hybridSearch, upsertVectors } from '@/lib/vector/milvus';
+import { hybridSearch, upsertVectors } from '@/lib/vector/postgres';
+import { searchMemoryForOwner } from '@/server/memory';
 import { HybridSearchConfig } from '@/types/hybrid-search';
 import { XMLParser } from 'fast-xml-parser';
 import * as XLSX from 'xlsx';
-const logger = createLogger({
-    type: 'actions:memories',
-}, {
-    json: false,// 开启json格式输出
-    pretty: false, // 关闭开发环境美化输出
-    colors: true, // 仅当json：false时启用颜色输出可用
-    includeCaller: false, // 日志不包含调用者
-});
+const logger = createLogger(
+    {
+        type: 'actions:memories',
+    },
+    {
+        json: false, // 开启json格式输出
+        pretty: false, // 关闭开发环境美化输出
+        colors: true, // 仅当json：false时启用颜色输出可用
+        includeCaller: false, // 日志不包含调用者
+    }
+);
+
 type ImportInput = {
     file: File;
     memoryId?: string;
@@ -84,10 +90,10 @@ function parseTMX(xml: string, srcPref?: string, tgtPref?: string) {
         const pick = (pref?: string) =>
             pref
                 ? tuv.find((x: any) =>
-                    String(x?.['@_xml:lang'] || x?.['@_lang'] || '')
-                        .toLowerCase()
-                        .startsWith(pref.toLowerCase())
-                )
+                      String(x?.['@_xml:lang'] || x?.['@_lang'] || '')
+                          .toLowerCase()
+                          .startsWith(pref.toLowerCase())
+                  )
                 : undefined;
         let s = pick(srcPref);
         let t = pick(tgtPref);
@@ -105,6 +111,7 @@ function parseTMX(xml: string, srcPref?: string, tgtPref?: string) {
 }
 
 export async function importMemoryAction(input: ImportInput) {
+    const authCtx = await requireUser();
     const { file, memoryId, sourceLang, targetLang, sourceKey, targetKey, notesKey } = input;
     const name = (file as any).name || 'upload';
     const ext = name.slice(name.lastIndexOf('.') + 1).toLowerCase();
@@ -120,32 +127,31 @@ export async function importMemoryAction(input: ImportInput) {
 
     const hasTm = (prisma as any).translationMemory && (prisma as any).translationMemoryEntry;
     if (!hasTm) {
-        // 降级写入 DictionaryEntry，但仍然执行向量化并入索到 Milvus
-        if (entries.length > 0) {
-            await prisma.$transaction(
-                entries.map(e =>
-                    prisma.dictionaryEntry.create({
-                        data: {
-                            dictionaryId: 'global-memory',
-                            sourceText: e.source,
-                            targetText: e.target,
-                            notes: e.notes ?? null,
-                        },
-                    })
-                )
-            );
-        }
-        return { success: true, data: { total: entries.length }, fallback: true } as const;
+        return { success: false, error: '当前数据模型未启用 TranslationMemory' } as const;
     }
 
     let targetMemoryId = memoryId;
     if (!targetMemoryId) {
-        const mem = await (prisma as any).translationMemory.upsert({
-            where: { id: 'global-memory' },
-            update: {},
-            create: { id: 'global-memory', name: '全局记忆库', description: '默认导入' },
+        const existing = await (prisma as any).translationMemory.findFirst({
+            where: {
+                name: '默认记忆库',
+                ...userOwnedWhere(authCtx),
+            },
+            orderBy: { createdAt: 'asc' },
         });
+        const mem =
+            existing ??
+            (await (prisma as any).translationMemory.create({
+                data: {
+                    name: '默认记忆库',
+                    description: '默认导入',
+                    tenantId: authCtx.tenantId || null,
+                    userId: authCtx.userId,
+                },
+            }));
         targetMemoryId = mem.id;
+    } else {
+        await requireOwnedMemory(targetMemoryId, authCtx);
     }
 
     if (entries.length > 0) {
@@ -182,33 +188,41 @@ export async function importMemoryAction(input: ImportInput) {
                         notes: e.notes ?? null,
                         sourceLang,
                         targetLang,
+                        createdById: authCtx.userId,
+                        updatedById: authCtx.userId,
                     },
                 })
             )
         );
-        // 写入 Milvus（TranslationMemory collection）
+        // 写入 Postgres pgvector embedding（TranslationMemory collection）
         try {
             const points = created
                 .map((row: any, i: number) => ({
                     id: row.id,
                     text: `${row.sourceText}\n${row.targetText}`,
                     vector: vectors[i] || [],
-                    meta: { memoryId: row.memoryId, sourceLang, targetLang },
+                    meta: {
+                        memoryId: row.memoryId,
+                        sourceLang,
+                        targetLang,
+                        tenantId: authCtx.tenantId || null,
+                        userId: authCtx.userId,
+                    },
                 }))
                 .filter((p: { vector: number[] }) => Array.isArray(p.vector) && p.vector.length);
 
             logger.log(
-                `[MEMORY_IMPORT] 准备写入 Milvus: ${points.length}/${created.length} 条记录有有效向量`
+                `[MEMORY_IMPORT] 准备写入 Postgres 向量索引: ${points.length}/${created.length} 条记录有有效向量`
             );
 
             if (points.length) {
                 await upsertVectors({ collection: 'TranslationMemory', points });
-                logger.log(`[MEMORY_IMPORT] 成功写入 Milvus: ${points.length} 条记录`);
+                logger.log(`[MEMORY_IMPORT] 成功写入 Postgres 向量索引: ${points.length} 条记录`);
             } else {
-                logger.warn(`[MEMORY_IMPORT] 警告: 没有有效向量可写入 Milvus`);
+                logger.warn(`[MEMORY_IMPORT] 警告: 没有有效向量可写入 Postgres 向量索引`);
             }
         } catch (error) {
-            logger.error(`[MEMORY_IMPORT] Milvus 写入失败:`, error);
+            logger.error(`[MEMORY_IMPORT] Postgres 向量索引写入失败:`, error);
             // 重新抛出错误，让调用者知道有问题
             throw new Error(`向量索引写入失败: ${error}`);
         }
@@ -220,6 +234,7 @@ export async function importMemoryAction(input: ImportInput) {
 export async function importMemoryFromForm(form: FormData) {
     'use server';
     try {
+        await requireUser();
         const file = form.get('file');
         if (!(file instanceof File)) return { success: false, error: '缺少文件（file）' } as const;
         const memoryId = (form.get('memoryId') as string) || undefined;
@@ -244,9 +259,11 @@ export async function importMemoryFromForm(form: FormData) {
 
 export async function listMemoriesAction() {
     try {
+        const authCtx = await requireUser();
         const hasTm = (prisma as any).translationMemory;
-        if (!hasTm) return { success: true, data: [{ id: 'global-memory', name: '全局记忆库' }] };
+        if (!hasTm) return { success: true, data: [] };
         const rows = await (prisma as any).translationMemory.findMany({
+            where: userOwnedWhere(authCtx),
             select: {
                 id: true,
                 name: true,
@@ -281,12 +298,18 @@ export async function listMemoriesAction() {
 
 export async function createMemoryAction(input: { name: string; description?: string }) {
     try {
+        const authCtx = await requireUser();
         const hasTm = (prisma as any).translationMemory;
         if (!hasTm) {
             return { success: false, error: '当前数据模型未启用 TranslationMemory' } as const;
         }
         const mem = await (prisma as any).translationMemory.create({
-            data: { name: input.name, description: input.description ?? null },
+            data: {
+                name: input.name,
+                description: input.description ?? null,
+                tenantId: authCtx.tenantId || null,
+                userId: authCtx.userId,
+            },
         });
         return { success: true, data: mem } as const;
     } catch (e: any) {
@@ -296,9 +319,11 @@ export async function createMemoryAction(input: { name: string; description?: st
 
 export async function deleteMemoryAction(memoryId: string) {
     try {
+        const authCtx = await requireUser();
         const hasTm = (prisma as any).translationMemory;
         if (!hasTm)
             return { success: false, error: '当前数据模型未启用 TranslationMemory' } as const;
+        await requireOwnedMemory(memoryId, authCtx);
         await (prisma as any).translationMemory.delete({ where: { id: memoryId } });
         return { success: true } as const;
     } catch (e: any) {
@@ -311,11 +336,13 @@ export async function updateMemoryLanguagesAction(
     input: { sourceLang?: string; targetLang?: string }
 ) {
     try {
+        const authCtx = await requireUser();
         const hasTm = (prisma as any).translationMemory;
         const hasEntry = (prisma as any).translationMemoryEntry;
         if (!hasTm || !hasEntry)
             return { success: false, error: '当前数据模型未启用 TranslationMemory' } as const;
         if (!memoryId) return { success: false, error: '缺少 memoryId' } as const;
+        await requireOwnedMemory(memoryId, authCtx);
 
         const data: any = {};
         if (input.sourceLang !== undefined) data.sourceLang = input.sourceLang || null;
@@ -336,11 +363,12 @@ export async function updateMemoryLanguagesAction(
 
 export async function getMemoryByIdAction(memoryId: string) {
     try {
+        const authCtx = await requireUser();
         const hasTm = (prisma as any).translationMemory;
         if (!hasTm)
             return { success: false, error: '当前数据模型未启用 TranslationMemory' } as const;
-        const mem = await (prisma as any).translationMemory.findUnique({
-            where: { id: memoryId },
+        const mem = await (prisma as any).translationMemory.findFirst({
+            where: { id: memoryId, ...userOwnedWhere(authCtx) },
             include: { _count: { select: { entries: true } } },
         });
         if (!mem) return { success: false, error: '未找到记忆库' } as const;
@@ -357,8 +385,10 @@ export async function getMemoryEntriesPagedAction(
     search?: string
 ) {
     try {
+        const authCtx = await requireUser();
         const hasTm = (prisma as any).translationMemoryEntry;
         if (!hasTm) return { success: false, error: '当前数据模型未启用 MemoryEntry' } as const;
+        await requireOwnedMemory(memoryId, authCtx);
         const where: any = { memoryId };
         if (search && search.trim()) {
             where.OR = [
@@ -388,118 +418,12 @@ export async function getMemoryEntriesPagedAction(
 export async function searchMemoryAction(
     query: string,
     opts?: {
-        tenantId?: string;
         limit?: number;
         searchConfig?: Partial<HybridSearchConfig>;
     }
 ) {
-    try {
-        const hasTm = (prisma as any).translationMemoryEntry;
-        if (!hasTm)
-            return {
-                success: true,
-                data: [] as Array<{ id: string; source: string; target: string; score: number }>,
-            } as const;
-
-        const tokenize = (text: string) => {
-            const t = String(text || '').toLowerCase();
-            const words = t.split(/[\s,.;:!?，。；：！、()\[\]{}"'“”‘’<>\-_/]+/).filter(Boolean);
-            const chars = Array.from(t.replace(/\s+/g, '')) as string[];
-            const bigrams: string[] = [];
-            for (let i = 0; i < Math.min(Math.max(0, chars.length - 1), 50); i++) {
-                const left = chars[i] || '';
-                const right = chars[i + 1] || '';
-                const bg = String(left) + String(right);
-                if (bg.trim().length >= 2) bigrams.push(bg);
-            }
-            return Array.from(new Set([...words, ...bigrams]));
-        };
-
-        if (!query?.trim()) return { success: true, data: [] as any[] } as const;
-        const limit = Math.max(1, opts?.limit || 5);
-        const searchConfig = opts?.searchConfig;
-
-        // 使用混合检索（向量 + BM25）
-        try {
-            const qv = await embedTextAction(query);
-            if (Array.isArray(qv) && qv.length) {
-                const hits = await hybridSearch({
-                    collection: 'TranslationMemory',
-                    query,
-                    vector: qv,
-                    config: {
-                        finalTopK: limit * 2, // 多取一些结果
-                        ...searchConfig,
-                    },
-                });
-
-                if (hits?.length) {
-                    const ids = hits.map(h => h.id);
-                    const rows: Array<{ id: string; sourceText: string; targetText: string }> =
-                        await (prisma as any).translationMemoryEntry.findMany({
-                            where: { id: { in: ids } },
-                            select: { id: true, sourceText: true, targetText: true },
-                        });
-                    const map = new Map<
-                        string,
-                        { id: string; sourceText: string; targetText: string }
-                    >(rows.map(r => [r.id, r]));
-                    const merged = hits
-                        .map(h => ({
-                            id: h.id,
-                            source: map.get(h.id)?.sourceText || '',
-                            target: map.get(h.id)?.targetText || '',
-                            score: h.score || 0,
-                            searchMode: h.source,
-                            vectorScore: h.vectorScore,
-                            keywordScore: h.keywordScore,
-                        }))
-                        .filter(x => x.source)
-                        .slice(0, limit);
-
-                    if (merged.length) {
-                        logger.log(
-                            `[SEARCH] Hybrid search found ${merged.length} results using ${searchConfig?.mode || 'hybrid'} mode`
-                        );
-                        return { success: true, data: merged, searchMode: 'hybrid' } as const;
-                    }
-                }
-            }
-        } catch (error) {
-            logger.error('[SEARCH] Hybrid search error:', error);
-        }
-
-        // BM 兜底
-        const tokens = tokenize(query).slice(0, 20);
-        if (!tokens.length) return { success: true, data: [] as any[] } as const;
-        const ors = tokens.map(tok => ({
-            sourceText: { contains: tok, mode: 'insensitive' as const },
-        }));
-        const rows = await (prisma as any).translationMemoryEntry.findMany({
-            where: {
-                OR: ors,
-                ...(opts?.tenantId ? { memory: { tenantId: opts.tenantId } } : {}),
-            },
-            select: { id: true, sourceText: true, targetText: true },
-            take: Math.max(50, limit * 20),
-            orderBy: { createdAt: 'desc' },
-        });
-        const tokenSet = new Set(tokens);
-        const scored = rows
-            .map((r: any) => {
-                const sTokens = tokenize(r.sourceText);
-                const inter = sTokens.filter((t: string) => tokenSet.has(t));
-                const recall = inter.length / Math.max(1, tokens.length);
-                const precision = inter.length / Math.max(1, sTokens.length);
-                const f1 = (2 * recall * precision) / Math.max(1e-6, recall + precision);
-                const score = 0.6 * recall + 0.4 * f1;
-                return { id: r.id, source: r.sourceText, target: r.targetText, score };
-            })
-            .sort((a: any, b: any) => b.score - a.score);
-        return { success: true, data: scored.slice(0, limit) } as const;
-    } catch (e: any) {
-        return { success: false, error: e?.message || '检索失败' } as const;
-    }
+    const authCtx = await requireUser();
+    return searchMemoryForOwner(query, authCtx, opts);
 }
 
 // 在指定记忆库内进行检索 - 支持混合检索
@@ -510,6 +434,7 @@ export async function searchMemoryInLibraryAction(
     searchConfig?: Partial<HybridSearchConfig>
 ) {
     try {
+        const authCtx = await requireUser();
         const hasEntry = (prisma as any).translationMemoryEntry;
         if (!hasEntry)
             return {
@@ -522,6 +447,7 @@ export async function searchMemoryInLibraryAction(
                     score?: number;
                 }>,
             } as const;
+        const memory = await requireOwnedMemory(memoryId, authCtx);
         if (!query?.trim()) return { success: true, data: [] as any[] } as const;
 
         // 使用混合检索（向量 + BM25）
@@ -532,11 +458,11 @@ export async function searchMemoryInLibraryAction(
                     collection: 'TranslationMemory',
                     query,
                     vector: qv,
+                    memoryId: memory.id,
                     config: {
                         finalTopK: Math.max(50, limit * 5), // 多取一些再内存过滤
                         ...searchConfig,
                     },
-                    filter: `meta like "%${memoryId}%"`, // 基于 meta 字段过滤记忆库
                 });
 
                 // 进一步过滤确保属于指定记忆库
@@ -554,7 +480,7 @@ export async function searchMemoryInLibraryAction(
                         targetText: string;
                         notes?: string | null;
                     }> = await (prisma as any).translationMemoryEntry.findMany({
-                        where: { id: { in: ids }, memoryId },
+                        where: { id: { in: ids }, memoryId: memory.id },
                         select: { id: true, sourceText: true, targetText: true, notes: true },
                     });
                     const rowMap = new Map(rows.map(r => [r.id, r]));
@@ -563,24 +489,24 @@ export async function searchMemoryInLibraryAction(
                             const r = rowMap.get(String(h.id));
                             return r
                                 ? {
-                                    ...r,
-                                    score: Number(h.score || 0),
-                                    searchMode: h.source,
-                                    vectorScore: h.vectorScore,
-                                    keywordScore: h.keywordScore,
-                                }
+                                      ...r,
+                                      score: Number(h.score || 0),
+                                      searchMode: h.source,
+                                      vectorScore: h.vectorScore,
+                                      keywordScore: h.keywordScore,
+                                  }
                                 : null;
                         })
                         .filter(Boolean) as Array<{
-                            id: string;
-                            sourceText: string;
-                            targetText: string;
-                            notes?: string | null;
-                            score?: number;
-                            searchMode?: string;
-                            vectorScore?: number;
-                            keywordScore?: number;
-                        }>;
+                        id: string;
+                        sourceText: string;
+                        targetText: string;
+                        notes?: string | null;
+                        score?: number;
+                        searchMode?: string;
+                        vectorScore?: number;
+                        keywordScore?: number;
+                    }>;
 
                     if (merged.length) {
                         logger.log(
@@ -604,7 +530,7 @@ export async function searchMemoryInLibraryAction(
             sourceText: { contains: tok, mode: 'insensitive' as const },
         }));
         const rows = await (prisma as any).translationMemoryEntry.findMany({
-            where: { memoryId, OR: ors },
+            where: { memoryId: memory.id, OR: ors },
             select: { id: true, sourceText: true, targetText: true, notes: true },
             take: Math.max(50, limit * 3),
             orderBy: { createdAt: 'desc' },
@@ -632,14 +558,16 @@ export async function searchMemoryInLibraryAction(
     }
 }
 
-// 重新为指定记忆库构建/补全向量索引（Milvus）
+// 重新为指定记忆库构建/补全向量索引（Postgres pgvector）
 export async function backfillMemoryVectorsAction(
     memoryId: string,
     opts?: { batchSize?: number; max?: number }
 ) {
     try {
+        const authCtx = await requireUser();
         const hasEntry = (prisma as any).translationMemoryEntry;
         if (!hasEntry) return { success: false, error: '当前数据模型未启用 MemoryEntry' } as const;
+        const memory = await requireOwnedMemory(memoryId, authCtx);
         const batchSize = Math.max(1, Math.min(200, opts?.batchSize || 100));
         const max = Math.max(1, Math.min(20000, opts?.max || 5000));
 
@@ -656,7 +584,7 @@ export async function backfillMemoryVectorsAction(
                 targetLang?: string | null;
                 createdAt: Date;
             }> = await (prisma as any).translationMemoryEntry.findMany({
-                where: { memoryId },
+                where: { memoryId: memory.id },
                 select: {
                     id: true,
                     sourceText: true,
@@ -692,21 +620,27 @@ export async function backfillMemoryVectorsAction(
                         id: r.id,
                         text: texts[i] || '',
                         vector: Array.isArray(vectors[i]) ? vectors[i]! : [],
-                        meta: { memoryId, sourceLang: r.sourceLang, targetLang: r.targetLang },
+                        meta: {
+                            memoryId: memory.id,
+                            sourceLang: r.sourceLang,
+                            targetLang: r.targetLang,
+                            tenantId: authCtx.tenantId || null,
+                            userId: authCtx.userId,
+                        },
                     }))
                     .filter(p => Array.isArray(p.vector) && p.vector.length);
 
                 logger.log(
-                    `[BACKFILL] 准备写入 Milvus: ${points.length}/${rows.length} 条记录有有效向量`
+                    `[BACKFILL] 准备写入 Postgres 向量索引: ${points.length}/${rows.length} 条记录有有效向量`
                 );
 
                 if (points.length) {
                     await upsertVectors({ collection: 'TranslationMemory', points });
-                    logger.log(`[BACKFILL] 成功写入 Milvus: ${points.length} 条记录`);
+                    logger.log(`[BACKFILL] 成功写入 Postgres 向量索引: ${points.length} 条记录`);
                 }
                 totalUpserted += rows.length;
             } catch (error) {
-                logger.error(`[BACKFILL] Milvus 写入失败:`, error);
+                logger.error(`[BACKFILL] Postgres 向量索引写入失败:`, error);
                 throw error;
             }
             if (rows.length < take) break;

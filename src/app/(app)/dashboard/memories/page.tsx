@@ -1,14 +1,12 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
-import { Separator } from '@/components/ui/separator';
 import { ImportMemoryDialog } from './components/import-memory-dialog';
 import { listMemoriesAction, createMemoryAction, deleteMemoryAction } from '@/actions/memories';
 import { useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
 import { toast } from 'sonner';
 import {
     Trash2,
@@ -16,7 +14,6 @@ import {
     Plus,
     Search,
     Download,
-    Upload,
     FileText,
     Calendar,
     Languages,
@@ -24,6 +21,8 @@ import {
     Settings,
     Eye,
     MoreHorizontal,
+    LayoutGrid,
+    List,
 } from 'lucide-react';
 import { useState } from 'react';
 import {
@@ -156,27 +155,39 @@ export default function MemoriesPage() {
 
     // 获取记忆库大小等级（用于展示）
     const getMemorySize = (entryCount: number) => {
-        if (entryCount >= 10000) return { label: t('sizeLarge'), color: 'bg-red-100 text-red-800' };
+        if (entryCount >= 10000)
+            return {
+                label: t('sizeLarge'),
+                color: 'border-slate-300 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300',
+            };
         if (entryCount >= 1000)
-            return { label: t('sizeMedium'), color: 'bg-yellow-100 text-yellow-800' };
+            return {
+                label: t('sizeMedium'),
+                color: 'border-slate-300 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300',
+            };
         if (entryCount >= 100)
-            return { label: t('sizeSmall'), color: 'bg-green-100 text-green-800' };
-        return { label: t('sizeTiny'), color: 'bg-gray-100 text-gray-800' };
+            return {
+                label: t('sizeSmall'),
+                color: 'border-slate-300 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300',
+            };
+        return {
+            label: t('sizeTiny'),
+            color: 'border-slate-300 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300',
+        };
     };
 
     return (
-        <div className="min-h-screen">
-            <div className="mx-auto w-full max-w-7xl space-y-6 p-6">
+        <div className="mx-auto w-full max-w-7xl p-6">
+            <div className="space-y-6">
                 {/* Header Section */}
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                     <div>
-                        <h1 className="flex items-center gap-3 text-3xl font-bold text-gray-900 dark:text-white">
-                            <div className="rounded-lg bg-blue-100 p-2 dark:bg-blue-900">
-                                <Database className="h-6 w-6 text-blue-600 dark:text-blue-400" />
-                            </div>
+                        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
                             {t('title')}
                         </h1>
-                        <p className="mt-1 text-gray-600 dark:text-gray-400">{t('description')}</p>
+                        <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                            {t('description')}
+                        </p>
                     </div>
 
                     <div className="flex items-center gap-3">
@@ -190,54 +201,64 @@ export default function MemoriesPage() {
 
                 {/* Stats Cards */}
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-                    <Card className="border-0 bg-gradient-to-r from-blue-500 to-blue-600 text-white">
+                    <Card className="border bg-card">
                         <CardContent className="p-4">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="text-sm text-blue-100">{t('totalMemories')}</p>
-                                    <p className="text-2xl font-bold">{memories.length}</p>
+                                    <p className="text-sm text-muted-foreground">
+                                        {t('totalMemories')}
+                                    </p>
+                                    <p className="text-2xl font-semibold text-foreground">
+                                        {memories.length}
+                                    </p>
                                 </div>
-                                <Database className="h-8 w-8 text-blue-200" />
+                                <Database className="h-5 w-5 text-muted-foreground" />
                             </div>
                         </CardContent>
                     </Card>
 
-                    <Card className="border-0 bg-gradient-to-r from-green-500 to-green-600 text-white">
+                    <Card className="border bg-card">
                         <CardContent className="p-4">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="text-sm text-green-100">{t('totalEntries')}</p>
-                                    <p className="text-2xl font-bold">
+                                    <p className="text-sm text-muted-foreground">
+                                        {t('totalEntries')}
+                                    </p>
+                                    <p className="text-2xl font-semibold text-foreground">
                                         {memories
                                             .reduce((sum, m) => sum + (m._count?.entries ?? 0), 0)
                                             .toLocaleString()}
                                     </p>
                                 </div>
-                                <FileText className="h-8 w-8 text-green-200" />
+                                <FileText className="h-5 w-5 text-muted-foreground" />
                             </div>
                         </CardContent>
                     </Card>
 
-                    <Card className="border-0 bg-gradient-to-r from-purple-500 to-purple-600 text-white">
+                    <Card className="border bg-card">
                         <CardContent className="p-4">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="text-sm text-purple-100">{t('activeMemories')}</p>
-                                    <p className="text-2xl font-bold">
+                                    <p className="text-sm text-muted-foreground">
+                                        {t('activeMemories')}
+                                    </p>
+                                    <p className="text-2xl font-semibold text-foreground">
                                         {memories.filter(m => (m._count?.entries ?? 0) > 0).length}
                                     </p>
                                 </div>
-                                <BarChart3 className="h-8 w-8 text-purple-200" />
+                                <BarChart3 className="h-5 w-5 text-muted-foreground" />
                             </div>
                         </CardContent>
                     </Card>
 
-                    <Card className="border-0 bg-gradient-to-r from-orange-500 to-orange-600 text-white">
+                    <Card className="border bg-card">
                         <CardContent className="p-4">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="text-sm text-orange-100">{t('languagePairs')}</p>
-                                    <p className="text-2xl font-bold">
+                                    <p className="text-sm text-muted-foreground">
+                                        {t('languagePairs')}
+                                    </p>
+                                    <p className="text-2xl font-semibold text-foreground">
                                         {
                                             new Set(
                                                 memories.map(
@@ -248,14 +269,14 @@ export default function MemoriesPage() {
                                         }
                                     </p>
                                 </div>
-                                <Languages className="h-8 w-8 text-orange-200" />
+                                <Languages className="h-5 w-5 text-muted-foreground" />
                             </div>
                         </CardContent>
                     </Card>
                 </div>
 
                 {/* Toolbar */}
-                <Card className="border-0 shadow-sm">
+                <Card className="border bg-card">
                     <CardContent className="p-4">
                         <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
                             <div className="relative max-w-md flex-1">
@@ -271,26 +292,19 @@ export default function MemoriesPage() {
                             <div className="flex items-center gap-2">
                                 <Button
                                     variant={viewMode === 'grid' ? 'default' : 'outline'}
-                                    size="sm"
+                                    size="icon"
                                     onClick={() => setViewMode('grid')}
+                                    title={t('gridView')}
                                 >
-                                    <div className="grid h-3 w-3 grid-cols-2 gap-0.5">
-                                        <div className="rounded-sm bg-current"></div>
-                                        <div className="rounded-sm bg-current"></div>
-                                        <div className="rounded-sm bg-current"></div>
-                                        <div className="rounded-sm bg-current"></div>
-                                    </div>
+                                    <LayoutGrid className="h-4 w-4" />
                                 </Button>
                                 <Button
                                     variant={viewMode === 'list' ? 'default' : 'outline'}
-                                    size="sm"
+                                    size="icon"
                                     onClick={() => setViewMode('list')}
+                                    title={t('listView')}
                                 >
-                                    <div className="flex h-3 w-3 flex-col gap-0.5">
-                                        <div className="h-0.5 rounded-sm bg-current"></div>
-                                        <div className="h-0.5 rounded-sm bg-current"></div>
-                                        <div className="h-0.5 rounded-sm bg-current"></div>
-                                    </div>
+                                    <List className="h-4 w-4" />
                                 </Button>
                             </div>
                         </div>
@@ -298,7 +312,7 @@ export default function MemoriesPage() {
                 </Card>
 
                 {/* Quick Create Card */}
-                <Card className="border-2 border-dashed border-gray-300 bg-gray-50/50 dark:border-gray-600 dark:bg-gray-800/50">
+                <Card className="border bg-card">
                     <CardContent className="p-6">
                         <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
                             <div className="flex-1">
@@ -344,7 +358,7 @@ export default function MemoriesPage() {
                     <Card>
                         <CardContent className="p-8">
                             <div className="flex items-center justify-center">
-                                <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-blue-600"></div>
+                                <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-primary"></div>
                                 <span className="ml-3 text-gray-600 dark:text-gray-400">
                                     {t('loading')}
                                 </span>
@@ -392,7 +406,7 @@ export default function MemoriesPage() {
                                 /* Grid Card View */
                                 <Card
                                     key={memory.id}
-                                    className="group border border-0 bg-white shadow-sm transition-all duration-200 hover:shadow-lg dark:bg-slate-800"
+                                    className="group border bg-card transition-colors hover:border-muted-foreground/30"
                                 >
                                     <CardHeader className="pb-3">
                                         <div className="flex items-start justify-between">
@@ -406,11 +420,7 @@ export default function MemoriesPage() {
                                             </div>
                                             <DropdownMenu>
                                                 <DropdownMenuTrigger asChild>
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        className="opacity-0 transition-opacity group-hover:opacity-100"
-                                                    >
+                                                    <Button variant="ghost" size="sm">
                                                         <MoreHorizontal className="h-4 w-4" />
                                                     </Button>
                                                 </DropdownMenuTrigger>
@@ -427,9 +437,6 @@ export default function MemoriesPage() {
                                                                 <Eye className="h-4 w-4" />{' '}
                                                                 {t('viewDetails')}
                                                             </span>
-                                                            <span className="text-xs text-muted-foreground">
-                                                                Enter
-                                                            </span>
                                                         </a>
                                                     </DropdownMenuItem>
                                                     <DropdownMenuItem
@@ -440,9 +447,6 @@ export default function MemoriesPage() {
                                                             <Download className="h-4 w-4" />{' '}
                                                             {t('export')}
                                                         </span>
-                                                        <span className="text-xs text-muted-foreground">
-                                                            TMX/CSV
-                                                        </span>
                                                     </DropdownMenuItem>
                                                     <DropdownMenuItem
                                                         onClick={() => handleSettings(memory.id)}
@@ -452,9 +456,6 @@ export default function MemoriesPage() {
                                                             <Settings className="h-4 w-4" />{' '}
                                                             {t('settings')}
                                                         </span>
-                                                        <span className="text-xs text-muted-foreground">
-                                                            Soon
-                                                        </span>
                                                     </DropdownMenuItem>
                                                     <DropdownMenuItem
                                                         onClick={() => handleDelete(memory.id)}
@@ -463,9 +464,6 @@ export default function MemoriesPage() {
                                                         <span className="flex items-center gap-2">
                                                             <Trash2 className="h-4 w-4" />{' '}
                                                             {t('delete')}
-                                                        </span>
-                                                        <span className="text-xs text-muted-foreground">
-                                                            Del
                                                         </span>
                                                     </DropdownMenuItem>
                                                 </DropdownMenuContent>
@@ -484,7 +482,7 @@ export default function MemoriesPage() {
                                                         {entryCount.toLocaleString()}
                                                     </span>
                                                     <Badge
-                                                        variant="secondary"
+                                                        variant="outline"
                                                         className={`text-xs ${sizeInfo.color}`}
                                                     >
                                                         {sizeInfo.label}
@@ -529,13 +527,13 @@ export default function MemoriesPage() {
                                 /* List View */
                                 <Card
                                     key={memory.id}
-                                    className="border-0 shadow-sm transition-shadow hover:shadow-md"
+                                    className="border bg-card transition-colors hover:border-muted-foreground/30"
                                 >
                                     <CardContent className="p-4">
                                         <div className="flex items-center justify-between">
                                             <div className="flex min-w-0 flex-1 items-center gap-4">
-                                                <div className="rounded-lg bg-blue-100 p-2 dark:bg-blue-900">
-                                                    <Database className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                                                <div className="rounded-md border bg-muted/40 p-2">
+                                                    <Database className="h-5 w-5 text-muted-foreground" />
                                                 </div>
 
                                                 <div className="min-w-0 flex-1">
@@ -579,10 +577,7 @@ export default function MemoriesPage() {
                                             </div>
 
                                             <div className="flex items-center gap-2">
-                                                <Badge
-                                                    variant="secondary"
-                                                    className={sizeInfo.color}
-                                                >
+                                                <Badge variant="outline" className={sizeInfo.color}>
                                                     {sizeInfo.label}
                                                 </Badge>
                                                 <Button variant="outline" size="sm" asChild>
@@ -609,9 +604,6 @@ export default function MemoriesPage() {
                                                                     <Eye className="h-4 w-4" />{' '}
                                                                     {t('viewDetails')}
                                                                 </span>
-                                                                <span className="text-xs text-muted-foreground">
-                                                                    Enter
-                                                                </span>
                                                             </a>
                                                         </DropdownMenuItem>
                                                         <DropdownMenuItem
@@ -621,9 +613,6 @@ export default function MemoriesPage() {
                                                             <span className="flex items-center gap-2">
                                                                 <Download className="h-4 w-4" />{' '}
                                                                 {t('export')}
-                                                            </span>
-                                                            <span className="text-xs text-muted-foreground">
-                                                                TMX/CSV
                                                             </span>
                                                         </DropdownMenuItem>
                                                         <DropdownMenuItem
@@ -636,9 +625,6 @@ export default function MemoriesPage() {
                                                                 <Settings className="h-4 w-4" />{' '}
                                                                 {t('settings')}
                                                             </span>
-                                                            <span className="text-xs text-muted-foreground">
-                                                                Soon
-                                                            </span>
                                                         </DropdownMenuItem>
                                                         <DropdownMenuItem
                                                             onClick={() => handleDelete(memory.id)}
@@ -647,9 +633,6 @@ export default function MemoriesPage() {
                                                             <span className="flex items-center gap-2">
                                                                 <Trash2 className="h-4 w-4" />{' '}
                                                                 {t('delete')}
-                                                            </span>
-                                                            <span className="text-xs text-muted-foreground">
-                                                                Del
                                                             </span>
                                                         </DropdownMenuItem>
                                                     </DropdownMenuContent>

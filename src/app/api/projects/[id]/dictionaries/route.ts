@@ -1,5 +1,5 @@
-import { auth } from '@/auth';
 import { prisma } from '@/lib/db';
+import { guardMessage, guardStatus, requireOwnedProject } from '@/lib/guards';
 import { createLogger } from '@/lib/logger';
 import { NextRequest } from 'next/server';
 const logger = createLogger({
@@ -15,26 +15,8 @@ export async function GET(
     context: { params: Promise<{ id: string }> } // ✅ 正确：params 是 Promise
 ) {
     try {
-        const session = await auth();
-        if (!session?.user?.id) {
-            return Response.json({ error: '未授权' }, { status: 401 });
-        }
-
         const { id: projectId } = await context.params;
-
-        // 验证项目所有权
-        const project = await prisma.project.findUnique({
-            where: { id: projectId },
-            select: { userId: true },
-        });
-
-        if (!project) {
-            return Response.json({ error: '项目不存在' }, { status: 404 });
-        }
-
-        if (project.userId && project.userId !== session.user.id) {
-            return Response.json({ error: '无权操作' }, { status: 403 });
-        }
+        await requireOwnedProject(projectId);
 
         // 获取项目关联的词典
         const projectDictionaries = await prisma.projectDictionary.findMany({
@@ -75,8 +57,8 @@ export async function GET(
     } catch (error) {
         logger.error('获取项目词典失败:', error);
         return Response.json(
-            { error: '获取失败', details: error instanceof Error ? error.message : '未知错误' },
-            { status: 500 }
+            { error: guardMessage(error) || '获取失败' },
+            { status: guardStatus(error) }
         );
     }
 }

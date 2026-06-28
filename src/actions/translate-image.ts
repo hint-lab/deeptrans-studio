@@ -1,6 +1,7 @@
 // app/actions/translate-image.ts
 'use server'
 import { createLogger } from '@/lib/logger';
+import { requireUser } from '@/lib/guards';
 const logger = createLogger({
     type: 'actions:translate-image',
 }, {
@@ -33,6 +34,7 @@ export async function fetchTextFromImg(
     imageUrl: string,
     options?: TranslateImageOptions
 ) {
+    await requireUser();
     const targetLang: SupportedLang = (options?.targetLang || 'zh-CN') as SupportedLang
     const shouldEnhance = options?.enhanceImage ?? true
     const timeout = options?.timeout || 60000
@@ -85,6 +87,7 @@ export async function fetchTextFromImg(
 }
 // 获取支持的语言列表
 export async function getSupportedLanguages() {
+    await requireUser();
     return Object.entries(SUPPORTED_LANGUAGES).map(([code, [tessCode, name]]) => ({
         code,
         tessCode,

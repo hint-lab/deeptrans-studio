@@ -2,7 +2,12 @@ import { BaseAgent, type AgentRunContext } from '../base';
 import { memoryTool, type MemoryHit } from '../tools/memory';
 
 export class DiscourseQueryAgent extends BaseAgent<
-    { source: string; tenantId?: string; prompt?: string; locale?: string },
+    {
+        source: string;
+        prompt?: string;
+        locale?: string;
+        owner?: { userId: string; tenantId?: string | null };
+    },
     { hits: MemoryHit[] }
 > {
     constructor(locale?: string) {
@@ -16,12 +21,15 @@ export class DiscourseQueryAgent extends BaseAgent<
     }
 
     async execute(
-        input: { source: string; tenantId?: string; prompt?: string },
+        input: {
+            source: string;
+            prompt?: string;
+            owner?: { userId: string; tenantId?: string | null };
+        },
         _ctx?: AgentRunContext
     ): Promise<{ hits: MemoryHit[] }> {
         // 使用混合检索获取高质量的相关翻译，限制为5条
         const hits = await memoryTool.search(input.source, {
-            tenantId: input.tenantId,
             limit: 5,
             searchConfig: {
                 mode: 'hybrid',
@@ -34,6 +42,7 @@ export class DiscourseQueryAgent extends BaseAgent<
                 },
                 finalTopK: 5,
             },
+            owner: input.owner,
         });
 
         // 过滤相似度过低的结果

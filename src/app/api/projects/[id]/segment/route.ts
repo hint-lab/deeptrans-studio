@@ -1,11 +1,9 @@
 import { getFileUrlAction } from '@/actions/upload';
-import {
-    findDocumentByIdDB,
-    findDocumentsByProjectIdDB,
-    updateDocumentStatusDB,
-} from '@/db/document';
+import { updateDocumentStatusDB } from '@/db/document';
 import { createDocumentItemsBulkDB, deleteDocumentItemsByDocumentIdDB } from '@/db/documentItem';
 import { extractTextFromUrl } from '@/lib/file-parser';
+import { guardMessage, guardStatus, requireOwnedProject, requireOwnedProjectDocument, requireWritableProject } from '@/lib/guards';
+import { initStructuredKey, readInitStructuredRaw, scopedProjectBatchId } from '@/lib/init-artifact-keys';
 import { createLogger } from '@/lib/logger';
 import { getRedis } from '@/lib/redis';
 import { TTL_BATCH, TTL_PROGRESS, setJSONWithTTL, setTextWithTTL } from '@/lib/redis-ttl';
@@ -65,6 +63,7 @@ async function buildTextFromStructuredHelper(
 }
 
 export async function POST(req: NextRequest, ctx: any) {
+    let ownedDocumentId = '';
     try {
         const redis = await getRedis();
         const { id: projectIdFromParams } = await (ctx?.params || {});
@@ -81,11 +80,14 @@ export async function POST(req: NextRequest, ctx: any) {
         } as { headChars?: number; preview?: boolean };
         if (!batchId) return NextResponse.json({ error: 'missing batchId' }, { status: 400 });
 
+        const project = await requireWritableProject(projectIdFromParams);
+        const scopedBatchId = scopedProjectBatchId(projectIdFromParams, batchId);
         const only = docIdFromReq
-            ? await findDocumentByIdDB(docIdFromReq)
-            : (await findDocumentsByProjectIdDB(projectIdFromParams))?.[0];
+            ? await requireOwnedProjectDocument(projectIdFromParams, docIdFromReq)
+            : project.documents?.[0];
         if (!only || !only.url)
             return NextResponse.json({ error: 'document not found' }, { status: 404 });
+        ownedDocumentId = only.id;
         // 构造正文（优先 structured）
         const isPreview = segment?.preview === true;
         const previewHead = Math.max(500, Math.min(8000, Number(segment?.headChars ?? 2000)));
@@ -101,7 +103,7 @@ export async function POST(req: NextRequest, ctx: any) {
         }
         if (!bodyText) return NextResponse.json({ error: 'empty content' }, { status: 400 });
 
-        const segBatch = isPreview ? `preview:${batchId}` : batchId;
+        const segBatch = isPreview ? `preview:${scopedBatchId}` : scopedBatchId;
 
         if (isPreview) {
             // 直接按 structured JSON 的 paragraphs 输出分段（透传 level/styleName/runs/placeholderSpans）
@@ -113,8 +115,11 @@ export async function POST(req: NextRequest, ctx: any) {
                 placeholderSpans?: any[];
             }> = [];
             try {
-                const raw = await redis.get(`init.${batchId}.docx.structured`);
-                logger.info(`Get segment from redis key:  init.${batchId}.docx.structured, value: `, raw || "")
+                const raw = await readInitStructuredRaw(redis, scopedBatchId);
+                logger.info('Get segment structured cache', {
+                    key: initStructuredKey(scopedBatchId),
+                    size: raw ? String(raw).length : 0,
+                });
                 if (raw) {
                     const obj = JSON.parse(String(raw));
                     if (Array.isArray(obj?.paragraphs)) paragraphs = obj.paragraphs as any[];
@@ -181,7 +186,7 @@ export async function POST(req: NextRequest, ctx: any) {
             placeholderSpans?: any[];
         }> = [];
         try {
-            const raw = await redis.get(`init.${batchId}.docx.structured`);
+            const raw = await readInitStructuredRaw(redis, scopedBatchId);
             if (raw) {
                 const obj = JSON.parse(String(raw));
                 if (Array.isArray(obj?.paragraphs)) paragraphsAll = obj.paragraphs as any[];
@@ -189,9 +194,7 @@ export async function POST(req: NextRequest, ctx: any) {
         } catch { }
         if (!paragraphsAll.length) {
             try {
-                const docs = await findDocumentsByProjectIdDB(projectIdFromParams as any);
-                const onlyDoc = docs?.[0];
-                const artifacts = (onlyDoc as any)?.structured?.artifacts;
+                const artifacts = (only as any)?.structured?.artifacts;
                 let jsonUrl: string | null = artifacts?.jsonUrl || null;
                 if (!jsonUrl && artifacts?.jsonFile) {
                     try {
@@ -264,23 +267,19 @@ export async function POST(req: NextRequest, ctx: any) {
         } catch { }
         return NextResponse.json({ ok: true, step: 'segment' });
     } catch (e: any) {
-        try {
-            const { id: projectIdFromParams } = await ctx.params;
-            const docs = await findDocumentsByProjectIdDB(projectIdFromParams);
-            const only = docs?.[0];
-            if (only?.id) {
-                try {
-                    await updateDocumentStatusDB(only.id, DocumentStatus.ERROR as any);
-                } catch { }
-            }
-        } catch { }
-        return NextResponse.json({ error: e?.message || 'segment failed' }, { status: 500 });
+        if (ownedDocumentId) {
+            try {
+                await updateDocumentStatusDB(ownedDocumentId, DocumentStatus.ERROR as any);
+            } catch { }
+        }
+        return NextResponse.json({ error: guardMessage(e) }, { status: guardStatus(e) });
     }
 }
 
 export async function GET(req: NextRequest, ctx: any) {
     try {
-        await ctx?.params;
+        const { id: projectIdFromParams } = await (ctx?.params || {});
+        await requireOwnedProject(projectIdFromParams);
         const batchId = req.nextUrl.searchParams.get('batchId') || '';
         if (!batchId) return NextResponse.json({ error: 'missing batchId' }, { status: 400 });
         const waitMs = Math.max(
@@ -289,7 +288,8 @@ export async function GET(req: NextRequest, ctx: any) {
         );
         const previewMode = req.nextUrl.searchParams.get('preview') === '1';
         const showAll = req.nextUrl.searchParams.get('all') === '1';
-        const segBatch = previewMode ? `preview:${batchId}` : batchId;
+        const scopedBatchId = scopedProjectBatchId(projectIdFromParams, batchId);
+        const segBatch = previewMode ? `preview:${scopedBatchId}` : scopedBatchId;
         const redis = await getRedis();
         const toPct = (t: any, d: any) =>
             Number(t) > 0 ? Math.min(100, Math.round((Number(d) / Number(t)) * 100)) : 0;
@@ -351,6 +351,6 @@ export async function GET(req: NextRequest, ctx: any) {
         }
         return NextResponse.json(await readStatus());
     } catch (e: any) {
-        return NextResponse.json({ error: e?.message || 'status failed' }, { status: 500 });
+        return NextResponse.json({ error: guardMessage(e) }, { status: guardStatus(e) });
     }
 }

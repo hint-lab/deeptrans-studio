@@ -22,7 +22,7 @@
                     },
                     {
                         "question": "必须使用 Docker 吗？",
-                        "solution": "开发环境推荐使用 Docker Compose 运行依赖服务（PostgreSQL、Redis、Milvus 等），但 Next.js 应用和 Worker 可以在本地运行。生产环境建议使用 Docker 进行部署。"
+                        "solution": "开发环境推荐使用 Docker Compose 运行依赖服务（PostgreSQL、Redis、pgvector 等），但 Next.js 应用和 Worker 可以在本地运行。生产环境建议使用 Docker 进行部署。"
                     },
                     {
                         "question": "如何配置 OpenAI API？",
@@ -63,8 +63,8 @@
                         "solution": "MinIO 数据默认存储在 Docker 卷中。可以通过 `docker volume ls` 查看，或配置自定义存储路径。"
                     },
                     {
-                        "question": "如何清理 Milvus 向量数据？",
-                        "solution": "可以通过 Attu UI（http://localhost:8001）删除集合，或使用 Milvus SDK 删除集合。删除后重新导入翻译记忆时会自动重建。"
+                        "question": "如何清理 pgvector 向量数据？",
+                        "solution": "可以通过 Prisma Studio（http://localhost:8001）删除集合，或使用 pgvector SDK 删除集合。删除后重新导入翻译记忆时会自动重建。"
                     }
                 ]
             },
@@ -74,7 +74,7 @@
                 "questions": [
                     {
                         "question": "支持哪些文档格式？",
-                        "solution": "支持 DOCX、PDF、TXT、Markdown 等格式。PDF 解析通过 PDFMath 服务处理，支持数学公式和复杂布局。"
+                        "solution": "项目文档支持 DOCX、PDF、TXT 与 Markdown。PDF 解析优先使用本地 pdf-parse；扫描版 PDF 可通过已配置的 OCR 服务兜底。"
                     },
                     {
                         "question": "如何批量翻译多个文档？",
@@ -82,7 +82,7 @@
                     },
                     {
                         "question": "翻译记忆库如何工作？",
-                        "solution": "翻译记忆库使用 Milvus 向量数据库存储源文-译文对照。\n在翻译过程中，系统会通过混合搜索（向量检索 + 关键词匹配）查找相似的翻译参考。"
+                        "solution": "翻译记忆库使用 PostgreSQL 向量索引存储源文-译文对照。\n在翻译过程中，系统会通过混合搜索（向量检索 + 关键词匹配）查找相似的翻译参考。"
                     },
                     {
                         "question": "如何导入术语词典？",
@@ -112,7 +112,7 @@
                     },
                     {
                         "question": "内存使用过高怎么办？",
-                        "solution": "检查：1) 数据库连接池大小，2) Redis 缓存数据量，3) Milvus 向量数据，4) Worker 并发数。适当调整配置或增加服务器资源。"
+                        "solution": "检查：1) 数据库连接池大小，2) Redis 缓存数据量，3) pgvector 向量数据，4) Worker 并发数。适当调整配置或增加服务器资源。"
                     },
                     {
                         "question": "如何优化数据库性能？",
@@ -138,7 +138,7 @@
                     },
                     {
                         "question": "如何监控系统状态？",
-                        "solution": "可以：1) 使用 docker compose ps 查看服务状态，2) 查看各服务日志，3) 使用 Prisma Studio 监控数据库，4) 使用 Attu UI 监控 Milvus，5) 配置 Prometheus 等监控工具。"
+                        "solution": "可以：1) 使用 docker compose ps 查看服务状态，2) 查看各服务日志，3) 使用 Prisma Studio 监控数据库，4) 使用 Prisma Studio 监控 pgvector，5) 配置 Prometheus 等监控工具。"
                     }
                 ]
             },

@@ -96,7 +96,13 @@ export const findDictionaryEntriesDB = async (
 /** 批量创建条目 */
 export const createDictionaryEntriesBulkDB = async (
     dictionaryId: string,
-    entries: Array<{ sourceText: string; targetText: string; notes?: string | null }>
+    entries: Array<{
+        sourceText: string;
+        targetText: string;
+        notes?: string | null;
+        createdById?: string;
+        updatedById?: string;
+    }>
 ): Promise<{ count: number } | null> => {
     if (!entries.length) return { count: 0 };
     return dbTry(() =>
@@ -107,6 +113,8 @@ export const createDictionaryEntriesBulkDB = async (
                 targetText: e.targetText,
                 notes: e.notes ?? null,
                 enabled: !!String(e.targetText || '').trim(),
+                createdById: e.createdById,
+                updatedById: e.updatedById,
             })),
         })
     );

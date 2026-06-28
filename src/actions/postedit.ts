@@ -4,6 +4,7 @@ import { DiscourseEmbedAgent } from '@/agents/postedit/DiscourseEmbedAgent';
 import { DiscourseEvaluateAgent } from '@/agents/postedit/DiscourseEvaluateAgent';
 import { DiscourseQueryAgent } from '@/agents/postedit/DiscourseQueryAgent';
 import type { MemoryHit } from '@/agents/tools/memory';
+import { requireUser } from '@/lib/guards';
 import { createLogger } from '@/lib/logger';
 const logger = createLogger({
     type: 'actions:postedit',
@@ -19,16 +20,16 @@ const logger = createLogger({
 export async function queryDiscourseAction(
     source: string,
     options?: {
-        tenantId?: string;
         prompt?: string;
     }
 ): Promise<{ hits: MemoryHit[] }> {
     try {
+        const authCtx = await requireUser();
         const agent = new DiscourseQueryAgent();
         const result = await agent.execute({
             source,
-            tenantId: options?.tenantId,
             prompt: options?.prompt,
+            owner: authCtx,
         });
         return result;
     } catch (error) {
@@ -45,17 +46,16 @@ export async function evaluateDiscourseAction(
     target?: string,
     options?: {
         references?: MemoryHit[];
-        tenantId?: string;
         prompt?: string;
     }
 ): Promise<any> {
     try {
+        await requireUser();
         const agent = new DiscourseEvaluateAgent();
         const result = await agent.execute({
             source,
             target,
             references: options?.references,
-            tenantId: options?.tenantId,
             prompt: options?.prompt,
         });
         return result;
@@ -73,17 +73,16 @@ export async function embedDiscourseAction(
     target: string,
     references: MemoryHit[],
     options?: {
-        tenantId?: string;
         prompt?: string;
     }
 ): Promise<string> {
     try {
+        await requireUser();
         const agent = new DiscourseEmbedAgent();
         const result = await agent.execute({
             source,
             target,
             references,
-            tenantId: options?.tenantId,
             prompt: options?.prompt,
         });
         return result;
@@ -100,7 +99,6 @@ export async function runPostEditAction(
     sourceText: string,
     targetText: string,
     options?: {
-        tenantId?: string;
         prompt?: string;
     }
 ): Promise<{
@@ -109,22 +107,20 @@ export async function runPostEditAction(
     rewrite: string;
 }> {
     try {
+        await requireUser();
         // 1. 语篇查询
         const query = await queryDiscourseAction(sourceText, {
-            tenantId: options?.tenantId,
             prompt: options?.prompt,
         });
 
         // 2. 语篇评估（使用查询到的所有结果作为参考）
         const evaluation = await evaluateDiscourseAction(sourceText, targetText, {
             references: query.hits,
-            tenantId: options?.tenantId,
             prompt: options?.prompt,
         });
 
         // 3. 语篇嵌入改写（使用查询到的所有结果作为参考）
         const rewrite = await embedDiscourseAction(sourceText, targetText, query.hits, {
-            tenantId: options?.tenantId,
             prompt: options?.prompt,
         });
 

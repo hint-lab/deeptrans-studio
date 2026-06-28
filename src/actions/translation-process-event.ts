@@ -3,11 +3,12 @@
 import {
     createTranslationStageRecordDB,
     findTranslationStageRecordsByDocumentItemIdDB,
-    deleteTranslationStageRecordByIdDB,
+    deleteTranslationStageRecordsByDocumentItemIdDB,
 } from '@/db/translationStageRecord';
-import { auth } from '@/auth';
+import { requireOwnedDocumentItem, requireUser, requireWritableDocumentItem } from '@/lib/guards';
 
 export async function listTranslationProcessEventsForSignoff(documentItemId: string) {
+    await requireOwnedDocumentItem(documentItemId);
     return findTranslationStageRecordsByDocumentItemIdDB(documentItemId);
 }
 
@@ -18,7 +19,8 @@ export async function recordGoToNextTranslationProcessEventAction(
     status?: string
 ) {
     try {
-        const session = await auth();
+        const authCtx = await requireUser();
+        await requireWritableDocumentItem(documentItemId, authCtx);
         const finalActorType = actorType || 'HUMAN';
         await createTranslationStageRecordDB({
             documentItemId: documentItemId,
@@ -26,7 +28,7 @@ export async function recordGoToNextTranslationProcessEventAction(
             actorType: finalActorType as any,
             actorId:
                 finalActorType === 'HUMAN' || finalActorType === 'USER'
-                    ? session?.user?.id || ''
+                    ? authCtx.userId
                     : null,
             model: finalActorType === 'AGENT' ? 'DeepTrans' : null,
             status: status || ('SUCCESS' as any),
@@ -45,7 +47,8 @@ export async function recordGoToPreviousTranslationStageAction(
     stepKey: string
 ) {
     try {
-        await deleteTranslationStageRecordByIdDB(documentItemId);
+        await requireWritableDocumentItem(documentItemId);
+        await deleteTranslationStageRecordsByDocumentItemIdDB(documentItemId);
         return {
             success: true,
             data: { id: documentItemId, stepKey: stepKey, actorType: 'USER' as any },

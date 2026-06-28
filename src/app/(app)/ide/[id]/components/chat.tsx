@@ -102,7 +102,7 @@ export function CardsChat() {
 
                 case 'termCheck':
                     const terms = await extractMonolingualTermsAction(userInput, { locale });
-                    const dict = await lookupDictionaryAction(terms, {});
+                    const dict = await lookupDictionaryAction(terms);
                     result = `## 🔍 术语检查结果\n\n✅ **检查完成**\n- 发现术语：**${terms.length}** 个\n- 词典匹配：**${dict.length}** 个条目\n\n${terms.length > 0 ? `**提取的术语：**\n${terms.map((term: any, index: number) => `${index + 1}. ${term.term}`).join('\n')}` : '未发现术语'}`;
                     break;
 

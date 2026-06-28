@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { type ChatMessage } from '@/lib/llm';
 import { streamText } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
+import { guardMessage, guardStatus, requireUser } from '@/lib/guards';
 
 const OPENAI_KEY = process.env.OPENAI_API_KEY || '';
 const DEFAULT_MODEL = process.env.OPENAI_API_MODEL || 'gpt-4o-mini';
@@ -12,6 +13,7 @@ const openai = createOpenAI({
 
 export async function POST(req: Request) {
     try {
+        await requireUser();
         if (!OPENAI_KEY)
             return NextResponse.json({ error: 'OPENAI_API_KEY 未配置' }, { status: 500 });
         const { prompt, system, locale } = await req.json();
@@ -60,6 +62,6 @@ export async function POST(req: Request) {
             },
         });
     } catch (e: any) {
-        return NextResponse.json({ error: e?.message || 'Chat failed' }, { status: 500 });
+        return NextResponse.json({ error: guardMessage(e) || 'Chat failed' }, { status: guardStatus(e) });
     }
 }

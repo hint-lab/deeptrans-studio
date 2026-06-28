@@ -15,7 +15,7 @@ from pdf2zh_next.high_level import do_translate_file_async
 
 __version__ = "2.6.2"
 __author__ = "Byaidu, awwaawwa"
-__license__ = "AGPL-3.0"
+__license__ = "MIT"
 __maintainer__ = "awwaawwa"
 __email__ = "aw@funstory.ai"
 

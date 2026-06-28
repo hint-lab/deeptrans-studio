@@ -158,9 +158,9 @@
                             "任务状态一直为 PENDING"
                         ],
                         "solutions": [
-                            "查看 Worker 日志：`docker compose logs worker`",
+                            "查看 Worker 日志：`docker compose logs app_worker`",
                             "检查任务数据格式是否正确",
-                            "验证相关服务（Milvus、MinIO、PDFMath）是否正常",
+                            "验证相关服务（pgvector、MinIO、Redis，以及可选 OCR）是否正常",
                             "检查 API 密钥和配置是否正确",
                             "查看 Redis 中的失败任务：`redis-cli KEYS 'bull:*:failed'`"
                         ]
@@ -168,18 +168,18 @@
                 ]
             },
             {
-                "name": "Milvus 向量库问题",
-                "description": "Milvus 向量数据库相关问题",
+                "name": "PostgreSQL 向量索引问题",
+                "description": "PostgreSQL 向量索引相关问题",
                 "issues": [
                     {
-                        "title": "Milvus 连接失败",
-                        "Problems": ["翻译记忆库搜索失败", "向量写入失败", "Milvus 服务无法访问"],
+                        "title": "pgvector 连接失败",
+                        "Problems": ["翻译记忆库搜索失败", "向量写入失败", "pgvector 服务无法访问"],
                         "solutions": [
-                            "检查 Milvus 和 etcd 服务是否运行：`docker compose ps milvus etcd`",
-                            "验证 Milvus 连接配置",
-                            "查看 Milvus 日志：`docker compose logs milvus`",
-                            "检查 etcd 状态：`docker compose logs etcd`",
-                            "访问 Attu UI（http://localhost:8001）检查 Milvus 状态"
+                            "检查 pgvector 是否运行：`docker compose ps pgvector`",
+                            "验证 pgvector 连接配置",
+                            "查看 pgvector 日志：`docker compose logs pgvector`",
+                            "通过 pgvector 日志检查内嵌 etcd 状态",
+                            "访问 Prisma Studio（http://localhost:8001）检查 pgvector 状态"
                         ]
                     },
                     {
@@ -187,7 +187,7 @@
                         "Problems": ["搜索时提示集合不存在", "向量写入失败，提示集合未找到"],
                         "solutions": [
                             "检查集合是否已创建",
-                            "在 Attu UI 中查看集合列表",
+                            "在 Prisma Studio 中查看集合列表",
                             "重新初始化集合（应用会自动创建）",
                             "检查集合名称是否正确"
                         ]
@@ -204,21 +204,21 @@
                 ]
             },
             {
-                "name": "PDFMath 服务问题",
-                "description": "PDF 解析服务相关问题",
+                "name": "PDF 解析问题",
+                "description": "PDF 解析器与可选 OCR 兜底相关问题",
                 "issues": [
                     {
-                        "title": "PDFMath 服务无法访问",
+                        "title": "PDF 解析失败",
                         "Problems": [
                             "文档解析失败",
                             "PDF 文件上传后无法处理",
                             "解析任务一直处于 PENDING 状态"
                         ],
                         "solutions": [
-                            "检查 PDFMath 服务是否运行：`docker compose ps pdfmath`",
-                            "查看 PDFMath 日志：`docker compose logs pdfmath`",
-                            "验证 PDFMath 服务 URL 配置",
-                            "测试服务连接：`curl http://localhost:8000/health`（如果配置了健康检查）",
+                            "检查应用日志：`docker compose logs app`",
+                            "文本型 PDF 请确认文件未损坏且包含可提取文本",
+                            "扫描版 PDF 请配置 OCR_AUTH_URL 与 OCR_BASE_URL",
+                            "如已配置 OCR，请验证 token 凭据与服务地址",
                             "检查 PDF 文件是否损坏或格式不支持"
                         ]
                     },
@@ -228,7 +228,7 @@
                         "solutions": [
                             "检查文件大小（建议不超过 100MB）",
                             "增加超时时间配置",
-                            "检查 PDFMath 服务资源使用情况",
+                            "检查应用或 OCR 服务资源使用情况",
                             "考虑将大文件拆分为多个小文件"
                         ]
                     }
@@ -270,13 +270,13 @@
                         "title": "Worker 无法启动",
                         "Problems": [
                             "docker compose up worker 失败",
-                            "本地 yarn dev:worker 报错",
+                            "本地 yarn worker 报错",
                             "Worker 进程立即退出"
                         ],
                         "solutions": [
                             "检查环境变量配置",
                             "验证 Redis 连接",
-                            "查看 Worker 日志：`docker compose logs worker`",
+                            "查看 Worker 日志：`docker compose logs app_worker`",
                             "检查 Node.js 版本",
                             "验证依赖是否正确安装",
                             "检查构建产物：`yarn build:worker`"

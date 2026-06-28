@@ -1,6 +1,7 @@
 'use server';
 
 import { createLogger } from '@/lib/logger';
+import { requireOwnedProject, requireUser, requireWritableProject } from '@/lib/guards';
 import { createStorageService } from '@/lib/storage/factory';
 const logger = createLogger({
     type: 'actions:upload',
@@ -25,21 +26,48 @@ const storageConfig = {
 // 创建存储服务实例
 const storageService = createStorageService(storageConfig);
 
+type UploadScope = {
+    projectId?: string;
+};
+
+async function resolveUploadNamespace(scope?: UploadScope) {
+    const authCtx = await requireUser();
+    if (scope?.projectId) {
+        const project = await requireWritableProject(scope.projectId, authCtx);
+        return { authCtx, namespace: `projects/${project.id}` };
+    }
+    return { authCtx, namespace: `users/${authCtx.userId}/uploads` };
+}
+
+async function assertReadableObject(fileName: string) {
+    const authCtx = await requireUser();
+    if (fileName.startsWith(`users/${authCtx.userId}/uploads/`)) return;
+
+    const match = /^projects\/([^/]+)\//.exec(fileName);
+    if (match?.[1]) {
+        await requireOwnedProject(match[1], authCtx);
+        return;
+    }
+
+    throw new Error('无权访问文件');
+}
+
 export async function getUploadUrlAction(
     fileName: string,
     contentType: string,
-    projectName: string
+    scope?: UploadScope
 ) {
     try {
-        logger.debug('开始获取上传 URL:', { fileName, contentType, projectName });
+        const { namespace } = await resolveUploadNamespace(scope);
+        logger.debug('开始获取上传 URL:', { fileName, contentType, namespace });
 
-        if (!fileName || !contentType || !projectName) {
-            logger.error('参数缺失:', { fileName, contentType, projectName });
+        if (!fileName || !contentType) {
+            logger.error('参数缺失:', { fileName, contentType });
             throw new Error('缺少必要参数');
         }
 
         // 获取上传 URL
-        const result = await storageService.getUploadUrl(fileName, contentType, projectName);
+        const result = await storageService.getUploadUrl(fileName, contentType, namespace);
         logger.debug('获取上传 URL 成功:', result);
 
         return {
@@ -59,19 +87,17 @@ export async function getUploadUrlAction(
 export async function uploadFileAction(formData: FormData) {
     try {
         const file = formData.get('file') as unknown as File | null;
-        const projectName = String(formData.get('projectName') || '').trim();
+        const projectId = String(formData.get('projectId') || '').trim() || undefined;
+        const { namespace } = await resolveUploadNamespace({ projectId });
 
         if (!file) {
             return { success: false, error: '缺少文件' };
-        }
-        if (!projectName) {
-            return { success: false, error: '缺少项目名称' };
         }
 
         const result = await storageService.getUploadUrl(
             file.name,
             (file as any).type || 'application/octet-stream',
-            projectName
+            namespace
         );
 
         const arrayBuffer = await file.arrayBuffer();
@@ -111,7 +137,9 @@ export async function uploadFileAction(formData: FormData) {
 // 获取已存在对象的临时访问 URL（用于读取）
 export async function getFileUrlAction(fileName: string) {
     try {
+        await requireUser();
         if (!fileName) return { success: false, error: '缺少文件名' };
+        await assertReadableObject(fileName);
         const url = await storageService.getFileUrl(fileName);
         return { success: true, data: { fileUrl: url } };
     } catch (error) {

@@ -22,7 +22,7 @@
                     },
                     {
                         "question": "Is Docker required?",
-                        "solution": "Development environment recommends using Docker Compose to run dependency services (PostgreSQL, Redis, Milvus, etc.), but Next.js application and Worker can run locally. Production environment recommends using Docker for deployment."
+                        "solution": "Development environment recommends using Docker Compose to run dependency services (PostgreSQL, Redis, pgvector, etc.), but Next.js application and Worker can run locally. Production environment recommends using Docker for deployment."
                     },
                     {
                         "question": "How to configure OpenAI API?",
@@ -63,8 +63,8 @@
                         "solution": "MinIO data is stored in Docker volumes by default. Can be viewed via `docker volume ls`, or configure custom storage path."
                     },
                     {
-                        "question": "How to clean Milvus vector data?",
-                        "solution": "Can delete collections through Attu UI (http://localhost:8001), or use Milvus SDK to delete collections. Collections will be automatically rebuilt when re-importing translation memories."
+                        "question": "How to clean PostgreSQL vector data?",
+                        "solution": "Can delete collections through Prisma Studio (http://localhost:8001), or use pgvector SDK to delete collections. Collections will be automatically rebuilt when re-importing translation memories."
                     }
                 ]
             },
@@ -74,7 +74,7 @@
                 "questions": [
                     {
                         "question": "What document formats are supported?",
-                        "solution": "Supports DOCX, PDF, TXT, Markdown, and other formats. PDF parsing is handled through PDFMath service, supporting mathematical formulas and complex layouts."
+                        "solution": "Project documents support DOCX, PDF, TXT, and Markdown. PDF parsing uses local pdf-parse first and falls back to the configured OCR service for scanned PDFs."
                     },
                     {
                         "question": "How to batch translate multiple documents?",
@@ -82,7 +82,7 @@
                     },
                     {
                         "question": "How does translation memory work?",
-                        "solution": "Translation memory uses Milvus vector database to store source-target text pairs. During translation, the system searches for similar translation references through hybrid search (vector retrieval + keyword matching)."
+                        "solution": "Translation memory uses PostgreSQL vector store to store source-target text pairs. During translation, the system searches for similar translation references through hybrid search (vector retrieval + keyword matching)."
                     },
                     {
                         "question": "How to import terminology dictionary?",
@@ -112,7 +112,7 @@
                     },
                     {
                         "question": "What to do if memory usage is too high?",
-                        "solution": "Check: 1) Database connection pool size, 2) Redis cache data volume, 3) Milvus vector data, 4) Worker concurrency. Appropriately adjust configuration or increase server resources."
+                        "solution": "Check: 1) Database connection pool size, 2) Redis cache data volume, 3) PostgreSQL vector data, 4) Worker concurrency. Appropriately adjust configuration or increase server resources."
                     },
                     {
                         "question": "How to optimize database performance?",
@@ -138,7 +138,7 @@
                     },
                     {
                         "question": "How to monitor system status?",
-                        "solution": "Can: 1) Use docker compose ps to view service status, 2) View logs of each service, 3) Use Prisma Studio to monitor database, 4) Use Attu UI to monitor Milvus, 5) Configure monitoring tools like Prometheus."
+                        "solution": "Can: 1) Use docker compose ps to view service status, 2) View logs of each service, 3) Use Prisma Studio to monitor database, 4) Use Prisma Studio to monitor pgvector, 5) Configure monitoring tools like Prometheus."
                     }
                 ]
             },

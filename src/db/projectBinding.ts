@@ -16,9 +16,14 @@ export const listProjectDictionaryBindingsDB = async (projectId: string) => {
 
 export const updateProjectDictionaryBindingsDB = async (
     projectId: string,
-    dictionaryIds: string[]
+    dictionaryIds: string[],
+    preserveDictionaryIds: string[] = []
 ) => {
-    const unique = Array.from(new Set((dictionaryIds || []).map(String).filter(Boolean)));
+    const unique = Array.from(
+        new Set(
+            [...(dictionaryIds || []), ...(preserveDictionaryIds || [])].map(String).filter(Boolean)
+        )
+    );
     return dbTry(async () =>
         prisma.$transaction(async (tx: any) => {
             // 删除未在列表中的绑定
@@ -51,10 +56,14 @@ export const listProjectMemoryBindingsDB = async (projectId: string) => {
     );
 };
 
-export const updateProjectMemoryBindingsDB = async (projectId: string, memoryIds: string[]) => {
+export const updateProjectMemoryBindingsDB = async (
+    projectId: string,
+    memoryIds: string[],
+    preserveMemoryIds: string[] = []
+) => {
     const has = (prisma as any).projectMemory;
     if (!has) return true;
-    const list = Array.isArray(memoryIds) ? memoryIds : [];
+    const list = [...(Array.isArray(memoryIds) ? memoryIds : []), ...(preserveMemoryIds || [])];
     const unique = Array.from(new Set(list.map(id => String(id || '').trim()).filter(Boolean)));
     return dbTry(async () =>
         prisma.$transaction(async (tx: any) => {

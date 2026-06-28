@@ -20,9 +20,12 @@ export interface MemoryHit {
 }
 
 export interface MemorySearchOptions {
-    tenantId?: string;
     limit?: number;
     searchConfig?: Partial<HybridSearchConfig>;
+    owner?: {
+        userId: string;
+        tenantId?: string | null;
+    };
 }
 
 export class MemoryTool {
@@ -41,6 +44,25 @@ export class MemoryTool {
         if (!query?.trim()) return [];
 
         try {
+            if (typeof window === 'undefined') {
+                if (!options?.owner?.userId) return [];
+                const { searchMemoryForOwner } = await import('@/server/memory');
+                const result = await searchMemoryForOwner(query, options.owner, {
+                    limit: options?.limit || 5,
+                    searchConfig: options?.searchConfig,
+                });
+                const rows = result?.success && Array.isArray(result.data) ? result.data : [];
+                return rows.map((item: any) => ({
+                    id: item.id,
+                    source: item.source ?? item.sourceText ?? '',
+                    target: item.target ?? item.targetText ?? '',
+                    score: Number(item.score) || 0,
+                    vectorScore: item.vectorScore ? Number(item.vectorScore) : undefined,
+                    keywordScore: item.keywordScore ? Number(item.keywordScore) : undefined,
+                    searchMode: item.searchMode,
+                }));
+            }
+
             // 构建完整的 API URL
             let url = '/api/memories/hybrid-search';
 

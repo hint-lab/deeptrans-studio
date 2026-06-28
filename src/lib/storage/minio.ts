@@ -20,7 +20,7 @@ export class MinioStorageService implements StorageService {
     async getUploadUrl(
         fileName: string,
         contentType: string,
-        projectName: string
+        namespace: string
     ): Promise<UploadResult> {
         // 确保 bucket 存在
         const bucketExists = await this.client.bucketExists(this.bucket);
@@ -30,7 +30,7 @@ export class MinioStorageService implements StorageService {
 
         // 生成唯一的文件名
         const fileExtension = fileName.split('.').pop();
-        const uniqueFileName = `${projectName}/${uuidv4()}.${fileExtension}`;
+        const uniqueFileName = `${namespace}/${uuidv4()}.${fileExtension}`;
 
         // 生成预签名上传 URL
         const uploadUrl = await this.client.presignedPutObject(

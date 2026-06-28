@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { findDocumentItemWithDocumentByIdDB } from '@/db/documentItem';
+import { guardMessage, guardStatus, requireOwnedDocumentItem } from '@/lib/guards';
 
 export async function GET(req: NextRequest, context: any) {
     try {
         const { itemId } = (await context?.params) || {};
         if (!itemId) return NextResponse.json({ error: 'Missing itemId' }, { status: 400 });
-        const item = await findDocumentItemWithDocumentByIdDB(itemId);
+        const item = await requireOwnedDocumentItem(itemId);
         if (!item || !item.document)
             return NextResponse.json({ error: 'Not found' }, { status: 404 });
         const doc: any = item.document;
@@ -32,6 +32,6 @@ export async function GET(req: NextRequest, context: any) {
             return NextResponse.redirect(out.toString(), 302);
         }
     } catch (e) {
-        return NextResponse.json({ error: 'Internal error' }, { status: 500 });
+        return NextResponse.json({ error: guardMessage(e) }, { status: guardStatus(e) });
     }
 }

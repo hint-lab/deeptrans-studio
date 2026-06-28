@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
             if (!r.success)
                 return NextResponse.json({ error: r.error || '发送失败' }, { status: 500 });
             // TODO: 这里接入短信服务商发送验证码
-            logger.debug(`发送验证码到手机号 ${phone}：${code}`);
+            logger.info('Phone verification challenge generated');
             return NextResponse.json({ ok: true });
         } else {
             const email = String(form.get('email') || '').trim();
@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
             if (!r.success)
                 return NextResponse.json({ error: r.error || '发送失败' }, { status: 500 });
             // TODO: 接入邮件服务发送验证码
-            logger.debug(`发送验证码到邮箱 ${email}：${code}`);
+            logger.info('Email verification challenge generated');
             return NextResponse.json({ ok: true });
         }
     } catch (e: any) {

@@ -1,10 +1,10 @@
 import { bulkUpsertEntriesAction, findProjectDictionaryAction } from '@/actions/dictionary';
 import { extractDocumentTermsAction, translateTermsBatchAction } from '@/actions/project-init';
-import { auth } from '@/auth';
 import { findBlankDictionaryEntriesBySourcesDB, updateDictionaryEntryTargetTextDB } from '@/db/dictionaryEntry';
-import { findDocumentsByProjectIdDB, updateDocumentStatusDB } from '@/db/document';
-import { findProjectByIdDB } from '@/db/project';
+import { updateDocumentStatusDB } from '@/db/document';
 import { extractTextFromUrl } from '@/lib/file-parser';
+import { guardMessage, guardStatus, requireOwnedProjectDocument, requireUser, requireWritableProject } from '@/lib/guards';
+import { scopedProjectBatchId } from '@/lib/init-artifact-keys';
 import { createLogger } from '@/lib/logger';
 import { getRedis } from '@/lib/redis';
 import { DocumentStatus } from '@/types/enums';
@@ -18,6 +18,7 @@ const logger = createLogger({
     includeCaller: false, // 日志不包含调用者
 });
 export async function POST(req: NextRequest, ctx: any) {
+    let ownedDocumentId = '';
     try {
         const { id: projectId } = await (ctx?.params || {});
         const q = req.nextUrl.searchParams;
@@ -40,15 +41,15 @@ export async function POST(req: NextRequest, ctx: any) {
         if (!projectId) return NextResponse.json({ error: 'missing project id' }, { status: 400 });
         if (!batchId) return NextResponse.json({ error: 'missing batchId' }, { status: 400 });
 
-        const session = await auth();
-        const userId = session?.user?.id || undefined;
-        if (!userId) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+        const authCtx = await requireUser();
+        const project = await requireWritableProject(projectId, authCtx);
+        const scopedBatchId = scopedProjectBatchId(projectId, batchId);
 
         let unique: string[] = [];
         {
             const redis = await getRedis();
-            const raw = await redis.get(`docTerms.${batchId}.item.terms.all`);
-            logger.debug(`redis get key: docTerms.${batchId}.item.terms.all`)
+            const raw = await redis.get(`docTerms.${scopedBatchId}.item.terms.all`);
+            logger.debug(`redis get key: docTerms.${scopedBatchId}.item.terms.all`);
             if (raw) {
                 try {
                     const obj = JSON.parse(String(raw));
@@ -58,17 +59,16 @@ export async function POST(req: NextRequest, ctx: any) {
                         new Set(terms.map(t => String(t?.term || '').trim()).filter(Boolean))
                     );
                 } catch {
-                    logger.error("JSON格式化失败: ", raw || "null")
+                    logger.error('术语结果 JSON 格式化失败');
                 } finally {
-                    logger.info("格式化docTerms: ", raw || "null")
+                    logger.info('格式化docTerms', { count: unique.length });
                 }
             }
         }
         // 兜底：若 Redis 中暂无术语，尝试即时抽取一个简版术语表（不经队列）
         if (!unique.length) {
             try {
-                const docs = await findDocumentsByProjectIdDB(projectId);
-                const only = docs?.[0];
+                const only = project.documents?.[0];
                 if (only?.url) {
                     const { text } = await extractTextFromUrl(only.url);
                     const head = String(text || '').slice(0, 4000);
@@ -105,7 +105,6 @@ export async function POST(req: NextRequest, ctx: any) {
         const applied = await bulkUpsertEntriesAction({
             dictionaryId,
             projectId,
-            userId: String(userId),
             terms: unique,
             mode: applyMode,
             copyFromOthers: true,
@@ -122,7 +121,6 @@ export async function POST(req: NextRequest, ctx: any) {
                 const norm = (s: string) => String(s || '').trim();
                 const blanks = await findBlankDictionaryEntriesBySourcesDB(dictionaryId, unique);
                 const srcList = blanks?.map((b: any) => norm(b.sourceText)) || [];
-                const project = await findProjectByIdDB(projectId);
                 const sourceLanguage = String(
                     q.get('sourceLanguage') || (project as any)?.sourceLanguage || 'auto'
                 );
@@ -176,25 +174,21 @@ export async function POST(req: NextRequest, ctx: any) {
         }
         try {
             const only = documentId
-                ? await (await import('@/db/document')).findDocumentByIdDB(documentId)
-                : (await findDocumentsByProjectIdDB(projectId))?.[0];
+                ? await requireOwnedProjectDocument(projectId, documentId, authCtx)
+                : project.documents?.[0];
             if (only?.id) {
+                ownedDocumentId = only.id;
                 await updateDocumentStatusDB(only.id, DocumentStatus.COMPLETED as any);
             }
         } catch { }
         return NextResponse.json({ ok: true, dictionaryId, inserted, updated, skipped });
     } catch (e: any) {
-        try {
-            const { id: projectId } = await ctx.params;
-            const docs = await findDocumentsByProjectIdDB(projectId);
-            const only = docs?.[0];
-            if (only?.id) {
-                try {
-                    await updateDocumentStatusDB(only.id, DocumentStatus.ERROR as any);
-                } catch { }
-            }
-        } catch { }
+        if (ownedDocumentId) {
+            try {
+                await updateDocumentStatusDB(ownedDocumentId, DocumentStatus.ERROR as any);
+            } catch { }
+        }
         logger.error({ error: e?.message || 'apply failed' });
-        return NextResponse.json({ error: e?.message || 'apply failed' }, { status: 500 });
+        return NextResponse.json({ error: guardMessage(e) || 'apply failed' }, { status: guardStatus(e) });
     }
 }

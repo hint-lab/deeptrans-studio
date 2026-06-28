@@ -1,5 +1,6 @@
 import { createLogger } from '@/lib/logger';
 import { NextResponse } from 'next/server';
+import { guardMessage, guardStatus, ownedWhere, requireUser } from '@/lib/guards';
 const logger = createLogger({
     type: 'request:dictionary',
 }, {
@@ -12,12 +13,11 @@ export async function GET(request: Request) {
     try {
         const { searchParams } = new URL(request.url);
         const q = String(searchParams.get('q') || '').trim();
-        const tenantId = searchParams.get('tenantId') || undefined;
-        const userId = searchParams.get('userId') || undefined;
         const limitParam = searchParams.get('limit');
         const limit = Math.max(1, Math.min(200, Number(limitParam || 50) || 50));
+        const authCtx = await requireUser();
 
-        logger.debug('Dictionary API lookup called:', { q, tenantId, userId, limit });
+        logger.debug('Dictionary API lookup called:', { hasQuery: !!q, limit });
 
         if (!q) {
             logger.debug('Dictionary API: No query term provided');
@@ -26,10 +26,14 @@ export async function GET(request: Request) {
 
         // 按可见范围组合查询条件：PUBLIC / PROJECT / PRIVATE(userId)
         const orScopes: any[] = [{ visibility: 'PUBLIC' as any }];
-        // PROJECT 范围：保留（当前不限定 projectId）
-        if (tenantId) orScopes.push({ visibility: 'PROJECT' as any });
-        else orScopes.push({ visibility: 'PROJECT' as any });
-        if (userId) orScopes.push({ visibility: 'PRIVATE' as any, userId });
+        orScopes.push({
+            visibility: 'PROJECT' as any,
+            OR: [
+                ...(authCtx.tenantId ? [{ tenantId: authCtx.tenantId }] : []),
+                { projectBindings: { some: { project: ownedWhere(authCtx) } } },
+            ],
+        });
+        orScopes.push({ visibility: 'PRIVATE' as any, userId: authCtx.userId });
 
         logger.debug('Dictionary API: Query scopes:', orScopes);
 
@@ -38,7 +42,6 @@ export async function GET(request: Request) {
 
         logger.debug('Dictionary API: Query result:', {
             rowsCount: rows?.length,
-            rows: rows?.slice(0, 3),
         });
 
         const visMap: Record<string, string> = { PUBLIC: '公共', PROJECT: '项目', PRIVATE: '私有' };
@@ -55,12 +58,11 @@ export async function GET(request: Request) {
 
         logger.debug('Dictionary API: Final response:', {
             dataCount: data?.length,
-            data: data?.slice(0, 3),
         });
 
         return NextResponse.json({ data });
     } catch (e: any) {
         logger.error('[API] dictionary/lookup error:', e);
-        return NextResponse.json({ error: e?.message || 'lookup failed' }, { status: 500 });
+        return NextResponse.json({ error: guardMessage(e) || 'lookup failed' }, { status: guardStatus(e) });
     }
 }

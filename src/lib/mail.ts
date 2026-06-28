@@ -10,10 +10,11 @@ const logger = createLogger({
 });
 function createTransporter() {
     if (!process.env.EMAIL_SERVER) return null;
-    // 开发环境开启日志，便于排查 500
+    const enableMailDebug =
+        process.env.NODE_ENV !== 'production' && process.env.LOGGER_ENABLE_DEBUG === 'true';
     const options: any = {
-        logger: process.env.NODE_ENV !== 'production',
-        debug: process.env.NODE_ENV !== 'production',
+        logger: enableMailDebug,
+        debug: enableMailDebug,
     };
     return nodemailer.createTransport(process.env.EMAIL_SERVER as string, options);
 }
@@ -33,7 +34,7 @@ export async function sendVerificationEmail(to: string, code: string) {
     const subject = '您的登录验证码';
     const text = `您的验证码是：${code} （2分钟内有效）`;
     const html = `<p>您的验证码是：<b>${code}</b></p><p>2分钟内有效，请勿泄露。</p>`;
-    logger.debug('✅ 参数验证通过:', { to, codeLength: code.length });
+    logger.debug('mail params validated', { recipientLength: to.length, codeLength: code.length });
     try {
         // 可提前验证连接配置是否有效
         await transporter.verify();
@@ -50,8 +51,8 @@ export async function sendVerificationEmail(to: string, code: string) {
             // 仅输出关键字段，避免泄露敏感信息
             logger.debug('[mail] sendMail info:', {
                 messageId: (info as any)?.messageId,
-                accepted: (info as any)?.accepted,
-                rejected: (info as any)?.rejected,
+                acceptedCount: Array.isArray((info as any)?.accepted) ? (info as any).accepted.length : 0,
+                rejectedCount: Array.isArray((info as any)?.rejected) ? (info as any).rejected.length : 0,
                 response: (info as any)?.response,
             });
         }
