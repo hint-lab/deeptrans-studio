@@ -40,21 +40,23 @@ export type StageBadgeBarProps = {
 };
 
 // --- 核心配置：定义视觉上的节点结构 ---
-// stages: 包含的真实状态
-// isGroup: 是否为合并显示模式（显示子状态微标）
-// labelKey: 对应的 i18n key（如果是 Group）
+// 每个真实阶段单独显示，避免把人工复核合并进自动处理节点里。
 const VISUAL_FLOW_CONFIG = [
     {
-        id: 'PRE_TRANS_GROUP',
-        stages: ['MT', 'MT_REVIEW'],
-        isGroup: true,
-        labelKey: 'groups.preTranslation', // 对应 "预翻译阶段"
+        id: 'MT_STEP',
+        stages: ['MT'],
     },
     {
-        id: 'QA_GROUP',
-        stages: ['QA', 'QA_REVIEW'],
-        isGroup: true,
-        labelKey: 'groups.qaProcess', // 对应 "质量检查"
+        id: 'MT_REVIEW_STEP',
+        stages: ['MT_REVIEW'],
+    },
+    {
+        id: 'QA_STEP',
+        stages: ['QA'],
+    },
+    {
+        id: 'QA_REVIEW_STEP',
+        stages: ['QA_REVIEW'],
     },
     {
         id: 'PE_STEP',
@@ -284,14 +286,7 @@ const StageBadgeBar: React.FC<StageBadgeBarProps> = ({
             const isNodeDone = currentRealStepIdx > lastStageIdx;
 
             // 获取显示标签
-            let label = '';
-            if (node.isGroup && node.labelKey) {
-                // 如果是合并组，使用组名 (如 "预翻译阶段")
-                label = tStage(node.labelKey, { defaultValue: 'Stage' });
-            } else {
-                // 如果是独立节点，使用标准阶段名 (如 "译后编辑")
-                label = getTranslationStageLabel(node.stages[0] as TranslationStage, tStage);
-            }
+            const label = getTranslationStageLabel(node.stages[0] as TranslationStage, tStage);
 
             // 样式基类
             let containerCls = "flex items-center px-2 py-[2px] rounded-full border transition-all duration-200 relative";
@@ -307,10 +302,6 @@ const StageBadgeBar: React.FC<StageBadgeBarProps> = ({
                 containerCls += " bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-foreground/70";
             }
 
-            // 子状态逻辑 (仅针对 isGroup = true 的节点)
-            const activeSubStage = node.stages.find(s => s === currentStage);
-            const isReviewing = activeSubStage?.includes('REVIEW'); // 简单判断
-
             return (
                 <div key={node.id} className="flex items-center">
                     <div className={containerCls}>
@@ -320,12 +311,6 @@ const StageBadgeBar: React.FC<StageBadgeBarProps> = ({
 
                         <div className="flex flex-col items-center leading-none">
                             <span>{label}</span>
-                            {/* 只有是 Group 且处于激活状态时，才显示子状态微标 */}
-                            {node.isGroup && isNodeActive && (
-                                <span className="text-[8px] opacity-80 mt-[1px] font-normal text-yellow-500">
-                                    {isReviewing ? tStage('status.reviewing') : tStage('status.processing')}
-                                </span>
-                            )}
                         </div>
                     </div>
                     {/* 连接线 */}
