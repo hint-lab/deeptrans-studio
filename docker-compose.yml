@@ -11,7 +11,7 @@ services:
         ports:
             - '${DB_PORT:-5432}:5432' # 使用 .env 中的 DB_PORT 或默认值 5432
         volumes:
-            - postgres_data:/var/lib/postgresql/data
+            - postgres_data:/var/lib/postgresql
         restart: unless-stopped
         networks:
             - app_local
