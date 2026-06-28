@@ -25,7 +25,6 @@ import { fetchDictionariesAction, fetchDictionaryEntriesAction } from '@/actions
 import { embedAndTranslateAction as textTranslate } from '@/actions/pre-translate';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { Skeleton } from '@/components/ui/skeleton';
 import { LANGUAGES } from '@/constants/languages';
 import { createLogger } from '@/lib/logger';
 import {
@@ -98,9 +97,10 @@ export default function InstantTranslatePage() {
     ];
     const [sourceText, setSourceText] = useState('');
     const [translatedText, setTranslatedText] = useState('');
-    const [sourceLanguage, setSourceLanguage] = useState('auto');
+    const [sourceLanguage, setSourceLanguage] = useState('en');
     const [targetLanguage, setTargetLanguage] = useState('zh');
     const [isTranslating, setIsTranslating] = useState(false);
+    const [isTranslationQueued, setIsTranslationQueued] = useState(false);
     const [autoTranslate, setAutoTranslate] = useState(true);
     const [translationStyle, setTranslationStyle] = useState('formal');
     const [selectedDictionaries, setSelectedDictionaries] = useState<string[]>([]);
@@ -172,6 +172,10 @@ export default function InstantTranslatePage() {
             return [];
         }
     };
+
+    const getLanguageLabel = (key: string) => {
+        return languages.find(lang => lang.key === key)?.label ?? key;
+    };
     // 真正的防抖翻译函数
     const debouncedTranslate = useCallback(
         async (text: string, source: string, target: string, style: string) => {
@@ -186,6 +190,7 @@ export default function InstantTranslatePage() {
             debounceTimerRef.current = setTimeout(async () => {
                 if (!text.trim()) {
                     setTranslatedText('');
+                    setIsTranslationQueued(false);
                     return;
                 }
 
@@ -194,12 +199,14 @@ export default function InstantTranslatePage() {
                     toast.error(t('pleaseSelectTargetLanguage'), {
                         description: t('targetCannotBeAuto'),
                     });
+                    setIsTranslationQueued(false);
                     return;
                 }
 
                 // 记录当前请求序号
                 const localRequestId = ++requestIdRef.current;
 
+                setIsTranslationQueued(false);
                 setIsTranslating(true);
                 try {
                     // 获取选中的词典条目
@@ -210,7 +217,7 @@ export default function InstantTranslatePage() {
                         source,
                         target,
                         dictEntries, // 传递术语库条目
-                        { prompt: `使用${translationStyle}风格翻译` }
+                        { prompt: `使用${style}风格翻译` }
                     );
 
                     // 仅处理最新的请求结果，避免旧请求覆盖
@@ -226,6 +233,8 @@ export default function InstantTranslatePage() {
                     }
                 }
             }, delay);
+
+            setIsTranslationQueued(true);
         },
         [toast, selectedDictionaries, translationStyle, dictionaryEntriesById]
     );
@@ -344,6 +353,7 @@ export default function InstantTranslatePage() {
         // 记录当前请求序号
         const localRequestId = ++requestIdRef.current;
 
+        setIsTranslationQueued(false);
         setIsTranslating(true);
         try {
             // 获取选中的词典条目
@@ -442,6 +452,8 @@ export default function InstantTranslatePage() {
             dict.domain.toLowerCase().includes(dictionarySearch.toLowerCase())
     );
 
+    const showTranslationProgress = isTranslationQueued || isTranslating;
+
     return (
         <div className="mx-auto w-full max-w-7xl p-6">
             <div className="mb-6">
@@ -452,39 +464,43 @@ export default function InstantTranslatePage() {
             </div>
 
             {/* 语言选择和控制栏 */}
-            <div className="mb-6 flex items-center justify-between rounded-lg bg-white p-4 dark:bg-gray-800">
-                <div className="flex items-center space-x-4">
-                    <Select
-                        value={sourceLanguage}
-                        onValueChange={value => setSourceLanguage(value)}
-                    >
-                        <SelectTrigger className="w-40 border-gray-300 bg-white text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
-                            <SelectValue placeholder={t('selectSourceLanguage')} />
-                        </SelectTrigger>
-                        <SelectContent className="border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-800">
-                            {languages.map(lang => (
-                                <SelectItem
-                                    key={lang.key}
-                                    value={lang.key}
-                                    className="text-gray-900 hover:bg-gray-100 dark:text-white dark:hover:bg-gray-700"
-                                >
-                                    {lang.label}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
+            <div className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-lg bg-white p-4 dark:bg-gray-800">
+                <div className="flex flex-wrap items-end gap-4">
+                    <div className="space-y-1.5">
+                        <Label className="text-xs text-gray-500">{t('sourceLanguage')}</Label>
+                        <Select
+                            value={sourceLanguage}
+                            onValueChange={value => setSourceLanguage(value)}
+                        >
+                            <SelectTrigger className="w-40 border-gray-300 bg-white text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                                <SelectValue placeholder={t('selectSourceLanguage')} />
+                            </SelectTrigger>
+                            <SelectContent className="border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-800">
+                                {languages.map(lang => (
+                                    <SelectItem
+                                        key={lang.key}
+                                        value={lang.key}
+                                        className="text-gray-900 hover:bg-gray-100 dark:text-white dark:hover:bg-gray-700"
+                                    >
+                                        {lang.label}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
 
                     <Button
                         variant="ghost"
                         size="sm"
                         onClick={swapLanguages}
                         disabled={sourceLanguage === 'auto'}
-                        className="p-2"
+                        className="mb-0.5 p-2"
                     >
                         <ArrowRightLeft className="h-4 w-4" />
                     </Button>
 
-                    <div className="flex flex-col">
+                    <div className="space-y-1.5">
+                        <Label className="text-xs text-gray-500">{t('targetLanguage')}</Label>
                         <Select
                             value={targetLanguage}
                             onValueChange={value => setTargetLanguage(value)}
@@ -509,27 +525,30 @@ export default function InstantTranslatePage() {
                     </div>
                 </div>
 
-                <div className="flex items-center space-x-4">
+                <div className="flex flex-wrap items-center gap-4">
                     {/* 翻译风格选择 */}
-                    <Select
-                        value={translationStyle}
-                        onValueChange={value => setTranslationStyle(value)}
-                    >
-                        <SelectTrigger className="w-32 border-gray-300 bg-white text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
-                            <SelectValue placeholder={t('translationStyle')} />
-                        </SelectTrigger>
-                        <SelectContent className="border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-800">
-                            {translationStyles.map(style => (
-                                <SelectItem
-                                    key={style.key}
-                                    value={style.key}
-                                    className="text-gray-900 hover:bg-gray-100 dark:text-white dark:hover:bg-gray-700"
-                                >
-                                    {style.label}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
+                    <div className="space-y-1.5">
+                        <Label className="text-xs text-gray-500">{t('translationStyle')}</Label>
+                        <Select
+                            value={translationStyle}
+                            onValueChange={value => setTranslationStyle(value)}
+                        >
+                            <SelectTrigger className="w-32 border-gray-300 bg-white text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                                <SelectValue placeholder={t('translationStyle')} />
+                            </SelectTrigger>
+                            <SelectContent className="border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-800">
+                                {translationStyles.map(style => (
+                                    <SelectItem
+                                        key={style.key}
+                                        value={style.key}
+                                        className="text-gray-900 hover:bg-gray-100 dark:text-white dark:hover:bg-gray-700"
+                                    >
+                                        {style.label}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
 
                     {/* 词库选择弹窗按钮 */}
                     <Dialog open={dictionaryDialogOpen} onOpenChange={setDictionaryDialogOpen}>
@@ -894,7 +913,12 @@ export default function InstantTranslatePage() {
                 <div className="h-100 rounded-lg border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
                     <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
                         <div className="flex items-center justify-between">
-                            <div className="text-lg font-medium">{t('sourceText')}</div>
+                            <div>
+                                <div className="text-lg font-medium">{t('sourceText')}</div>
+                                <div className="text-xs text-gray-500">
+                                    {getLanguageLabel(sourceLanguage)}
+                                </div>
+                            </div>
                             <div className="flex items-center space-x-2">
                                 <Button
                                     variant="ghost"
@@ -929,7 +953,17 @@ export default function InstantTranslatePage() {
                 <div className="h-100 rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
                     <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
                         <div className="flex items-center justify-between">
-                            <div className="text-lg font-medium">{t('translatedText')}</div>
+                            <div>
+                                <div className="flex items-center gap-2 text-lg font-medium">
+                                    {t('translatedText')}
+                                    {showTranslationProgress && (
+                                        <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                                    )}
+                                </div>
+                                <div className="text-xs text-gray-500">
+                                    {getLanguageLabel(targetLanguage)}
+                                </div>
+                            </div>
                             <div className="flex items-center space-x-2">
                                 <Button
                                     variant="ghost"
@@ -951,8 +985,33 @@ export default function InstantTranslatePage() {
                         </div>
                     </div>
                     <div className="p-4">
-                        {isTranslating ? (
-                            <Skeleton className="h-80 w-full rounded-md" />
+                        {showTranslationProgress ? (
+                            <div className="flex h-80 flex-col rounded-md border border-dashed border-primary/30 bg-primary/5 p-4">
+                                <div className="mb-4 flex items-center justify-between text-sm text-primary">
+                                    <span>
+                                        {isTranslationQueued
+                                            ? t('waitingToTranslate')
+                                            : t('translating')}
+                                    </span>
+                                    <span>
+                                        {getLanguageLabel(sourceLanguage)} →{' '}
+                                        {getLanguageLabel(targetLanguage)}
+                                    </span>
+                                </div>
+                                <div className="mb-6 h-1.5 overflow-hidden rounded-full bg-primary/10">
+                                    <div className="h-full w-1/3 animate-pulse rounded-full bg-primary" />
+                                </div>
+                                <div className="space-y-3">
+                                    <div className="h-4 w-11/12 animate-pulse rounded bg-primary/15" />
+                                    <div className="h-4 w-10/12 animate-pulse rounded bg-primary/15" />
+                                    <div className="h-4 w-8/12 animate-pulse rounded bg-primary/15" />
+                                </div>
+                                {translatedText && (
+                                    <div className="mt-6 flex-1 overflow-hidden whitespace-pre-wrap text-lg text-gray-500">
+                                        {translatedText}
+                                    </div>
+                                )}
+                            </div>
                         ) : (
                             <Textarea
                                 value={translatedText}

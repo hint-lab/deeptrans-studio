@@ -21,20 +21,21 @@ export function LogoMenu({ logoSrc, compact = false }: LogoMenuProps) {
     const t = useTranslations('IDE.menus.logo');
     const [aboutOpen, setAboutOpen] = useState(false);
     const [prefOpen, setPrefOpen] = useState(false);
-    const currentLogoSrc = compact ? '/deeptrans_icon.svg' : logoSrc;
+
+    if (compact) {
+        return null;
+    }
 
     return (
         <MenubarMenu>
-            <MenubarTrigger
-                className={`cursor-pointer font-bold hover:opacity-90 ${compact ? 'w-10 justify-center px-1' : 'w-40'}`}
-            >
+            <MenubarTrigger className="w-40 cursor-pointer font-bold hover:opacity-90">
                 <Image
-                    src={currentLogoSrc}
+                    src={logoSrc}
                     alt="DeepTrans Studio"
-                    width={compact ? 28 : 160}
-                    height={compact ? 28 : 64}
+                    width={160}
+                    height={64}
                     priority
-                    className={compact ? 'h-7 w-7 flex-none shrink-0' : 'flex-none shrink-0'}
+                    className="flex-none shrink-0"
                 />
             </MenubarTrigger>
             <MenubarContent>

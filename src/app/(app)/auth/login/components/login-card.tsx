@@ -16,16 +16,15 @@ export const LoginCard = ({ isDemo }: LoginCardProps) => {
             </CardHeader>
             <CardContent>
                 <EmailLoginForm />
-                <div className="mt-4 text-center text-sm text-muted-foreground">
-                    {isDemo ? (
-                        <>{t('demoAccount')}: test@example.com / 123456</>
-                    ) : (
-                        <>
+                <div className="mt-4 space-y-2 text-center text-sm text-muted-foreground">
+                    <div>{t('demoAccount')}: test@example.com / 123456</div>
+                    {isDemo ? null : (
+                        <div>
                             {t('noAccount')}{' '}
                             <a className="underline" href="/auth/register">
                                 {t('goRegister')}
                             </a>
-                        </>
+                        </div>
                     )}
                 </div>
             </CardContent>

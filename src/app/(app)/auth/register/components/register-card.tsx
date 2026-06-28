@@ -79,6 +79,9 @@ export const RegisterCard = () => {
                 const result = await emailLoginAction({ email: email.trim(), code: code.trim() }, '/dashboard');
                 if (result?.error) toast.error(t('loginFailed', { error: result.error }));
             } catch (e: any) {
+                if (e?.message === 'NEXT_REDIRECT' || e?.digest?.includes?.('NEXT_REDIRECT')) {
+                    throw e;
+                }
                 toast.error((e as Error)?.message || t('registerFailed'));
             }
         });

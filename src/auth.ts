@@ -10,17 +10,20 @@ import NextAuth from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 
 import { findUserByEmailDB, findUserByIdDB, updateUserByIdDB } from './db/user';
-import { DEMO_CODE, DEMO_EMAIL, ensureDemoUser } from './lib/demo-user';
+import { DEMO_CODE, DEMO_EMAIL, ensureDemoUser, isDemoAccount } from './lib/demo-user';
 // 直接将配置内联在此文件中，不再依赖外部 authConfig
 const MAX_AGE = Number(process.env.AUTH_SESSION_MAX_AGE ?? 3600);
-const logger = createLogger({
-    type: 'auth',
-}, {
-    json: false,// 开启json格式输出
-    pretty: false, // 关闭开发环境美化输出
-    colors: true, // 仅当json：false时启用颜色输出可用
-    includeCaller: false, // 日志不包含调用者
-});
+const logger = createLogger(
+    {
+        type: 'auth',
+    },
+    {
+        json: false, // 开启json格式输出
+        pretty: false, // 关闭开发环境美化输出
+        colors: true, // 仅当json：false时启用颜色输出可用
+        includeCaller: false, // 日志不包含调用者
+    }
+);
 export const { handlers, signIn, signOut, auth } = NextAuth({
     providers: [
         CredentialsProvider({
@@ -33,6 +36,12 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             async authorize(credentials) {
                 // 同时支持 phone+code 与 email+code
                 const { phone, email, code } = credentials as any;
+                if (isDemoAccount(email)) {
+                    if (code === DEMO_CODE) {
+                        return ensureDemoUser();
+                    }
+                    return null;
+                }
                 if (process.env.IS_DEMO === 'yes') {
                     if (code === DEMO_CODE && email === DEMO_EMAIL) {
                         return ensureDemoUser();
@@ -41,7 +50,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                     }
                 } else {
                     if (email) {
-                        const { getVerificationCodeByEmail } = await import('./db/verificationCode');
+                        const { getVerificationCodeByEmail } =
+                            await import('./db/verificationCode');
                         const record = await getVerificationCodeByEmail(email as string);
                         if (!record || record.code !== code) {
                             return null;
@@ -50,7 +60,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                         return user || null;
                     }
                     if (phone) {
-                        const { getVerificationCodeByPhone } = await import('./db/verificationCode');
+                        const { getVerificationCodeByPhone } =
+                            await import('./db/verificationCode');
                         const record = await getVerificationCodeByPhone(phone as string);
                         if (!record || record.code !== code) {
                             return null;

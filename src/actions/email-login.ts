@@ -3,7 +3,7 @@ import { signIn } from '@/auth';
 import { DEFAULT_LOGIN_REDIRECT } from '@/routes';
 import { findUserByEmailDB, updateUserByIdDB } from '@/db/user';
 import { getVerificationCodeByEmail } from '@/db/verificationCode';
-import { DEMO_CODE, DEMO_EMAIL, ensureDemoUser } from '@/lib/demo-user';
+import { DEMO_CODE, DEMO_EMAIL, ensureDemoUser, isDemoAccount } from '@/lib/demo-user';
 
 export const emailLoginAction = async (
     values: { email: string; code: string },
@@ -13,7 +13,12 @@ export const emailLoginAction = async (
     const code = values?.code?.trim();
     if (!email || !code) return { error: '邮箱或验证码缺失' };
 
-    if (process.env.IS_DEMO === 'yes') {
+    if (isDemoAccount(email)) {
+        if (code !== DEMO_CODE) {
+            return { error: `测试账号验证码固定为 ${DEMO_CODE}` };
+        }
+        await ensureDemoUser();
+    } else if (process.env.IS_DEMO === 'yes') {
         if (code !== DEMO_CODE || email !== DEMO_EMAIL) {
             return { error: `演示环境仅允许使用 ${DEMO_EMAIL} / ${DEMO_CODE} 登录` };
         }

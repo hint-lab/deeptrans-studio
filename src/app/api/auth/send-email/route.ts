@@ -1,18 +1,21 @@
 import { createEmailVerificationCode } from '@/db/verificationCode';
 import { findUserByEmailDB } from '@/db/user';
-import { DEMO_CODE, DEMO_EMAIL, ensureDemoUser } from '@/lib/demo-user';
+import { DEMO_CODE, DEMO_EMAIL, ensureDemoUser, isDemoAccount } from '@/lib/demo-user';
 import { createLogger } from '@/lib/logger';
 import { sendVerificationEmail } from '@/lib/mail';
 import { NextRequest, NextResponse } from 'next/server';
 export const runtime = 'nodejs';
-const logger = createLogger({
-    type: 'api:auth:send-email',
-}, {
-    json: false,// 开启json格式输出
-    pretty: false, // 关闭开发环境美化输出
-    colors: true, // 仅当json：false时启用颜色输出可用
-    includeCaller: false, // 日志不包含调用者
-});
+const logger = createLogger(
+    {
+        type: 'api:auth:send-email',
+    },
+    {
+        json: false, // 开启json格式输出
+        pretty: false, // 关闭开发环境美化输出
+        colors: true, // 仅当json：false时启用颜色输出可用
+        includeCaller: false, // 日志不包含调用者
+    }
+);
 export async function POST(request: NextRequest) {
     try {
         const form = await request.formData();
@@ -21,6 +24,17 @@ export async function POST(request: NextRequest) {
         if (!email) return NextResponse.json({ error: 'Email is required' }, { status: 400 });
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
             return NextResponse.json({ error: '邮箱格式不正确' }, { status: 400 });
+        }
+
+        if (isDemoAccount(email)) {
+            await ensureDemoUser();
+            logger.info('Demo account verification bypassed');
+            return NextResponse.json({
+                success: true,
+                code: DEMO_CODE,
+                accepted: [DEMO_EMAIL],
+                message: '测试账号使用固定验证码，无需发送邮件',
+            });
         }
 
         if (process.env.IS_DEMO === 'yes') {
@@ -79,7 +93,9 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Failed to send email' }, { status: 500 });
         }
         // 返回发送结果
-        logger.info('Verification email sent', { acceptedCount: (info as any)?.accepted?.length || 0 });
+        logger.info('Verification email sent', {
+            acceptedCount: (info as any)?.accepted?.length || 0,
+        });
 
         return NextResponse.json({
             success: true,

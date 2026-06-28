@@ -34,30 +34,23 @@ export default function Header() {
         );
     }
 
-    const logoSrc = !isSidebarOpen
-        ? '/deeptrans_icon.svg'
-        : logoTheme === 'dark'
-          ? '/logo3_dark.svg'
-          : '/logo3.svg';
+    const logoSrc = logoTheme === 'dark' ? '/logo3_dark.svg' : '/logo3.svg';
 
     return (
         <div className="z-50 flex size-full items-center justify-between bg-background/95 px-4 backdrop-blur">
             <SidebarToggle isOpen={isSidebarOpen} onToggle={toggleSidebar} />
-            <Link
-                href="/dashboard"
-                className={
-                    isSidebarOpen ? 'flex items-center' : 'flex h-8 w-8 items-center justify-center'
-                }
-            >
-                <Image
-                    alt="Logo"
-                    src={logoSrc}
-                    width={isSidebarOpen ? 50 : 28}
-                    height={isSidebarOpen ? 20 : 28}
-                    priority
-                    className={isSidebarOpen ? 'h-6 w-auto' : 'h-7 w-7'}
-                />
-            </Link>
+            {isSidebarOpen ? (
+                <Link href="/dashboard" className="flex items-center">
+                    <Image
+                        alt="Logo"
+                        src={logoSrc}
+                        width={50}
+                        height={20}
+                        priority
+                        className="h-6 w-auto"
+                    />
+                </Link>
+            ) : null}
             <div className="ml-auto flex items-center space-x-4 px-3">
                 <LocaleSwitcher />
                 <Button
