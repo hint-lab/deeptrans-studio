@@ -3,6 +3,7 @@ import type { NextPage } from 'next';
 import Image from 'next/image';
 import { RegisterCard } from './components/register-card';
 import LocaleSwitcher from '@/components/locale-switcher';
+import { redirect } from 'next/navigation';
 
 export const metadata: Metadata = {
     title: 'Register',
@@ -10,6 +11,10 @@ export const metadata: Metadata = {
 };
 
 const RegisterPage: NextPage = () => {
+    if (process.env.IS_DEMO === 'yes') {
+        redirect('/auth/login');
+    }
+
     return (
         <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-gradient-to-br from-[#0f1020] via-[#11122a] to-[#0b0c1a]">
             {/* 语言切换器 */}

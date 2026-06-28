@@ -10,6 +10,7 @@ import NextAuth from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 
 import { findUserByEmailDB, findUserByIdDB, updateUserByIdDB } from './db/user';
+import { DEMO_CODE, DEMO_EMAIL, ensureDemoUser } from './lib/demo-user';
 // 直接将配置内联在此文件中，不再依赖外部 authConfig
 const MAX_AGE = Number(process.env.AUTH_SESSION_MAX_AGE ?? 3600);
 const logger = createLogger({
@@ -33,9 +34,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                 // 同时支持 phone+code 与 email+code
                 const { phone, email, code } = credentials as any;
                 if (process.env.IS_DEMO === 'yes') {
-                    if (code === '123456' && email === 'test@example.com') {
-                        const user = await findUserByEmailDB(email as string);
-                        return user || null;
+                    if (code === DEMO_CODE && email === DEMO_EMAIL) {
+                        return ensureDemoUser();
                     } else {
                         return null;
                     }

@@ -1,5 +1,6 @@
 import { createEmailVerificationCode } from '@/db/verificationCode';
 import { findUserByEmailDB } from '@/db/user';
+import { DEMO_CODE, DEMO_EMAIL, ensureDemoUser } from '@/lib/demo-user';
 import { createLogger } from '@/lib/logger';
 import { sendVerificationEmail } from '@/lib/mail';
 import { NextRequest, NextResponse } from 'next/server';
@@ -20,6 +21,22 @@ export async function POST(request: NextRequest) {
         if (!email) return NextResponse.json({ error: 'Email is required' }, { status: 400 });
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
             return NextResponse.json({ error: '邮箱格式不正确' }, { status: 400 });
+        }
+
+        if (process.env.IS_DEMO === 'yes') {
+            if (email !== DEMO_EMAIL) {
+                return NextResponse.json(
+                    { error: `演示环境仅允许使用 ${DEMO_EMAIL} / ${DEMO_CODE} 登录` },
+                    { status: 403 }
+                );
+            }
+            await ensureDemoUser();
+            return NextResponse.json({
+                success: true,
+                code: DEMO_CODE,
+                accepted: [DEMO_EMAIL],
+                message: '演示账号使用固定验证码',
+            });
         }
 
         const existingUser = await findUserByEmailDB(email);
