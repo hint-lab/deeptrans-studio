@@ -74,7 +74,7 @@
                 "questions": [
                     {
                         "question": "支持哪些文档格式？",
-                        "solution": "项目文档支持 DOCX、PDF、TXT 与 Markdown。PDF 解析优先使用本地 pdf-parse；扫描版 PDF 可通过已配置的 OCR 服务兜底。"
+                        "solution": "项目文档支持 DOCX、PDF、TXT 与 Markdown。PDF 解析默认使用 MinerU 在线解析器；agent 模式无需 token，standard/precise 模式使用 MINERU_API_TOKEN。只有明确需要本地 PDF 文本抽取时才设置 MINERU_DISABLE=true。"
                     },
                     {
                         "question": "如何批量翻译多个文档？",

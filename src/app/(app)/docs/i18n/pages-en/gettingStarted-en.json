@@ -19,15 +19,21 @@
             "step2": {
                 "number": "2",
                 "title": "Upload Documents",
-                "description": "Supports multiple formats: DOCX, PDF, TXT, Markdown, etc. Drag and drop files or click the upload button.",
-                "tips": ["Supports batch upload", "Large files are automatically segmented"],
+                "description": "Supports DOCX, PDF, TXT, and Markdown. PDF files are parsed through MinerU online parsing by default; drag and drop files or click the upload button.",
+                "tips": [
+                    "Current upload limit is 10MB",
+                    "Use MINERU_PAGE_RANGE or split files for large PDFs"
+                ],
                 "image": "/docs/en/gettingstarted-en/pic2.png"
             },
             "step3": {
                 "number": "3",
                 "title": "Document Parsing",
                 "description": "The system automatically parses document structure, extracts translatable content, and performs intelligent segmentation.",
-                "tips": ["View parsing progress", "Supports manual segment adjustment"],
+                "tips": [
+                    "View parsing progress",
+                    "Supports manual segment adjustment"
+                ],
                 "image": "/docs/en/gettingstarted-en/pic3.png"
             },
             "step4": {
@@ -44,14 +50,20 @@
                 "number": "5",
                 "title": "Quality Check",
                 "description": "Use built-in quality assessment tools to check translation quality, including terminology consistency, grammar checks, etc.",
-                "tips": ["Automatically mark issues", "Supports batch fixes"],
+                "tips": [
+                    "Automatically mark issues",
+                    "Supports batch fixes"
+                ],
                 "image": "/docs/en/gettingstarted-en/pic5.png"
             },
             "step6": {
                 "number": "6",
                 "title": "Export & Delivery",
                 "description": "After completing translation, export to original format or other formats while maintaining document style.",
-                "tips": ["Supports multiple export formats", "Can generate translation reports"],
+                "tips": [
+                    "Supports multiple export formats",
+                    "Can generate translation reports"
+                ],
                 "image": "/docs/en/gettingstarted-en/pic6.png"
             }
         },

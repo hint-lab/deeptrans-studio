@@ -18,9 +18,9 @@
                 "title": "文档 (Document)",
                 "description": "项目中的单个文件",
                 "details": [
-                    "支持多种格式：DOCX、PDF、TXT等",
-                    "自动解析文档结构",
-                    "保留原始格式信息",
+                    "支持 DOCX、PDF、TXT 与 Markdown",
+                    "PDF 默认使用 MinerU 在线解析",
+                    "尽可能保留原始格式信息",
                     "可以预览和下载"
                 ]
             },
@@ -49,7 +49,12 @@
             "memory": {
                 "title": "翻译记忆 (Translation Memory)",
                 "description": "历史翻译的数据库",
-                "details": ["自动匹配相似句子", "提高翻译一致性", "减少重复工作", "支持模糊匹配"],
+                "details": [
+                    "自动匹配相似句子",
+                    "提高翻译一致性",
+                    "减少重复工作",
+                    "支持模糊匹配"
+                ],
                 "image": "/docs/zh/concepts/pic5.png"
             },
             "workflow": {

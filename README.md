@@ -165,6 +165,34 @@ OPENAI_API_KEY="sk-xxxx"
 OPENAI_BASE_URL="https://api.openai.com/v1"
 OPENAI_API_MODEL="gpt-4o-mini"
 
+# Dedicated chat/translation LLM config. Falls back to OPENAI_* when unset.
+# LLM_API_KEY="sk-xxxx"
+# LLM_BASE_URL="https://api.openai.com/v1"
+# LLM_MODEL="gpt-4o-mini"
+
+# Embedding provider. EMBEDDING_* falls back to OPENAI_* when unset.
+OPENAI_EMBED_MODEL=doubao-embedding-text-240715
+# EMBEDDING_API_KEY="sk-xxxx"
+# EMBEDDING_BASE_URL="https://api.openai.com/v1"
+# EMBEDDING_API_PATH="/embeddings"
+# EMBEDDING_MODEL="doubao-embedding-text-240715"
+# EMBEDDING_DIMENSIONS=
+
+# MinerU online PDF parser
+MINERU_API_MODE=agent
+MINERU_AGENT_BASE_URL=https://mineru.net/api/v1/agent
+MINERU_API_BASE_URL=https://mineru.net/api/v4
+# MINERU_API_TOKEN="token-for-standard-or-precise-mode"
+MINERU_MODEL_VERSION=vlm
+MINERU_LANGUAGE=ch
+MINERU_IS_OCR=false
+MINERU_ENABLE_TABLE=true
+MINERU_ENABLE_FORMULA=true
+MINERU_TIMEOUT_MS=300000
+MINERU_POLL_INTERVAL_MS=3000
+# MINERU_PAGE_RANGE=1-20
+# MINERU_DISABLE=false
+
 # Object Storage: choose MinIO or Tencent COS
 STORAGE_TYPE=minio
 STORAGE_ENDPOINT=localhost
@@ -190,6 +218,7 @@ STUDIO_HOST=localhost
 ```
 
 > 💡 **Production note**: The default database image is PostgreSQL 18 with pgvector and PGroonga. PGroonga is required for CJK keyword search. Production object storage uses Tencent COS; MinIO is only started by the local development compose file.
+> PDF parsing uses the MinerU online parser by default. `MINERU_API_MODE=agent` uses the lightweight agent endpoint without a token; `standard`/`precise` uses the token-based v4 endpoint. Set `MINERU_DISABLE=true` only when you intentionally want local PDF text extraction.
 
 ### Database Setup
 

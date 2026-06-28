@@ -74,7 +74,7 @@
                 "questions": [
                     {
                         "question": "What document formats are supported?",
-                        "solution": "Project documents support DOCX, PDF, TXT, and Markdown. PDF parsing uses local pdf-parse first and falls back to the configured OCR service for scanned PDFs."
+                        "solution": "Project documents support DOCX, PDF, TXT, and Markdown. PDF parsing uses the MinerU online parser by default. Agent mode works without a token; standard/precise mode uses MINERU_API_TOKEN. Set MINERU_DISABLE=true only when local PDF text extraction is intentionally required."
                     },
                     {
                         "question": "How to batch translate multiple documents?",

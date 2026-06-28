@@ -18,9 +18,9 @@
                 "title": "Document",
                 "description": "Individual file within a project",
                 "details": [
-                    "Supports multiple formats: DOCX, PDF, TXT, etc.",
-                    "Automatically parses document structure",
-                    "Retains original format information",
+                    "Supports DOCX, PDF, TXT, and Markdown",
+                    "PDF parsing uses MinerU online parsing by default",
+                    "Retains original format information where available",
                     "Can be previewed and downloaded"
                 ]
             },

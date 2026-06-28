@@ -168,7 +168,7 @@
                         "solutions": [
                             "View Worker logs: `docker compose logs app_worker`",
                             "Check if task data format is correct",
-                            "Verify PostgreSQL/pgvector/PGroonga, Valkey, object storage, and optional OCR are healthy",
+                            "Verify PostgreSQL/pgvector/PGroonga, Valkey, object storage, MinerU PDF parsing, and API keys are healthy",
                             "Check if API keys and configuration are correct",
                             "View failed tasks in Valkey: `redis-cli KEYS 'bull:*:failed'`"
                         ]
@@ -223,7 +223,7 @@
             },
             {
                 "name": "PDF Parsing Issues",
-                "description": "PDF parser and optional OCR fallback issues",
+                "description": "MinerU online PDF parsing and local fallback issues",
                 "issues": [
                     {
                         "title": "PDF Parsing Fails",
@@ -234,10 +234,11 @@
                         ],
                         "solutions": [
                             "Check application logs: `docker compose logs app`",
-                            "For text-based PDFs, verify the PDF is not corrupted and contains extractable text",
-                            "For scanned PDFs, configure OCR_AUTH_URL and OCR_BASE_URL",
-                            "If OCR is configured, verify the token credentials and service URL",
-                            "Check if PDF file is corrupted or format is not supported"
+                            "Verify MINERU_API_MODE is agent, standard, or precise",
+                            "For agent mode, verify MINERU_AGENT_BASE_URL is reachable",
+                            "For standard/precise mode, configure MINERU_API_TOKEN and verify MINERU_API_BASE_URL",
+                            "If the online parser is unavailable, set MINERU_DISABLE=true to use local text extraction intentionally",
+                            "Check whether the PDF is corrupted or outside supported formats"
                         ]
                     },
                     {
@@ -247,10 +248,10 @@
                             "Parsing task timeout failure"
                         ],
                         "solutions": [
-                            "Check file size (recommended not exceeding 100MB)",
-                            "Increase timeout configuration",
-                            "Check application or OCR service resource usage",
-                            "Consider splitting large files into multiple smaller files"
+                            "Current upload limit is 10MB; reduce or split larger PDFs before upload",
+                            "Increase MINERU_TIMEOUT_MS or MINERU_POLL_INTERVAL_MS for slow parsing tasks",
+                            "Use MINERU_PAGE_RANGE to parse a smaller page range first",
+                            "Check MinerU service availability and network access from the app container"
                         ]
                     }
                 ]

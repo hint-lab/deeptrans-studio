@@ -165,6 +165,34 @@ OPENAI_API_KEY="sk-xxxx"
 OPENAI_BASE_URL="https://api.openai.com/v1"
 OPENAI_API_MODEL="gpt-4o-mini"
 
+# 独立聊天/翻译 LLM 配置；未设置时回退到 OPENAI_*。
+# LLM_API_KEY="sk-xxxx"
+# LLM_BASE_URL="https://api.openai.com/v1"
+# LLM_MODEL="gpt-4o-mini"
+
+# Embedding 提供方；EMBEDDING_* 未设置时回退到 OPENAI_*。
+OPENAI_EMBED_MODEL=doubao-embedding-text-240715
+# EMBEDDING_API_KEY="sk-xxxx"
+# EMBEDDING_BASE_URL="https://api.openai.com/v1"
+# EMBEDDING_API_PATH="/embeddings"
+# EMBEDDING_MODEL="doubao-embedding-text-240715"
+# EMBEDDING_DIMENSIONS=
+
+# MinerU 在线 PDF 解析
+MINERU_API_MODE=agent
+MINERU_AGENT_BASE_URL=https://mineru.net/api/v1/agent
+MINERU_API_BASE_URL=https://mineru.net/api/v4
+# MINERU_API_TOKEN="standard-or-precise-mode-token"
+MINERU_MODEL_VERSION=vlm
+MINERU_LANGUAGE=ch
+MINERU_IS_OCR=false
+MINERU_ENABLE_TABLE=true
+MINERU_ENABLE_FORMULA=true
+MINERU_TIMEOUT_MS=300000
+MINERU_POLL_INTERVAL_MS=3000
+# MINERU_PAGE_RANGE=1-20
+# MINERU_DISABLE=false
+
 # 对象存储：MinIO 或腾讯云 COS 二选一
 STORAGE_TYPE=minio
 STORAGE_ENDPOINT=localhost
@@ -190,6 +218,7 @@ STUDIO_HOST=localhost
 ```
 
 > 💡 **生产提示**：默认数据库镜像是 PostgreSQL 18 + pgvector + PGroonga。PGroonga 是 CJK 关键词检索的必需能力。生产对象存储使用腾讯云 COS；MinIO 只由本地开发 compose 启动。
+> PDF 解析默认使用 MinerU 在线解析器。`MINERU_API_MODE=agent` 使用无需 token 的轻量 agent 接口；`standard`/`precise` 使用需要 token 的 v4 精准解析接口。只有明确需要本地 PDF 文本抽取时才设置 `MINERU_DISABLE=true`。
 
 ### 数据库初始化
 
