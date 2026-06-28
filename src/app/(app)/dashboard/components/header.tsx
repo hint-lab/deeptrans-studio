@@ -27,8 +27,9 @@ export default function Header() {
             <div className="z-50 flex size-full items-center justify-between bg-background/95 px-4 backdrop-blur">
                 <div className="h-6 w-[50px]" />
                 <div className="ml-auto flex items-center space-x-4 px-3">
+                    <div className="h-8 w-16" />
                     <div className="h-10 w-10" />
-                    <UserNavDropDown />
+                    <div className="h-10 w-10" />
                 </div>
             </div>
         );

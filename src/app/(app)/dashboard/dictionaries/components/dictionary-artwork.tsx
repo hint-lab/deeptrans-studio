@@ -206,6 +206,7 @@ export function DictionaryArtwork({
                                             fill
                                             className="object-cover"
                                             sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw, (max-width: 1280px) 25vw, 20vw"
+                                            priority={dictionary.cover === '/images/dictionaries/legal.svg'}
                                         />
                                     ) : (
                                         <div className="p-4 text-center">

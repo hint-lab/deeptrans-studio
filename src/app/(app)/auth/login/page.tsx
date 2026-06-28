@@ -1,7 +1,6 @@
 import { type Metadata } from 'next';
 import { LoginCard } from './components/login-card';
 import type { NextPage } from 'next';
-import Image from 'next/image';
 import LocaleSwitcher from '@/components/locale-switcher';
 
 export const metadata: Metadata = {
@@ -25,13 +24,10 @@ const LoginPage: NextPage = () => {
 
             <div className="z-10 flex w-full max-w-[480px] flex-col justify-center py-12 sm:px-8">
                 <div className="mx-auto mb-8 flex w-full flex-col items-center justify-center">
-                    <Image
+                    <img
                         src="/logo_dark.svg"
                         alt="DeepTrans Studio"
-                        width={320}
-                        height={56}
-                        className="opacity-95"
-                        priority
+                        className="h-auto w-[320px] max-w-full opacity-95"
                     />
                 </div>
                 <LoginCard isDemo={isDemo} />

@@ -39,8 +39,9 @@ import { useActiveDocumentItem } from '@/hooks/useActiveDocumentItem';
 import { useRunningState } from '@/hooks/useRunning';
 import { useUserSettings } from '@/hooks/useUserSettings';
 import { createLogger } from '@/lib/logger';
+import { CheckCircle2, UserCheck } from 'lucide-react';
 import { useSession } from 'next-auth/react';
-import { useLocale } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { useState as useReactState } from 'react';
 import { KeyboardShortcutsDialog, type ShortcutItem } from '../keyboard-shortcuts-dialog';
 import { PreferencesDialog } from '../preferences-dialog';
@@ -53,6 +54,63 @@ const logger = createLogger({
     colors: true, // 仅当json：false时启用颜色输出可用
     includeCaller: false, // 日志不包含调用者
 });
+
+function ReviewStageMarker({
+    active,
+    completed,
+}: {
+    active: boolean;
+    completed: boolean;
+}) {
+    const tStage = useTranslations('IDE.translationStages');
+    const label = tStage('status.reviewing');
+
+    return (
+        <div
+            data-stage-label="review"
+            aria-label={label}
+            title={label}
+            className={[
+                'relative flex h-10 w-12 items-center justify-center px-2 py-2 font-medium transition-all duration-200 md:px-4 md:py-3 xl:w-36',
+                active
+                    ? 'text-indigo-600 dark:text-indigo-400'
+                    : completed
+                        ? 'text-emerald-600 dark:text-emerald-400'
+                        : 'text-gray-500 dark:text-gray-400',
+            ].join(' ')}
+        >
+            <span className="relative z-10 flex items-center gap-1">
+                <UserCheck className="h-4 w-4 flex-none shrink-0" />
+                <span className="hidden whitespace-nowrap text-sm xl:inline">{label}</span>
+            </span>
+        </div>
+    );
+}
+
+function CompletedStageMarker({ active }: { active: boolean }) {
+    const tStage = useTranslations('IDE.translationStages');
+    const label = tStage('COMPLETED');
+
+    return (
+        <div
+            data-stage-label="completed"
+            aria-label={label}
+            title={label}
+            className={[
+                'relative flex h-10 w-12 items-center justify-center px-2 py-2 font-medium transition-all duration-200 md:px-4 md:py-3 xl:w-28',
+                active
+                    ? 'text-emerald-600 dark:text-emerald-400'
+                    : 'text-gray-500 dark:text-gray-400',
+            ].join(' ')}
+        >
+            <span className="relative z-10 flex items-center gap-1">
+                <CheckCircle2 className="h-4 w-4 flex-none shrink-0" />
+                <span className="hidden whitespace-nowrap text-sm xl:inline">{label}</span>
+            </span>
+        </div>
+    );
+}
+
 export function ActionSection() {
     // 在组件顶层获取所有需要的状态
     const {
@@ -1239,6 +1297,17 @@ export function ActionSection() {
                     onBatchTranslate={handleBatchTranslate}
                     progressPercent={batchProgress}
                 />
+                <ReviewStageMarker
+                    active={currentStage === 'MT_REVIEW'}
+                    completed={[
+                        'QA',
+                        'QA_REVIEW',
+                        'POST_EDIT',
+                        'POST_EDIT_REVIEW',
+                        'SIGN_OFF',
+                        'COMPLETED',
+                    ].includes(currentStage || '')}
+                />
                 <QualityMenu
                     isTranslating={
                         isRunning &&
@@ -1250,6 +1319,15 @@ export function ActionSection() {
                         .some((it: any) => it.status === 'MT_REVIEW')}
                     onEvaluate={handleEvaluateMode}
                     progressPercent={batchProgress}
+                />
+                <ReviewStageMarker
+                    active={currentStage === 'QA_REVIEW'}
+                    completed={[
+                        'POST_EDIT',
+                        'POST_EDIT_REVIEW',
+                        'SIGN_OFF',
+                        'COMPLETED',
+                    ].includes(currentStage || '')}
                 />
                 <PostEditMenu
                     isTranslating={isRunning &&
@@ -1396,6 +1474,10 @@ export function ActionSection() {
                             setCurrentOperation('idle');
                         }
                     }}
+                />
+                <ReviewStageMarker
+                    active={currentStage === 'POST_EDIT_REVIEW'}
+                    completed={['SIGN_OFF', 'COMPLETED'].includes(currentStage || '')}
                 />
 
                 {/* 签发菜单（与其他按钮同一行显示） */}
@@ -1551,6 +1633,7 @@ export function ActionSection() {
                         }
                     }}
                 />
+                <CompletedStageMarker active={currentStage === 'COMPLETED'} />
             </div>
             <BatchProgressDialog
                 open={batchOpen}

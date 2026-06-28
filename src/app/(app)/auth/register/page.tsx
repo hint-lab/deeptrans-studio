@@ -1,6 +1,5 @@
 import { type Metadata } from 'next';
 import type { NextPage } from 'next';
-import Image from 'next/image';
 import { RegisterCard } from './components/register-card';
 import LocaleSwitcher from '@/components/locale-switcher';
 import { redirect } from 'next/navigation';
@@ -29,13 +28,10 @@ const RegisterPage: NextPage = () => {
 
             <div className="z-10 flex w-full max-w-[480px] flex-col justify-center py-12 sm:px-8">
                 <div className="mx-auto mb-8 flex w-full flex-col items-center justify-center">
-                    <Image
+                    <img
                         src="/logo_dark.svg"
                         alt="DeepTrans Studio"
-                        width={320}
-                        height={56}
-                        className="opacity-95"
-                        priority
+                        className="h-auto w-[320px] max-w-full opacity-95"
                     />
                 </div>
                 <RegisterCard />

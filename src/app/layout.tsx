@@ -42,7 +42,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     return (
         <html lang={locale} suppressHydrationWarning className={`${GeistSans.variable}`}>
             <body>
-                <SessionProvider session={session}>
+                <SessionProvider session={session} refetchOnWindowFocus={false}>
                     <NextIntlClientProvider messages={messages} locale={locale}>
                         <NextThemeProvider attribute="class" defaultTheme="system" enableSystem>
                             {/* 使用时需要包裹在TooltipProvider中 */}
