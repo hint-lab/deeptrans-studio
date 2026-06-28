@@ -93,9 +93,9 @@ services:
         labels:
             - 'traefik.enable=true'
             - 'traefik.http.services.studio.loadbalancer.server.port=3000'
-            - 'traefik.http.routers.studio.rule=Host(`${STUDIO_HOST:-localhost}`)'
+            - 'traefik.http.routers.studio.rule=Host(`${STUDIO_HOST:-localhost}`) || Host(`${STUDIO_ALT_HOST:-deeptrans.studio}`)'
             - 'traefik.http.routers.studio.entrypoints=web'
-            - 'traefik.http.routers.studio-secure.rule=Host(`${STUDIO_HOST:-localhost}`)'
+            - 'traefik.http.routers.studio-secure.rule=Host(`${STUDIO_HOST:-localhost}`) || Host(`${STUDIO_ALT_HOST:-deeptrans.studio}`)'
             - 'traefik.http.routers.studio-secure.entrypoints=websecure'
             - 'traefik.http.routers.studio-secure.tls=true'
             - 'traefik.http.routers.studio-secure.tls.certresolver=le'

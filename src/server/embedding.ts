@@ -15,9 +15,9 @@ async function resolveEmbeddingProvider(pref?: Partial<ProviderConfig>): Promise
 
     return {
         providerKey: 'openai',
-        model: process.env.OPENAI_EMBED_MODEL || 'text-embedding-3-small',
-        apiKey: process.env.OPENAI_API_KEY,
-        baseUrl: process.env.OPENAI_BASE_URL,
+        model: process.env.EMBEDDING_MODEL || process.env.OPENAI_EMBED_MODEL || 'text-embedding-3-small',
+        apiKey: process.env.EMBEDDING_API_KEY || process.env.OPENAI_API_KEY,
+        baseUrl: process.env.EMBEDDING_BASE_URL || process.env.OPENAI_BASE_URL,
     };
 }
 
