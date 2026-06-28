@@ -33,6 +33,7 @@ source .env
 
 DB_PASSWORD=$(echo "$DATABASE_URL" | awk -F':' '{print $3}' | awk -F'@' '{print $1}')
 DB_PORT=$(echo "$DATABASE_URL" | awk -F':' '{print $4}' | awk -F'\/' '{print $1}')
+DB_IMAGE="deeptrans/postgres-pgvector-pgroonga:18"
 
 if [ "$DB_PASSWORD" = "password" ]; then
   echo "You are using the default database password"
@@ -46,10 +47,13 @@ if [ "$DB_PASSWORD" = "password" ]; then
   sed -i -e "s#:password@#:$DB_PASSWORD@#" .env
 fi
 
+docker image inspect "$DB_IMAGE" >/dev/null 2>&1 || \
+  docker build -t "$DB_IMAGE" docker/postgres-pgvector-pgroonga
+
 docker run -d \
   --name $DB_CONTAINER_NAME \
   -e POSTGRES_USER="postgres" \
   -e POSTGRES_PASSWORD="$DB_PASSWORD" \
   -e POSTGRES_DB=deeptrans \
   -p "$DB_PORT":5432 \
-  pgvector/pgvector:0.8.3-pg18 && echo "Database container '$DB_CONTAINER_NAME' was successfully created"
+  "$DB_IMAGE" && echo "Database container '$DB_CONTAINER_NAME' was successfully created"

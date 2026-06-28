@@ -2,6 +2,7 @@
 
 import { createLogger } from '@/lib/logger';
 import { requireOwnedProject, requireUser, requireWritableProject } from '@/lib/guards';
+import { getStorageConfigFromEnv } from '@/lib/storage/config';
 import { createStorageService } from '@/lib/storage/factory';
 const logger = createLogger({
     type: 'actions:upload',
@@ -11,20 +12,8 @@ const logger = createLogger({
     colors: true, // 仅当json：false时启用颜色输出可用
     includeCaller: false, // 日志不包含调用者
 });
-// 存储服务配置
-const storageConfig = {
-    type: (process.env.STORAGE_TYPE || 'minio') as 'minio' | 'cos',
-    endpoint: process.env.STORAGE_ENDPOINT || 'localhost',
-    port: parseInt(process.env.STORAGE_PORT || '9000'),
-    useSSL: process.env.STORAGE_USE_SSL === 'true',
-    accessKey: process.env.STORAGE_ACCESS_KEY || 'minioadmin',
-    secretKey: process.env.STORAGE_SECRET_KEY || 'minioadmin',
-    bucket: process.env.STORAGE_BUCKET || 'deeptrans',
-    region: process.env.STORAGE_REGION, // 腾讯云 COS 需要
-};
-
 // 创建存储服务实例
-const storageService = createStorageService(storageConfig);
+const storageService = createStorageService(getStorageConfigFromEnv());
 
 type UploadScope = {
     projectId?: string;
@@ -101,23 +90,11 @@ export async function uploadFileAction(formData: FormData) {
         );
 
         const arrayBuffer = await file.arrayBuffer();
-        const putRes = await fetch(result.uploadUrl, {
-            method: 'PUT',
+        await storageService.putObject({
+            fileName: result.fileName,
             body: Buffer.from(arrayBuffer),
-            headers: {
-                'Content-Type': (file as any).type || 'application/octet-stream',
-            },
+            contentType: (file as any).type || 'application/octet-stream',
         });
-        if (!putRes.ok) {
-            let text = '';
-            try {
-                text = await putRes.text();
-            } catch { }
-            return {
-                success: false,
-                error: `上传失败: ${putRes.status} ${putRes.statusText} ${text}`,
-            };
-        }
 
         return {
             success: true,

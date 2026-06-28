@@ -1,12 +1,24 @@
+export type StorageProvider = 'minio' | 'cos';
+
+export type PutObjectInput = {
+    fileName: string;
+    body: Buffer | Uint8Array | string;
+    contentType?: string;
+};
+
 export interface StorageConfig {
-    type: 'minio' | 'cos';
-    endpoint: string;
+    type: StorageProvider;
+    endpoint?: string;
     port?: number;
     useSSL: boolean;
     accessKey: string;
     secretKey: string;
     bucket: string;
-    region?: string; // 腾讯云 COS 需要
+    region?: string;
+    appId?: string;
+    domain?: string;
+    uploadUrlExpiresSeconds?: number;
+    downloadUrlExpiresSeconds?: number;
 }
 
 export interface UploadResult {
@@ -19,4 +31,6 @@ export interface UploadResult {
 export interface StorageService {
     getUploadUrl(fileName: string, contentType: string, namespace: string): Promise<UploadResult>;
     getFileUrl(fileName: string): Promise<string>;
+    getObjectBuffer(fileName: string): Promise<Buffer>;
+    putObject(input: PutObjectInput): Promise<{ fileName: string }>;
 }

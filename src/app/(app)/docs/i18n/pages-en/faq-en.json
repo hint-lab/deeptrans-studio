@@ -22,7 +22,7 @@
                     },
                     {
                         "question": "Is Docker required?",
-                        "solution": "Development environment recommends using Docker Compose to run dependency services (PostgreSQL, Redis, pgvector, etc.), but Next.js application and Worker can run locally. Production environment recommends using Docker for deployment."
+                        "solution": "Development environment recommends using Docker Compose to run dependency services (PostgreSQL, Valkey, pgvector, etc.), but Next.js application and Worker can run locally. Production environment recommends using Docker for deployment."
                     },
                     {
                         "question": "How to configure OpenAI API?",
@@ -64,7 +64,7 @@
                     },
                     {
                         "question": "How to clean PostgreSQL vector data?",
-                        "solution": "Can delete collections through Prisma Studio (http://localhost:8001), or use pgvector SDK to delete collections. Collections will be automatically rebuilt when re-importing translation memories."
+                        "solution": "Embeddings are stored on TranslationMemoryEntry rows in PostgreSQL. Re-import or run the backfill action to rebuild missing vectors."
                     }
                 ]
             },
@@ -108,11 +108,11 @@
                     },
                     {
                         "question": "How to improve batch translation efficiency?",
-                        "solution": "1) Increase number of Worker instances, 2) Optimize queue configuration, 3) Use faster LLM API, 4) Reasonably set concurrency, 5) Ensure Redis and database performance is sufficient."
+                        "solution": "1) Increase number of Worker instances, 2) Optimize queue configuration, 3) Use faster LLM API, 4) Reasonably set concurrency, 5) Ensure Valkey and database performance is sufficient."
                     },
                     {
                         "question": "What to do if memory usage is too high?",
-                        "solution": "Check: 1) Database connection pool size, 2) Redis cache data volume, 3) PostgreSQL vector data, 4) Worker concurrency. Appropriately adjust configuration or increase server resources."
+                        "solution": "Check: 1) Database connection pool size, 2) Valkey cache data volume, 3) PostgreSQL vector data, 4) Worker concurrency. Appropriately adjust configuration or increase server resources."
                     },
                     {
                         "question": "How to optimize database performance?",
@@ -130,7 +130,7 @@
                     },
                     {
                         "question": "What configurations are needed for production environment?",
-                        "solution": "Key configurations: 1) Use dedicated database and Redis instances, 2) Set strong passwords and AUTH_SECRET, 3) Configure HTTPS, 4) Set environment variable NODE_ENV=production, 5) Configure logs and monitoring."
+                        "solution": "Key configurations: 1) Use dedicated database and Valkey instances, 2) Set strong passwords and AUTH_SECRET, 3) Configure HTTPS, 4) Set environment variable NODE_ENV=production, 5) Configure logs and monitoring."
                     },
                     {
                         "question": "How to set up HTTPS?",
@@ -138,7 +138,7 @@
                     },
                     {
                         "question": "How to monitor system status?",
-                        "solution": "Can: 1) Use docker compose ps to view service status, 2) View logs of each service, 3) Use Prisma Studio to monitor database, 4) Use Prisma Studio to monitor pgvector, 5) Configure monitoring tools like Prometheus."
+                        "solution": "Can: 1) Use docker compose ps to view service status, 2) View logs of each service, 3) Use Prisma Studio to monitor database, 4) Use Prisma Studio to inspect translation memory rows, 5) Configure monitoring tools like Prometheus."
                     }
                 ]
             },

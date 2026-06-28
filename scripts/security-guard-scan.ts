@@ -288,6 +288,81 @@ for (const rule of forbiddenPatterns) {
     });
 }
 
+const guardedWriteHelperRules: Array<{
+    label: string;
+    helpers: string[];
+    scopes: string[];
+    allowedMarkers: string[];
+}> = [
+    {
+        label: 'document item write helpers require write guard',
+        helpers: [
+            'updateDocumentItemByIdDB',
+            'deleteDocumentItemsByDocumentIdDB',
+            'createDocumentItemsBulkDB',
+        ],
+        scopes: ['src/actions', 'src/app/api', 'src/worker'],
+        allowedMarkers: [
+            'requireWritableDocumentItem',
+            'requireWritableDocument',
+            'requireWritableProject',
+            'assertJobCanWriteItem',
+        ],
+    },
+    {
+        label: 'document status write helpers require write guard',
+        helpers: ['updateDocumentStatusDB', 'updateDocumentStructuredDB'],
+        scopes: ['src/actions', 'src/app/api', 'src/worker'],
+        allowedMarkers: [
+            'requireWritableDocument',
+            'requireWritableProject',
+            'assertJobCanWriteItem',
+        ],
+    },
+    {
+        label: 'project write helpers require project write guard',
+        helpers: ['updateProjectByIdDB', 'deleteProjectByIdDB'],
+        scopes: ['src/actions', 'src/app/api'],
+        allowedMarkers: ['requireWritableProject'],
+    },
+    {
+        label: 'dictionary write helpers require dictionary write guard',
+        helpers: [
+            'deleteDictionaryByIdDB',
+            'deleteDictionaryEntriesByDictionaryIdDB',
+            'updateDictionaryEntryByIdDB',
+            'deleteDictionaryEntryByIdDB',
+        ],
+        scopes: ['src/actions', 'src/app/api'],
+        allowedMarkers: ['requireWritableDictionary'],
+    },
+    {
+        label: 'translation stage write helpers require item write guard',
+        helpers: [
+            'deleteTranslationStageRecordByIdDB',
+            'deleteTranslationStageRecordsByDocumentItemIdDB',
+        ],
+        scopes: ['src/actions', 'src/app/api'],
+        allowedMarkers: ['requireWritableDocumentItem'],
+    },
+];
+
+for (const rule of guardedWriteHelperRules) {
+    const hits: string[] = [];
+    for (const scope of rule.scopes) {
+        for (const file of listFiles(scope, rel => /\.(ts|tsx)$/.test(rel))) {
+            const text = read(file);
+            if (!rule.helpers.some(helper => text.includes(helper))) continue;
+            if (!rule.allowedMarkers.some(marker => text.includes(marker))) hits.push(file);
+        }
+    }
+    checks.push({
+        ok: hits.length === 0,
+        label: rule.label,
+        detail: hits.join(', '),
+    });
+}
+
 const middleware = read('src/middleware.ts');
 for (const publicApi of ['/api/dictionary/lookup', '/api/memories/hybrid-search']) {
     checks.push({
@@ -317,17 +392,26 @@ checks.push({
 
 const isolationSmokeText = read('scripts/security-isolation-smoke.ts');
 checks.push({
-    ok:
-        isolationSmokeText.includes('requireWritableProject') &&
+  ok:
+    isolationSmokeText.includes('requireWritableProject') &&
         isolationSmokeText.includes('requireWritableDocument') &&
         isolationSmokeText.includes('requireWritableDocumentItem') &&
         isolationSmokeText.includes('same tenant cannot write project dictionary'),
-    label: 'security isolation smoke covers readable-vs-writable boundaries',
+  label: 'security isolation smoke covers readable-vs-writable boundaries',
+});
+
+const tenancyPlan = read('SECURITY_TENANCY_PLAN.md');
+checks.push({
+  ok:
+    tenancyPlan.includes('Do not use tenant match as write permission') &&
+    tenancyPlan.includes('requireWritableProject') &&
+    tenancyPlan.includes('ProjectMember'),
+  label: 'tenant permission plan documents write boundaries',
 });
 
 checks.push({
-    ok:
-        packageJson.scripts?.['security:verify'] === 'tsx scripts/security-verify.ts' &&
+  ok:
+    packageJson.scripts?.['security:verify'] === 'tsx scripts/security-verify.ts' &&
         read('scripts/security-verify.ts').includes('DATABASE_URL') &&
         read('scripts/security-verify.ts').includes('tenant:backfill') &&
         read('scripts/security-verify.ts').includes('security:isolation-smoke'),

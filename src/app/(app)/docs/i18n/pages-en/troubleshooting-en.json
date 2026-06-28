@@ -52,7 +52,7 @@
                         ],
                         "solutions": [
                             "Check if Docker and Docker Compose are correctly installed",
-                            "Check port occupancy: `lsof -i :5432` (PostgreSQL), `lsof -i :6379` (Redis)",
+                            "Check port occupancy: `lsof -i :5432` (PostgreSQL), `lsof -i :6379` (Valkey)",
                             "View container logs: `docker compose logs [service-name]`",
                             "Try restarting service: `docker compose restart [service-name]`",
                             "Clean and recreate: `docker compose down -v && docker compose up -d`"
@@ -62,7 +62,7 @@
                         "title": "Environment Variable Configuration Error",
                         "Problems": [
                             "Cannot connect to database after application startup",
-                            "Redis connection failure",
+                            "Valkey connection failure",
                             "API calls return authentication errors"
                         ],
                         "solutions": [
@@ -125,22 +125,22 @@
                 ]
             },
             {
-                "name": "Redis & Queue Issues",
-                "description": "Redis connection and BullMQ queue related issues",
+                "name": "Valkey & Queue Issues",
+                "description": "Valkey connection and BullMQ queue related issues",
                 "issues": [
                     {
-                        "title": "Redis Connection Failure",
+                        "title": "Valkey Connection Failure",
                         "Problems": [
-                            "Redis connection error when application starts",
+                            "Valkey connection error when application starts",
                             "Queue tasks cannot execute",
                             "Worker cannot consume tasks"
                         ],
                         "solutions": [
-                            "Check if Redis service is running: `docker compose ps redis`",
+                            "Check if Valkey service is running: `docker compose ps valkey`",
                             "Verify REDIS_URL environment variable",
-                            "Test Redis connection: `redis-cli -u $REDIS_URL ping`",
-                            "View Redis logs: `docker compose logs redis`",
-                            "Check Redis memory usage: `redis-cli info memory`"
+                            "Test Valkey connection: `redis-cli -u $REDIS_URL ping`",
+                            "View Valkey logs: `docker compose logs valkey`",
+                            "Check Valkey memory usage: `redis-cli info memory`"
                         ]
                     },
                     {
@@ -154,7 +154,7 @@
                             "Check if Worker service is running normally",
                             "Increase number of Worker instances",
                             "View queue status: `yarn queue:ui` (if Bull Board is configured)",
-                            "Check Redis memory usage",
+                            "Check Valkey memory usage",
                             "Clean failed tasks: `redis-cli FLUSHDB` (use with caution)"
                         ]
                     },
@@ -168,9 +168,9 @@
                         "solutions": [
                             "View Worker logs: `docker compose logs app_worker`",
                             "Check if task data format is correct",
-                            "Verify related services (pgvector, MinIO, Redis, and optional OCR) are normal",
+                            "Verify related services （pgvector、MinIO、Valkey、 and optional OCR) are normal",
                             "Check if API keys and configuration are correct",
-                            "View failed tasks in Redis: `redis-cli KEYS 'bull:*:failed'`"
+                            "View failed tasks in Valkey: `redis-cli KEYS 'bull:*:failed'`"
                         ]
                     }
                 ]
@@ -184,14 +184,14 @@
                         "Problems": [
                             "Translation memory search failure",
                             "Vector write failure",
-                            "pgvector service cannot be accessed"
+                            "PostgreSQL vector extension is unavailable"
                         ],
                         "solutions": [
-                            "Check if pgvector is running: `docker compose ps pgvector`",
-                            "Verify pgvector connection configuration",
-                            "View pgvector logs: `docker compose logs pgvector`",
-                            "Check the embedded etcd status through pgvector logs",
-                            "Access Prisma Studio (http://localhost:8001) to check pgvector status"
+                            "Check if PostgreSQL is running: `docker compose ps db`",
+                            "Verify DATABASE_URL and vector extension migration",
+                            "View database logs: `docker compose logs db`",
+                            "Check whether `CREATE EXTENSION vector` migration has run",
+                            "Use Prisma Studio or SQL to inspect TranslationMemoryEntry embeddings"
                         ]
                     },
                     {
@@ -256,22 +256,21 @@
                 ]
             },
             {
-                "name": "MinIO Object Storage Issues",
-                "description": "MinIO storage service related issues",
+                "name": "Object Storage Issues",
+                "description": "MinIO or Tencent COS storage service related issues",
                 "issues": [
                     {
-                        "title": "MinIO Connection Failure",
+                        "title": "Object Storage Connection Failure",
                         "Problems": [
                             "File upload failure",
                             "Document preview cannot load",
                             "Storage operations report errors"
                         ],
                         "solutions": [
-                            "Check if MinIO service is running: `docker compose ps minio`",
-                            "Verify MINIO_ACCESS_KEY and MINIO_SECRET_KEY configuration",
-                            "Check if MINIO_BUCKET exists",
-                            "View MinIO logs: `docker compose logs minio`",
-                            "Access MinIO Console (default http://localhost:9001) to check status"
+                            "Verify STORAGE_TYPE is minio or cos",
+                            "For MinIO, verify STORAGE_ENDPOINT, STORAGE_ACCESS_KEY, STORAGE_SECRET_KEY, and STORAGE_BUCKET",
+                            "For Tencent COS, verify COS_SECRET_ID, COS_SECRET_KEY, COS_BUCKET, and COS_REGION",
+                            "Check that the bucket exists and the credential has object read/write permissions"
                         ]
                     },
                     {
@@ -304,7 +303,7 @@
                         ],
                         "solutions": [
                             "Check environment variable configuration",
-                            "Verify Redis connection",
+                            "Verify Valkey connection",
                             "View Worker logs: `docker compose logs app_worker`",
                             "Check Node.js version",
                             "Verify dependencies are correctly installed",
@@ -341,7 +340,7 @@
                         "solutions": [
                             "Check database query performance, analyze using Prisma Studio",
                             "Optimize database indexes",
-                            "Check if Redis cache is working normally",
+                            "Check if Valkey cache is working normally",
                             "View browser network panel to analyze request time",
                             "Check server resource usage (CPU, memory)"
                         ]

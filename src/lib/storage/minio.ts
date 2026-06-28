@@ -1,20 +1,30 @@
 import { Client } from 'minio';
-import { v4 as uuidv4 } from 'uuid';
-import { StorageConfig, StorageService, UploadResult } from './types';
+import { PutObjectInput, StorageConfig, StorageService, UploadResult } from './types';
+import {
+    DEFAULT_OBJECT_URL_EXPIRES_SECONDS,
+    buildObjectKey,
+    streamToBuffer,
+} from './utils';
 
 export class MinioStorageService implements StorageService {
     private client: Client;
     private bucket: string;
+    private uploadUrlExpiresSeconds: number;
+    private downloadUrlExpiresSeconds: number;
 
     constructor(config: StorageConfig) {
         this.client = new Client({
-            endPoint: config.endpoint,
+            endPoint: config.endpoint || 'localhost',
             port: config.port,
             useSSL: config.useSSL,
             accessKey: config.accessKey,
             secretKey: config.secretKey,
         });
         this.bucket = config.bucket;
+        this.uploadUrlExpiresSeconds =
+            config.uploadUrlExpiresSeconds || DEFAULT_OBJECT_URL_EXPIRES_SECONDS;
+        this.downloadUrlExpiresSeconds =
+            config.downloadUrlExpiresSeconds || DEFAULT_OBJECT_URL_EXPIRES_SECONDS;
     }
 
     async getUploadUrl(
@@ -28,22 +38,21 @@ export class MinioStorageService implements StorageService {
             await this.client.makeBucket(this.bucket);
         }
 
-        // 生成唯一的文件名
-        const fileExtension = fileName.split('.').pop();
-        const uniqueFileName = `${namespace}/${uuidv4()}.${fileExtension}`;
+        const uniqueFileName = buildObjectKey(fileName, namespace);
+        const expires = this.getUploadUrlExpiresSeconds();
 
         // 生成预签名上传 URL
         const uploadUrl = await this.client.presignedPutObject(
             this.bucket,
             uniqueFileName,
-            24 * 60 * 60 // 24小时有效期
+            expires
         );
 
         // 生成预签名访问 URL
         const fileUrl = await this.client.presignedGetObject(
             this.bucket,
             uniqueFileName,
-            24 * 60 * 60 // 24小时有效期
+            this.getDownloadUrlExpiresSeconds()
         );
 
         return {
@@ -55,6 +64,31 @@ export class MinioStorageService implements StorageService {
     }
 
     async getFileUrl(fileName: string): Promise<string> {
-        return this.client.presignedGetObject(this.bucket, fileName, 24 * 60 * 60);
+        return this.client.presignedGetObject(
+            this.bucket,
+            fileName,
+            this.getDownloadUrlExpiresSeconds()
+        );
+    }
+
+    async getObjectBuffer(fileName: string): Promise<Buffer> {
+        const stream = await this.client.getObject(this.bucket, fileName);
+        return streamToBuffer(stream);
+    }
+
+    async putObject(input: PutObjectInput): Promise<{ fileName: string }> {
+        const body = Buffer.isBuffer(input.body) ? input.body : Buffer.from(input.body);
+        await this.client.putObject(this.bucket, input.fileName, body, body.length, {
+            ...(input.contentType ? { 'Content-Type': input.contentType } : {}),
+        });
+        return { fileName: input.fileName };
+    }
+
+    private getUploadUrlExpiresSeconds() {
+        return this.uploadUrlExpiresSeconds;
+    }
+
+    private getDownloadUrlExpiresSeconds() {
+        return this.downloadUrlExpiresSeconds;
     }
 }

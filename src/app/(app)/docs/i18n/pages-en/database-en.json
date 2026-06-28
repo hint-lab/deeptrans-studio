@@ -19,7 +19,7 @@
                     "description": "Type-safe ORM providing database access, migration management, and type generation"
                 },
                 {
-                    "name": "Redis",
+                    "name": "Valkey",
                     "description": "Cache and task queue for storing temporary data and BullMQ task queues"
                 },
                 {

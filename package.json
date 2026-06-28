@@ -87,6 +87,7 @@
         "clsx": "^2.1.1",
         "cmdk": "1.0.0",
         "cookies-next": "^4.2.1",
+        "cos-nodejs-sdk-v5": "^2.15.4",
         "crypto-browserify": "^3.12.1",
         "date-fns": "^4.1.0",
         "docx": "^9.5.1",

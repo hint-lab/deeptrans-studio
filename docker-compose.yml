@@ -1,6 +1,8 @@
 services:
     db:
-        image: pgvector/pgvector:0.8.3-pg18
+        build:
+            context: ./docker/postgres-pgvector-pgroonga
+        image: deeptrans/postgres-pgvector-pgroonga:18
         container_name: deeptrans-db
         environment:
             POSTGRES_USER: ${POSTGRES_USER:-postgres} # 使用 .env 中的 POSTGRES_USER 或默认值 postgres
@@ -61,14 +63,14 @@ services:
         networks:
             - app_local
 
-    redis:
-        image: redis:7-alpine
-        container_name: deeptrans-redis
-        command: ['redis-server', '--save', '60', '1', '--loglevel', 'warning']
+    valkey:
+        image: valkey/valkey:8-alpine
+        container_name: deeptrans-valkey
+        command: ['valkey-server', '--save', '60', '1', '--loglevel', 'warning']
         ports:
             - '6379:6379'
         volumes:
-            - redis-data:/data
+            - valkey-data:/data
         restart: unless-stopped
         networks:
             - app_local
@@ -84,7 +86,7 @@ services:
             - '3000:3000'
         depends_on:
             - db
-            - redis
+            - valkey
         networks:
             - web
             - app_local
@@ -108,7 +110,7 @@ services:
             - .env # 导入文件中的所有环境变量
         depends_on:
             - db
-            - redis
+            - valkey
         networks:
             - web
             - app_local
@@ -123,4 +125,4 @@ volumes:
     postgres_data:
     minio-data:
     traefik_data:
-    redis-data:
+    valkey-data:

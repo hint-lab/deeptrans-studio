@@ -24,8 +24,8 @@
         "envConfig": {
             "title": "Configure Environment Variables",
             "description": "Copy or create .env.local and fill in according to your actual environment:",
-            "note": "💡 For production environments, please change the database, Redis, pgvector, and object storage to dedicated instances and keep credentials secure.",
-            "example": "# Database & Cache\nDATABASE_URL=\"postgresql://postgres:123456@localhost:5432/deeptrans\"\nREDIS_URL=\"redis://127.0.0.1:6379\"\n\n# Authentication & Site Config\nAUTH_SECRET=\"Please generate a random string\"\nNEXTAUTH_URL=\"http://localhost:3000\"\nNODE_ENV=development\n\n# LLM / AI Services\nOPENAI_API_KEY=\"sk-xxxx\"\nOPENAI_BASE_URL=\"https://api.openai.com/v1\"\nOPENAI_API_MODEL=\"gpt-4o-mini\"\n\n# Object Storage & Resources\nMINIO_ACCESS_KEY=minioadmin\nMINIO_SECRET_KEY=minioadmin\nMINIO_BUCKET=deeptrans\n\n# Other Services\nSTUDIO_HOST=localhost        # Used for Traefik/HTTPS deployment\n\n# Optional: GitHub OAuth, SMTP, pgvector access info, etc."
+            "note": "💡 For production environments, please change the database, Valkey, pgvector, and object storage to dedicated instances and keep credentials secure.",
+            "example": "# Database & Cache\nDATABASE_URL=\"postgresql://postgres:123456@localhost:5432/deeptrans\"\nREDIS_URL=\"redis://valkey:6379\"\n\n# Authentication & Site Config\nAUTH_SECRET=\"Please generate a random string\"\nNEXTAUTH_URL=\"http://localhost:3000\"\nNODE_ENV=development\n\n# LLM / AI Services\nOPENAI_API_KEY=\"sk-xxxx\"\nOPENAI_BASE_URL=\"https://api.openai.com/v1\"\nOPENAI_API_MODEL=\"gpt-4o-mini\"\n\n# Object Storage: MinIO or Tencent COS\nSTORAGE_TYPE=minio\nSTORAGE_ENDPOINT=localhost\nSTORAGE_PORT=9000\nSTORAGE_USE_SSL=false\nSTORAGE_ACCESS_KEY=minioadmin\nSTORAGE_SECRET_KEY=minioadmin\nSTORAGE_BUCKET=deeptrans\n\n# Tencent COS example\n# STORAGE_TYPE=cos\n# COS_SECRET_ID=AKIDxxxxxxxx\n# COS_SECRET_KEY=xxxxxxxx\n# COS_BUCKET=deeptrans-1250000000\n# COS_REGION=ap-guangzhou\n\n# Other Services\nSTUDIO_HOST=localhost        # Used for Traefik/HTTPS deployment\n\n# Optional: GitHub OAuth, SMTP, pgvector access info, etc."
         },
         "initDb": {
             "title": "Initialize Database",
@@ -42,7 +42,7 @@
             "step1": {
                 "title": "Start Dependency Services",
                 "description": "Recommended to use services from Docker Compose:",
-                "command": "docker compose up -d db redis minio pgvector\n# If you need Prisma Studio or Traefik, append pgvector traefik"
+                "command": "docker compose up -d db valkey minio\n# If you need Traefik, append traefik"
             },
             "step2": {
                 "title": "Start Next.js Application",
@@ -57,7 +57,7 @@
             },
             "access": {
                 "title": "Access Application",
-                "description": "Visit http://localhost:3000 to access Studio; Prisma Studio (pgvector UI) is exposed at http://localhost:8001 by default."
+                "description": "Visit http://localhost:3000 to access Studio; Prisma Studio can be started with `yarn db:studio`."
             }
         },
         "dockerCompose": {
@@ -73,7 +73,7 @@
             },
             "step3": {
                 "title": "Start Main Services",
-                "command": "docker compose up -d traefik app app_worker db redis pgvector minio",
+                "command": "docker compose up -d traefik app app_worker db valkey minio",
                 "note": "Traefik will map ports 80/443 to Studio. Prisma Studio can be started as needed."
             }
         },

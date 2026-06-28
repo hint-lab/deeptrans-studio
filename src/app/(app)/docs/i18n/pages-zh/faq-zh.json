@@ -22,7 +22,7 @@
                     },
                     {
                         "question": "必须使用 Docker 吗？",
-                        "solution": "开发环境推荐使用 Docker Compose 运行依赖服务（PostgreSQL、Redis、pgvector 等），但 Next.js 应用和 Worker 可以在本地运行。生产环境建议使用 Docker 进行部署。"
+                        "solution": "开发环境推荐使用 Docker Compose 运行依赖服务（PostgreSQL、Valkey、pgvector 等），但 Next.js 应用和 Worker 可以在本地运行。生产环境建议使用 Docker 进行部署。"
                     },
                     {
                         "question": "如何配置 OpenAI API？",
@@ -64,7 +64,7 @@
                     },
                     {
                         "question": "如何清理 pgvector 向量数据？",
-                        "solution": "可以通过 Prisma Studio（http://localhost:8001）删除集合，或使用 pgvector SDK 删除集合。删除后重新导入翻译记忆时会自动重建。"
+                        "solution": "向量存储在 PostgreSQL 的 TranslationMemoryEntry 行上。重新导入或运行向量补全动作即可重建缺失向量。"
                     }
                 ]
             },
@@ -108,11 +108,11 @@
                     },
                     {
                         "question": "如何提高批量翻译效率？",
-                        "solution": "1) 增加 Worker 实例数量，2) 优化队列配置，3) 使用更快的 LLM API，4) 合理设置并发数，5) 确保 Redis 和数据库性能充足。"
+                        "solution": "1) 增加 Worker 实例数量，2) 优化队列配置，3) 使用更快的 LLM API，4) 合理设置并发数，5) 确保 Valkey 和数据库性能充足。"
                     },
                     {
                         "question": "内存使用过高怎么办？",
-                        "solution": "检查：1) 数据库连接池大小，2) Redis 缓存数据量，3) pgvector 向量数据，4) Worker 并发数。适当调整配置或增加服务器资源。"
+                        "solution": "检查：1) 数据库连接池大小，2) Valkey 缓存数据量，3) pgvector 向量数据，4) Worker 并发数。适当调整配置或增加服务器资源。"
                     },
                     {
                         "question": "如何优化数据库性能？",
@@ -130,7 +130,7 @@
                     },
                     {
                         "question": "生产环境需要哪些配置？",
-                        "solution": "关键配置：1) 使用专用数据库和 Redis 实例，2) 设置强密码和 AUTH_SECRET，3) 配置 HTTPS，4) 设置环境变量 NODE_ENV=production，5) 配置日志和监控。"
+                        "solution": "关键配置：1) 使用专用数据库和 Valkey 实例，2) 设置强密码和 AUTH_SECRET，3) 配置 HTTPS，4) 设置环境变量 NODE_ENV=production，5) 配置日志和监控。"
                     },
                     {
                         "question": "如何设置 HTTPS？",
@@ -138,7 +138,7 @@
                     },
                     {
                         "question": "如何监控系统状态？",
-                        "solution": "可以：1) 使用 docker compose ps 查看服务状态，2) 查看各服务日志，3) 使用 Prisma Studio 监控数据库，4) 使用 Prisma Studio 监控 pgvector，5) 配置 Prometheus 等监控工具。"
+                        "solution": "可以：1) 使用 docker compose ps 查看服务状态，2) 查看各服务日志，3) 使用 Prisma Studio 监控数据库，4) 使用 Prisma Studio 查看翻译记忆数据，5) 配置 Prometheus 等监控工具。"
                     }
                 ]
             },

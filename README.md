@@ -76,7 +76,7 @@ DeepTrans Studio is described in our CSCW '26 Companion Demo (CCF-A) paper. If y
 
 ### 🔌 Extensibility
 
-- **Open Architecture**: Modular design with PostgreSQL, MinIO, Redis integration
+- **Open Architecture**: Modular design with PostgreSQL, MinIO, Valkey integration
 - **API Gateway**: RESTful APIs for external integration
 - **Custom Agents**: Extensible AI agent framework
 - **Plugin System**: Support for custom translation engines and processing pipelines
@@ -90,9 +90,9 @@ graph TD
     Browser[Web Browser] -->|HTTPS| Traefik[Traefik Proxy]
     Traefik -->|HTTP 3000| Studio[Next.js Studio]
     Studio -->|Server Actions| Postgres[(PostgreSQL)]
-    Studio -->|Task Queue| Redis[(Redis)]
+    Studio -->|Task Queue| Valkey[(Valkey)]
     Studio -->|Parse Requests| Parser[Built-in Parsers]
-    Worker[Worker Service] -->|Consume Tasks| Redis
+    Worker[Worker Service] -->|Consume Tasks| Valkey
     Worker -->|ORM| Postgres
     Worker -->|Vector Ops| Postgres
     Worker -->|Object Storage| MinIO[(MinIO)]
@@ -105,7 +105,7 @@ graph TD
 | **Studio**   | Next.js 15, React 19, TypeScript                      | Frontend UI, Server Actions, Authentication       |
 | **Worker**   | Node.js, BullMQ                                       | Background job processing, batch operations       |
 | **Database** | PostgreSQL 18, pgvector, Prisma 6                     | Relational data, vector search, and ORM           |
-| **Cache**    | Redis                                                 | Session management, task queues                   |
+| **Cache**    | Valkey                                                | Redis-protocol cache, session state, task queues  |
 | **Storage**  | MinIO (S3-compatible)                                 | Document and asset storage                        |
 | **Parser**   | DOCX XML parser, pdf-parse, OCR fallback, text parser | Document parsing for DOCX, PDF, TXT, and Markdown |
 | **Gateway**  | Traefik                                               | Reverse proxy, SSL/TLS termination                |
@@ -137,7 +137,7 @@ Create `.env.local` file with the following configuration:
 ```env
 # Database & Cache
 DATABASE_URL="postgresql://postgres:password@localhost:5432/deeptrans"
-REDIS_URL="redis://127.0.0.1:6379"
+REDIS_URL="redis://valkey:6379"
 
 # Authentication & Site
 AUTH_SECRET="your-secret-key-here"  # Generate with: openssl rand -base64 32
@@ -149,10 +149,21 @@ OPENAI_API_KEY="sk-xxxx"
 OPENAI_BASE_URL="https://api.openai.com/v1"
 OPENAI_API_MODEL="gpt-4o-mini"
 
-# Object Storage
-MINIO_ACCESS_KEY=minioadmin
-MINIO_SECRET_KEY=minioadmin
-MINIO_BUCKET=deeptrans
+# Object Storage: choose MinIO or Tencent COS
+STORAGE_TYPE=minio
+STORAGE_ENDPOINT=localhost
+STORAGE_PORT=9000
+STORAGE_USE_SSL=false
+STORAGE_ACCESS_KEY=minioadmin
+STORAGE_SECRET_KEY=minioadmin
+STORAGE_BUCKET=deeptrans
+
+# Tencent COS example
+# STORAGE_TYPE=cos
+# COS_SECRET_ID=AKIDxxxxxxxx
+# COS_SECRET_KEY=xxxxxxxx
+# COS_BUCKET=deeptrans-1250000000
+# COS_REGION=ap-guangzhou
 
 # Services
 STUDIO_HOST=localhost
@@ -183,7 +194,7 @@ yarn db:seed
 
 ```bash
 # Start dependency services
-docker compose up -d db redis minio
+docker compose up -d db valkey minio
 
 # Start Next.js development server
 yarn dev
@@ -217,7 +228,7 @@ cp .env.example .env.production
 docker compose build app app_worker
 
 # Deploy services
-docker compose up -d traefik app app_worker db redis minio
+docker compose up -d traefik app app_worker db valkey minio
 
 # Services will be available on configured domain with SSL via Traefik
 ```

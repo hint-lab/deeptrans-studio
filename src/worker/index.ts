@@ -10,12 +10,13 @@ import { fetchDocumentItemNeedsMtReviewByIdDB, updateDocumentItemByIdDB } from '
 import { prisma } from '@/lib/db';
 import { createLogger } from '@/lib/logger';
 import { TTL_BATCH, setJSONWithTTL } from '@/lib/redis-ttl';
+import { getStorageConfigFromEnv } from '@/lib/storage/config';
+import { createStorageService } from '@/lib/storage/factory';
 import { canWriteDocumentItemForOwner } from '@/server/document-item-access';
 import { embedBatchForOwner } from '@/server/embedding';
 import { runPreTranslateForOwner } from '@/server/pre-translate';
 import { extractDocumentTermsForOwner } from '@/server/project-init';
 import { runQualityAssureForOwner } from '@/server/quality-assure';
-import { Client as MinioClient } from 'minio';
 import { upsertVectors } from '../lib/vector/postgres';
 import { createWorker, getQueueConnection } from './queue';
 const logger = createLogger(
@@ -31,6 +32,7 @@ const logger = createLogger(
 );
 
 const connection = getQueueConnection();
+const storageService = createStorageService(getStorageConfigFromEnv());
 
 async function assertJobCanWriteItem(jobData: any) {
     const itemId = String(jobData?.id || '');
@@ -292,23 +294,7 @@ const memoryImportWorker = createWorker(
         });
         if (!memory) throw new Error('UNAUTHORIZED_MEMORY');
 
-        const minio = new MinioClient({
-            endPoint: process.env.MINIO_ENDPOINT || '127.0.0.1',
-            port: Number(process.env.MINIO_PORT || 9000),
-            useSSL: process.env.MINIO_USE_SSL === '1' || process.env.MINIO_USE_SSL === 'true',
-            accessKey: process.env.MINIO_ACCESS_KEY || process.env.MINIO_ROOT_USER || '',
-            secretKey: process.env.MINIO_SECRET_KEY || process.env.MINIO_ROOT_PASSWORD || '',
-        });
-        const bucket = process.env.MINIO_BUCKET || process.env.MINIO_BUCKET_NAME || 'deeptrans';
-
-        const stream = await minio.getObject(bucket, fileKey);
-        const chunks: Buffer[] = [];
-        await new Promise<void>((resolve, reject) => {
-            stream.on('data', (c: Buffer) => chunks.push(c));
-            stream.on('end', () => resolve());
-            stream.on('error', reject);
-        });
-        const buf = Buffer.concat(chunks);
+        const buf = await storageService.getObjectBuffer(fileKey);
 
         // parse file
         let pairs: Array<{ source: string; target: string; notes?: string }> = [];
