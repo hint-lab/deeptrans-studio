@@ -1,10 +1,6 @@
 import { Client } from 'minio';
 import { PutObjectInput, StorageConfig, StorageService, UploadResult } from './types';
-import {
-    DEFAULT_OBJECT_URL_EXPIRES_SECONDS,
-    buildObjectKey,
-    streamToBuffer,
-} from './utils';
+import { DEFAULT_OBJECT_URL_EXPIRES_SECONDS, buildObjectKey, streamToBuffer } from './utils';
 
 export class MinioStorageService implements StorageService {
     private client: Client;

@@ -59,13 +59,13 @@ DeepTrans Studio is described in our CSCW '26 Companion Demo (CCF-A) paper. If y
 - **Multi-Engine Support**: Integration with OpenAI and custom AI models
 - **Terminology Extraction**: Automated domain-specific term extraction
 - **Quality Assessment**: AI-driven grammar, syntax, and discourse evaluation
-- **Translation Memory**: Vector-based semantic search using PostgreSQL + pgvector
+- **Translation Memory**: Vector search with pgvector and CJK keyword search with PGroonga
 
 ### 📚 Knowledge Management
 
 - **Project Dictionaries**: Project-specific terminology databases
 - **Translation Memory**: Import/export translation memory in TMX, CSV, XLSX formats
-- **Semantic Search**: Vector similarity search powered by pgvector
+- **Semantic Search**: Vector similarity search powered by pgvector, with PGroonga keyword retrieval
 
 ### 🔄 Workflow Automation
 
@@ -76,7 +76,7 @@ DeepTrans Studio is described in our CSCW '26 Companion Demo (CCF-A) paper. If y
 
 ### 🔌 Extensibility
 
-- **Open Architecture**: Modular design with PostgreSQL, MinIO, Valkey integration
+- **Open Architecture**: Modular design with PostgreSQL, Valkey, and pluggable object storage
 - **API Gateway**: RESTful APIs for external integration
 - **Custom Agents**: Extensible AI agent framework
 - **Plugin System**: Support for custom translation engines and processing pipelines
@@ -95,20 +95,20 @@ graph TD
     Worker[Worker Service] -->|Consume Tasks| Valkey
     Worker -->|ORM| Postgres
     Worker -->|Vector Ops| Postgres
-    Worker -->|Object Storage| MinIO[(MinIO)]
+    Worker -->|Object Storage Interface| Storage[(MinIO / Tencent COS)]
 ```
 
 ### Core Components
 
-| Component    | Technology                                            | Purpose                                           |
-| ------------ | ----------------------------------------------------- | ------------------------------------------------- |
-| **Studio**   | Next.js 15, React 19, TypeScript                      | Frontend UI, Server Actions, Authentication       |
-| **Worker**   | Node.js, BullMQ                                       | Background job processing, batch operations       |
-| **Database** | PostgreSQL 18, pgvector, Prisma 6                     | Relational data, vector search, and ORM           |
-| **Cache**    | Valkey                                                | Redis-protocol cache, session state, task queues  |
-| **Storage**  | MinIO (S3-compatible)                                 | Document and asset storage                        |
-| **Parser**   | DOCX XML parser, pdf-parse, OCR fallback, text parser | Document parsing for DOCX, PDF, TXT, and Markdown |
-| **Gateway**  | Traefik                                               | Reverse proxy, SSL/TLS termination                |
+| Component    | Technology                                            | Purpose                                                     |
+| ------------ | ----------------------------------------------------- | ----------------------------------------------------------- |
+| **Studio**   | Next.js 15, React 19, TypeScript                      | Frontend UI, Server Actions, Authentication                 |
+| **Worker**   | Node.js, BullMQ                                       | Background job processing, batch operations                 |
+| **Database** | PostgreSQL 18, pgvector, PGroonga, Prisma 6           | Relational data, vector search, CJK keyword search, and ORM |
+| **Cache**    | Valkey                                                | Redis-protocol cache, session state, task queues            |
+| **Storage**  | StorageService interface, MinIO, Tencent COS          | Document and asset storage                                  |
+| **Parser**   | DOCX XML parser, pdf-parse, OCR fallback, text parser | Document parsing for DOCX, PDF, TXT, and Markdown           |
+| **Gateway**  | Traefik                                               | Reverse proxy, SSL/TLS termination                          |
 
 ## 🚀 Quick Start
 
@@ -228,7 +228,7 @@ cp .env.example .env.production
 docker compose build app app_worker
 
 # Deploy services
-docker compose up -d traefik app app_worker db valkey minio
+docker compose up -d traefik app app_worker db valkey
 
 # Services will be available on configured domain with SSL via Traefik
 ```
@@ -337,8 +337,9 @@ Built with modern technologies:
 - [Next.js](https://nextjs.org/) - React framework
 - [Prisma](https://www.prisma.io/) - Database ORM
 - [pgvector](https://github.com/pgvector/pgvector) - PostgreSQL vector search
+- [PGroonga](https://pgroonga.github.io/) - CJK-capable PostgreSQL full-text search
 - [BullMQ](https://docs.bullmq.io/) - Job queues
-- [MinIO](https://min.io/) - Object storage
+- [MinIO](https://min.io/) / Tencent COS - Object storage
 - [Traefik](https://traefik.io/) - Reverse proxy
 
 ## 📞 Support

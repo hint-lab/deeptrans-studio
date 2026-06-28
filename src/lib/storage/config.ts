@@ -1,6 +1,4 @@
-import {
-    DEFAULT_OBJECT_URL_EXPIRES_SECONDS,
-} from '@/lib/storage/utils';
+import { DEFAULT_OBJECT_URL_EXPIRES_SECONDS } from '@/lib/storage/utils';
 import type { StorageConfig, StorageProvider } from './types';
 
 function parseBool(value: string | undefined, fallback: boolean) {
@@ -28,11 +26,9 @@ function storageTypeFromEnv(env: NodeJS.ProcessEnv): StorageProvider {
 export function getStorageConfigFromEnv(env: NodeJS.ProcessEnv = process.env): StorageConfig {
     const type = storageTypeFromEnv(env);
     const uploadUrlExpiresSeconds =
-        parseNumber(env.STORAGE_UPLOAD_URL_EXPIRES_SECONDS) ??
-        DEFAULT_OBJECT_URL_EXPIRES_SECONDS;
+        parseNumber(env.STORAGE_UPLOAD_URL_EXPIRES_SECONDS) ?? DEFAULT_OBJECT_URL_EXPIRES_SECONDS;
     const downloadUrlExpiresSeconds =
-        parseNumber(env.STORAGE_DOWNLOAD_URL_EXPIRES_SECONDS) ??
-        DEFAULT_OBJECT_URL_EXPIRES_SECONDS;
+        parseNumber(env.STORAGE_DOWNLOAD_URL_EXPIRES_SECONDS) ?? DEFAULT_OBJECT_URL_EXPIRES_SECONDS;
 
     if (type === 'cos') {
         const useSSL = parseBool(env.COS_USE_SSL ?? env.STORAGE_USE_SSL, true);
@@ -57,10 +53,7 @@ export function getStorageConfigFromEnv(env: NodeJS.ProcessEnv = process.env): S
         port: parseNumber(env.STORAGE_PORT ?? env.MINIO_PORT) ?? 9000,
         useSSL: parseBool(env.STORAGE_USE_SSL ?? env.MINIO_USE_SSL, false),
         accessKey:
-            env.STORAGE_ACCESS_KEY ||
-            env.MINIO_ACCESS_KEY ||
-            env.MINIO_ROOT_USER ||
-            'minioadmin',
+            env.STORAGE_ACCESS_KEY || env.MINIO_ACCESS_KEY || env.MINIO_ROOT_USER || 'minioadmin',
         secretKey:
             env.STORAGE_SECRET_KEY ||
             env.MINIO_SECRET_KEY ||
@@ -72,4 +65,3 @@ export function getStorageConfigFromEnv(env: NodeJS.ProcessEnv = process.env): S
         downloadUrlExpiresSeconds,
     };
 }
-

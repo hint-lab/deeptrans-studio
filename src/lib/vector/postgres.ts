@@ -198,10 +198,7 @@ export async function searchKeywords(params: {
 
     const k = Math.max(1, Math.min(200, params.k || 10));
     const scope = { ...scopeFromFilter(params.filter), ...params };
-    const tokenClauses = tokens.map(
-        token =>
-            Prisma.sql`(e."sourceText" ILIKE ${`%${token}%`} OR e."targetText" ILIKE ${`%${token}%`})`
-    );
+    const pgroongaQuery = tokens.join(' OR ');
 
     const rows = (await prisma.$queryRaw(
         Prisma.sql`
@@ -216,7 +213,7 @@ export async function searchKeywords(params: {
                 m."userId"
             FROM "TranslationMemoryEntry" e
             JOIN "TranslationMemory" m ON m.id = e."memoryId"
-            WHERE (${Prisma.join(tokenClauses, ' OR ')})
+            WHERE (e."sourceText" &@~ ${pgroongaQuery} OR e."targetText" &@~ ${pgroongaQuery})
             ${scopeSql(scope)}
             ORDER BY e."updatedAt" DESC
             LIMIT ${Math.max(k * 5, 50)}

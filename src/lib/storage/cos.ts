@@ -1,9 +1,6 @@
 import COS from 'cos-nodejs-sdk-v5';
 import { PutObjectInput, StorageConfig, StorageService, UploadResult } from './types';
-import {
-    DEFAULT_OBJECT_URL_EXPIRES_SECONDS,
-    buildObjectKey,
-} from './utils';
+import { DEFAULT_OBJECT_URL_EXPIRES_SECONDS, buildObjectKey } from './utils';
 
 export class CosStorageService implements StorageService {
     private client: COS;
@@ -99,4 +96,3 @@ function normalizeCosBucket(bucket: string, appId?: string) {
     if (!appId || /-\d{5,}$/.test(trimmed)) return trimmed;
     return `${trimmed}-${appId}`;
 }
-

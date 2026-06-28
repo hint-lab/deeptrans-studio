@@ -51,45 +51,6 @@ services:
             - 'traefik.http.routers.traefik.entrypoints=websecure'
             - 'traefik.http.routers.traefik.tls=true'
             - 'traefik.http.routers.traefik.tls.certresolver=le'
-    minio:
-        image: minio/minio:latest
-        container_name: deeptrans-minio
-        restart: always
-        environment:
-            MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
-            MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
-            MINIO_BUCKET_NAME: ${MINIO_BUCKET:-deeptrans}
-        volumes:
-            - minio-data:/data
-        ports:
-            - '${MINIO_PORT:-9000}:9000' # API 端口）
-            - '${MINIO_CONSOLE_PORT:-9001}:9001' # 控制台端口
-        command: minio server /data --console-address ":9001"
-        healthcheck:
-            test: ['CMD', 'mc', 'ready', 'local']
-            interval: 30s
-            timeout: 10s
-            retries: 3
-        networks:
-            - app_local
-            - web # 连接到web网络
-        labels:
-            - 'traefik.enable=true'
-            # 1. 控制台路由 (Console) - 用于浏览器访问
-            - 'traefik.http.routers.minio-console.rule=Host(`minio-admin.deeptrans.studio`)'
-            - 'traefik.http.routers.minio-console.entrypoints=websecure'
-            - 'traefik.http.routers.minio-console.tls=true'
-            - 'traefik.http.routers.minio-console.tls.certresolver=le'
-            - 'traefik.http.routers.minio-console.service=minio-console-svc'
-            - 'traefik.http.services.minio-console-svc.loadbalancer.server.port=9001'
-
-            # 2. API 路由 (S3 API) - 用于程序和 SDK 访问
-            - 'traefik.http.routers.minio-api.rule=Host(`minio.deeptrans.studio`)'
-            - 'traefik.http.routers.minio-api.entrypoints=websecure'
-            - 'traefik.http.routers.minio-api.tls=true'
-            - 'traefik.http.routers.minio-api.tls.certresolver=le'
-            - 'traefik.http.routers.minio-api.service=minio-api-svc'
-            - 'traefik.http.services.minio-api-svc.loadbalancer.server.port=9000'
     valkey:
         image: valkey/valkey:8-alpine
         container_name: deeptrans-valkey
@@ -107,6 +68,16 @@ services:
         container_name: deeptrans-app
         env_file:
             - .env
+        environment:
+            STORAGE_TYPE: cos
+            STORAGE_USE_SSL: 'true'
+            COS_SECRET_ID: ${COS_SECRET_ID}
+            COS_SECRET_KEY: ${COS_SECRET_KEY}
+            COS_BUCKET: ${COS_BUCKET}
+            COS_REGION: ${COS_REGION}
+            COS_APP_ID: ${COS_APP_ID:-}
+            COS_DOMAIN: ${COS_DOMAIN:-}
+            COS_USE_SSL: ${COS_USE_SSL:-true}
         depends_on:
             - db
             - valkey
@@ -127,6 +98,16 @@ services:
         container_name: deeptrans-app_worker
         env_file:
             - .env
+        environment:
+            STORAGE_TYPE: cos
+            STORAGE_USE_SSL: 'true'
+            COS_SECRET_ID: ${COS_SECRET_ID}
+            COS_SECRET_KEY: ${COS_SECRET_KEY}
+            COS_BUCKET: ${COS_BUCKET}
+            COS_REGION: ${COS_REGION}
+            COS_APP_ID: ${COS_APP_ID:-}
+            COS_DOMAIN: ${COS_DOMAIN:-}
+            COS_USE_SSL: ${COS_USE_SSL:-true}
         depends_on:
             - db
             - valkey
@@ -142,6 +123,5 @@ networks:
 
 volumes:
     postgres_data:
-    minio-data:
     traefik_data:
     valkey-data:

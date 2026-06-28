@@ -10,7 +10,11 @@ export function normalizeNamespace(namespace: string) {
 
 export function buildObjectKey(originalName: string, namespace: string) {
     const cleanNamespace = normalizeNamespace(namespace);
-    const baseName = String(originalName || '').split(/[\\/]/).filter(Boolean).pop() || 'file';
+    const baseName =
+        String(originalName || '')
+            .split(/[\\/]/)
+            .filter(Boolean)
+            .pop() || 'file';
     const extensionMatch = /\.([A-Za-z0-9]{1,16})$/.exec(baseName);
     const extension = extensionMatch ? `.${extensionMatch[1]}` : '';
     const objectName = `${uuidv4()}${extension}`;
@@ -27,4 +31,3 @@ export function streamToBuffer(stream: NodeJS.ReadableStream) {
         stream.on('error', reject);
     });
 }
-

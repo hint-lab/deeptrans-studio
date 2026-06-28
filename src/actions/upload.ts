@@ -4,14 +4,17 @@ import { createLogger } from '@/lib/logger';
 import { requireOwnedProject, requireUser, requireWritableProject } from '@/lib/guards';
 import { getStorageConfigFromEnv } from '@/lib/storage/config';
 import { createStorageService } from '@/lib/storage/factory';
-const logger = createLogger({
-    type: 'actions:upload',
-}, {
-    json: false,// 开启json格式输出
-    pretty: false, // 关闭开发环境美化输出
-    colors: true, // 仅当json：false时启用颜色输出可用
-    includeCaller: false, // 日志不包含调用者
-});
+const logger = createLogger(
+    {
+        type: 'actions:upload',
+    },
+    {
+        json: false, // 开启json格式输出
+        pretty: false, // 关闭开发环境美化输出
+        colors: true, // 仅当json：false时启用颜色输出可用
+        includeCaller: false, // 日志不包含调用者
+    }
+);
 // 创建存储服务实例
 const storageService = createStorageService(getStorageConfigFromEnv());
 
