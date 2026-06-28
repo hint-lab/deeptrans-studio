@@ -1,7 +1,7 @@
 'use server';
 import { signIn } from '@/auth';
 import { DEFAULT_LOGIN_REDIRECT } from '@/routes';
-import { findUserByEmailDB, createUserDB, updateUserByIdDB } from '@/db/user';
+import { findUserByEmailDB, updateUserByIdDB } from '@/db/user';
 import { getVerificationCodeByEmail } from '@/db/verificationCode';
 
 export const emailLoginAction = async (
@@ -12,11 +12,9 @@ export const emailLoginAction = async (
     const code = values?.code?.trim();
     if (!email || !code) return { error: '邮箱或验证码缺失' };
 
-    let existingUser = await findUserByEmailDB(email);
+    const existingUser = await findUserByEmailDB(email);
     if (!existingUser) {
-        const newUser = await createUserDB({ email });
-        if (!newUser) return { error: '自动创建用户失败，请稍后重试' };
-        existingUser = newUser;
+        return { error: '账号不存在，请先注册' };
     }
     if (process.env.IS_DEMO === 'yes') {
         if (code === '123456' && email === 'test@example.com') {

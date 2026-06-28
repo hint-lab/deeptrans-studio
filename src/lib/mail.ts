@@ -19,6 +19,32 @@ function createTransporter() {
     return nodemailer.createTransport(process.env.EMAIL_SERVER as string, options);
 }
 
+function buildVerificationEmail(code: string) {
+    const subject = 'DeepTrans Studio 登录验证码';
+    const text = `您的 DeepTrans Studio 验证码是：${code}。验证码 2 分钟内有效，请勿泄露。`;
+    const html = `
+<div style="margin:0;padding:32px 0;background:#f6f8fb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,'PingFang SC','Microsoft YaHei',sans-serif;color:#111827;">
+  <div style="max-width:560px;margin:0 auto;background:#ffffff;border:1px solid #e5e7eb;border-radius:16px;overflow:hidden;">
+    <div style="padding:28px 32px;border-bottom:1px solid #eef2f7;">
+      <div style="font-size:20px;font-weight:700;color:#0f172a;">DeepTrans Studio</div>
+      <div style="margin-top:6px;font-size:14px;color:#64748b;">邮箱验证码</div>
+    </div>
+    <div style="padding:32px;">
+      <p style="margin:0 0 16px;font-size:15px;line-height:1.7;color:#334155;">您好，您正在使用邮箱验证码登录或注册 DeepTrans Studio。</p>
+      <div style="margin:24px 0;padding:20px 24px;text-align:center;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;">
+        <div style="font-size:13px;color:#64748b;margin-bottom:8px;">验证码</div>
+        <div style="font-size:34px;line-height:1;font-weight:800;letter-spacing:6px;color:#0f172a;">${code}</div>
+      </div>
+      <p style="margin:0;font-size:14px;line-height:1.7;color:#64748b;">验证码 2 分钟内有效。若不是您本人操作，请忽略此邮件。</p>
+    </div>
+    <div style="padding:18px 32px;background:#f8fafc;border-top:1px solid #eef2f7;font-size:12px;color:#94a3b8;">
+      此邮件由系统自动发送，请勿直接回复。
+    </div>
+  </div>
+</div>`;
+    return { subject, text, html };
+}
+
 export async function sendVerificationEmail(to: string, code: string) {
     // 验证参数
     if (!to || typeof to !== 'string') {
@@ -31,9 +57,7 @@ export async function sendVerificationEmail(to: string, code: string) {
         throw new Error('EMAIL_SERVER 未配置，无法发送邮件');
     }
     const from = process.env.EMAIL_FROM || 'no-reply@example.com';
-    const subject = '您的登录验证码';
-    const text = `您的验证码是：${code} （2分钟内有效）`;
-    const html = `<p>您的验证码是：<b>${code}</b></p><p>2分钟内有效，请勿泄露。</p>`;
+    const { subject, text, html } = buildVerificationEmail(code);
     logger.debug('mail params validated', { recipientLength: to.length, codeLength: code.length });
     try {
         // 可提前验证连接配置是否有效

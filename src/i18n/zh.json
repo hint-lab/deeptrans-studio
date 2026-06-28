@@ -50,6 +50,7 @@
         "codeSent": "验证码已发送",
         "sendFailed": "发送失败",
         "pleaseEnterEmail": "请输入邮箱",
+        "invalidEmailFormat": "邮箱格式不正确",
         "loginFailed": "登录失败：{error}",
         "loginSuccess": "登录成功",
         "registerFailed": "注册失败",

@@ -50,6 +50,7 @@
         "codeSent": "Verification code sent",
         "sendFailed": "Failed to send",
         "pleaseEnterEmail": "Please enter email",
+        "invalidEmailFormat": "Invalid email format",
         "loginFailed": "Login failed: {error}",
         "loginSuccess": "Login successful",
         "registerFailed": "Registration failed",
