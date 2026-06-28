@@ -61,6 +61,43 @@ const logger = createLogger({
     colors: true, // 仅当json：false时启用颜色输出可用
     includeCaller: false, // 日志不包含调用者
 });
+
+function TranslationPendingPlaceholder({ label }: { label: string }) {
+    const rows = ['w-11/12', 'w-4/5', 'w-2/3'];
+
+    return (
+        <div
+            className="min-h-[220px] px-5 py-4"
+            aria-live="polite"
+            aria-busy="true"
+        >
+            <div className="mb-5 flex items-center gap-2 text-xs text-muted-foreground">
+                <span className="relative flex h-2 w-2">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-indigo-500 opacity-50" />
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-indigo-500" />
+                </span>
+                <span>{label}</span>
+            </div>
+            <div className="space-y-4">
+                {rows.map((width, index) => (
+                    <div
+                        key={width}
+                        className={cn(
+                            'h-4 rounded-sm bg-foreground/10 opacity-60 animate-pulse',
+                            width
+                        )}
+                        style={{ animationDelay: `${index * 180}ms` }}
+                    />
+                ))}
+                <div className="flex items-center gap-1 pt-1">
+                    <span className="h-4 w-[1.5px] animate-pulse rounded-full bg-indigo-500" />
+                    <span className="h-4 w-24 rounded-sm bg-foreground/5" />
+                </div>
+            </div>
+        </div>
+    );
+}
+
 export default function ParallelEditor({ className }: { className?: string }) {
     const t = useTranslations('IDE.parallelEditor');
     const { sourceText, targetText, setSourceTranslationText, setTargetTranslationText } =
@@ -727,8 +764,18 @@ export default function ParallelEditor({ className }: { className?: string }) {
                                                                     {isRunning && (
                                                                         <span className="absolute left-0 right-0 top-0 h-0.5 animate-progress bg-indigo-500" />
                                                                     )}
-                                                                    {/* 骨架屏：在准备/预译阶段且译文为空时显示 */}
+                                                                    {/* 空译文状态：运行中使用 DeepL 式轻量闪烁占位，未开始保留空态提示 */}
                                                                     {(!targetText ||
+                                                                        String(
+                                                                            targetText
+                                                                        ).trim() === '') &&
+                                                                        isRunning ? (
+                                                                        <TranslationPendingPlaceholder
+                                                                            label={t(
+                                                                                'translatingTarget'
+                                                                            )}
+                                                                        />
+                                                                    ) : (!targetText ||
                                                                         String(
                                                                             targetText
                                                                         ).trim() === '') &&

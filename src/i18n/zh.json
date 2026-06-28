@@ -1103,6 +1103,7 @@
             "sourceText": "原文",
             "targetText": "译文",
             "loadingSource": "加载原文...",
+            "translatingTarget": "正在翻译...",
             "clickToStartTranslation": "点击下一步，开始深度翻译...",
             "hidePanel": "隐藏面板",
             "showPanel": "显示面板",

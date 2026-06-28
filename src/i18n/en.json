@@ -1101,6 +1101,7 @@
             "sourceText": "Source Text",
             "targetText": "Target Text",
             "loadingSource": "Loading source text...",
+            "translatingTarget": "Translating...",
             "clickToStartTranslation": "Click Next to start deep translation...",
             "hidePanel": "Hide Panel",
             "showPanel": "Show Panel",
