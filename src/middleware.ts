@@ -33,6 +33,7 @@ export async function middleware(request: NextRequest) {
         '/docs',
         '/api/auth/verify-email',
         '/api/auth/send-email',
+        '/api/auth/register',
     ];
     // 认证相关路径（NextAuth 内部处理，但需要逻辑来处理重定向）
     const authPaths = ['/auth/login', '/auth/register', '/auth/error'];
