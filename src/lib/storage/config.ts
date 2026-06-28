@@ -32,10 +32,11 @@ export function getStorageConfigFromEnv(env: NodeJS.ProcessEnv = process.env): S
 
     if (type === 'cos') {
         const useSSL = parseBool(env.COS_USE_SSL ?? env.STORAGE_USE_SSL, true);
+        const domain = cleanDomain(env.COS_DOMAIN || env.STORAGE_DOMAIN);
         return {
             type,
-            endpoint: cleanDomain(env.COS_DOMAIN ?? env.STORAGE_ENDPOINT),
-            domain: cleanDomain(env.COS_DOMAIN ?? env.STORAGE_DOMAIN),
+            endpoint: domain,
+            domain,
             useSSL,
             accessKey: env.COS_SECRET_ID || env.STORAGE_ACCESS_KEY || '',
             secretKey: env.COS_SECRET_KEY || env.STORAGE_SECRET_KEY || '',
