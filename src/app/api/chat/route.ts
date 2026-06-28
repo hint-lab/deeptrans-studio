@@ -4,18 +4,24 @@ import { streamText } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
 import { guardMessage, guardStatus, requireUser } from '@/lib/guards';
 
-const OPENAI_KEY = process.env.OPENAI_API_KEY || '';
-const DEFAULT_MODEL = process.env.OPENAI_API_MODEL || 'gpt-4o-mini';
-const openai = createOpenAI({
-    apiKey: OPENAI_KEY,
-    baseURL: process.env.OPENAI_BASE_URL,
-});
+function getChatConfig() {
+    return {
+        apiKey: process.env.LLM_API_KEY || process.env.OPENAI_API_KEY || '',
+        baseURL: process.env.LLM_BASE_URL || process.env.OPENAI_BASE_URL,
+        model: process.env.LLM_MODEL || process.env.OPENAI_API_MODEL || 'gpt-4o-mini',
+    };
+}
 
 export async function POST(req: Request) {
     try {
         await requireUser();
-        if (!OPENAI_KEY)
-            return NextResponse.json({ error: 'OPENAI_API_KEY 未配置' }, { status: 500 });
+        const cfg = getChatConfig();
+        if (!cfg.apiKey)
+            return NextResponse.json({ error: 'LLM_API_KEY 或 OPENAI_API_KEY 未配置' }, { status: 500 });
+        const openai = createOpenAI({
+            apiKey: cfg.apiKey,
+            baseURL: cfg.baseURL,
+        });
         const { prompt, system, locale } = await req.json();
         const messages: ChatMessage[] = [];
 
@@ -33,7 +39,7 @@ export async function POST(req: Request) {
         messages.push({ role: 'user', content: String(prompt || '').trim() });
 
         const result = await streamText({
-            model: openai.chat(DEFAULT_MODEL),
+            model: openai.chat(cfg.model),
             messages,
         });
 

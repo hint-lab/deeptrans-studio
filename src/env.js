@@ -14,6 +14,9 @@ export const env = createEnv({
         OPENAI_API_KEY: z.string(),
         OPENAI_BASE_URL: z.url().optional(),
         OPENAI_API_MODEL: z.string().default('gpt-4o-mini'),
+        LLM_API_KEY: z.string().optional(),
+        LLM_BASE_URL: z.url().optional(),
+        LLM_MODEL: z.string().optional(),
 
         // internal HTTP base for tools (e.g., dictionary lookup)
         DICTIONARY_API_URL: z.url().default('http://localhost:3000'),
@@ -59,6 +62,9 @@ export const env = createEnv({
         OPENAI_API_KEY: process.env.OPENAI_API_KEY,
         OPENAI_BASE_URL: process.env.OPENAI_BASE_URL,
         OPENAI_API_MODEL: process.env.OPENAI_API_MODEL,
+        LLM_API_KEY: process.env.LLM_API_KEY,
+        LLM_BASE_URL: process.env.LLM_BASE_URL,
+        LLM_MODEL: process.env.LLM_MODEL,
 
         STORAGE_TYPE: process.env.STORAGE_TYPE,
         STORAGE_ENDPOINT: process.env.STORAGE_ENDPOINT,

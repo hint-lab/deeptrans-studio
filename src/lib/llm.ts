@@ -12,13 +12,13 @@ const logger = createLogger({
     includeCaller: false, // 日志不包含调用者
 });
 function getOpenAI() {
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) throw new Error('OPENAI_API_KEY 未配置');
-    return createOpenAI({ apiKey, baseURL: process.env.OPENAI_BASE_URL });
+    const apiKey = process.env.LLM_API_KEY || process.env.OPENAI_API_KEY;
+    if (!apiKey) throw new Error('LLM_API_KEY 或 OPENAI_API_KEY 未配置');
+    return createOpenAI({ apiKey, baseURL: process.env.LLM_BASE_URL || process.env.OPENAI_BASE_URL });
 }
 
 function getModelName(override?: string) {
-    return override || process.env.OPENAI_API_MODEL || 'gpt-4o-mini';
+    return override || process.env.LLM_MODEL || process.env.OPENAI_API_MODEL || 'gpt-4o-mini';
 }
 
 export async function chatText(
