@@ -10,6 +10,8 @@ async function resolveEmbeddingProvider(pref?: Partial<ProviderConfig>): Promise
             model: pref.model,
             apiKey: pref.apiKey,
             baseUrl: pref.baseUrl,
+            apiPath: pref.apiPath,
+            dimensions: pref.dimensions,
         };
     }
 
@@ -18,6 +20,8 @@ async function resolveEmbeddingProvider(pref?: Partial<ProviderConfig>): Promise
         model: process.env.EMBEDDING_MODEL || process.env.OPENAI_EMBED_MODEL || 'text-embedding-3-small',
         apiKey: process.env.EMBEDDING_API_KEY || process.env.OPENAI_API_KEY,
         baseUrl: process.env.EMBEDDING_BASE_URL || process.env.OPENAI_BASE_URL,
+        apiPath: process.env.EMBEDDING_API_PATH,
+        dimensions: process.env.EMBEDDING_DIMENSIONS ? Number(process.env.EMBEDDING_DIMENSIONS) : undefined,
     };
 }
 
