@@ -59,8 +59,8 @@
                         ]
                     },
                     {
-                        "question": "Where is MinIO stored data?",
-                        "solution": "MinIO data is stored in Docker volumes by default. Can be viewed via `docker volume ls`, or configure custom storage path."
+                        "question": "Where is object storage data stored?",
+                        "solution": "Local development uses MinIO Docker volumes. Production uses Tencent COS, so files are stored in the configured COS bucket."
                     },
                     {
                         "question": "How to clean PostgreSQL vector data?",
@@ -82,7 +82,7 @@
                     },
                     {
                         "question": "How does translation memory work?",
-                        "solution": "Translation memory uses PostgreSQL vector store to store source-target text pairs. During translation, the system searches for similar translation references through hybrid search (vector retrieval + keyword matching)."
+                        "solution": "Translation memory stores source-target text pairs in PostgreSQL. pgvector handles semantic retrieval, and PGroonga handles CJK keyword matching for Chinese, Japanese, and Korean content."
                     },
                     {
                         "question": "How to import terminology dictionary?",
@@ -130,7 +130,7 @@
                     },
                     {
                         "question": "What configurations are needed for production environment?",
-                        "solution": "Key configurations: 1) Use dedicated database and Valkey instances, 2) Set strong passwords and AUTH_SECRET, 3) Configure HTTPS, 4) Set environment variable NODE_ENV=production, 5) Configure logs and monitoring."
+                        "solution": "Key configurations: 1) Use dedicated PostgreSQL and Valkey instances, 2) configure Tencent COS credentials with STORAGE_TYPE=cos, 3) set strong passwords and AUTH_SECRET, 4) configure HTTPS, 5) set NODE_ENV=production, 6) configure logs and monitoring."
                     },
                     {
                         "question": "How to set up HTTPS?",

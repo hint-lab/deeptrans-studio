@@ -160,7 +160,7 @@
                         "solutions": [
                             "查看 Worker 日志：`docker compose logs app_worker`",
                             "检查任务数据格式是否正确",
-                            "验证相关服务（pgvector、MinIO、Redis，以及可选 OCR）是否正常",
+                            "验证 PostgreSQL/pgvector/PGroonga、Valkey、对象存储以及可选 OCR 是否正常",
                             "检查 API 密钥和配置是否正确",
                             "查看 Valkey 中的失败任务：`redis-cli KEYS 'bull:*:failed'`"
                         ]
@@ -187,22 +187,25 @@
                         ]
                     },
                     {
-                        "title": "向量集合不存在",
-                        "Problems": ["搜索时提示集合不存在", "向量写入失败，提示集合未找到"],
+                        "title": "翻译记忆向量缺失",
+                        "Problems": [
+                            "搜索没有返回语义匹配结果",
+                            "导入后 TranslationMemoryEntry.embedding 为空"
+                        ],
                         "solutions": [
-                            "检查集合是否已创建",
-                            "在 Prisma Studio 中查看集合列表",
-                            "重新初始化集合（应用会自动创建）",
-                            "检查集合名称是否正确"
+                            "运行翻译记忆向量补全动作",
+                            "重新导入翻译记忆文件",
+                            "验证 embedding 模型和 OPENAI_EMBED_MODEL 配置",
+                            "用 SQL 检查 PostgreSQL vector 和 PGroonga 扩展"
                         ]
                     },
                     {
                         "title": "向量维度不匹配",
                         "Problems": ["向量写入失败，提示维度错误", "搜索时返回维度不匹配错误"],
                         "solutions": [
-                            "检查嵌入模型配置，确保维度一致（默认 1536）",
-                            "删除并重建集合（开发环境）",
-                            "验证向量生成代码中的维度设置"
+                            "检查嵌入模型配置，当前 schema 维度保持 1536",
+                            "更换 embedding 模型前先做显式重嵌入迁移",
+                            "验证向量生成代码和数据库 schema 一致"
                         ]
                     }
                 ]
@@ -256,11 +259,10 @@
                         "title": "文件上传失败",
                         "Problems": ["文档上传后无法保存", "上传进度卡住", "存储空间不足错误"],
                         "solutions": [
-                            "检查磁盘空间：`df -h`",
-                            "验证 MinIO 存储路径权限",
+                            "本地 MinIO 检查磁盘空间和 Docker 卷权限",
+                            "腾讯云 COS 检查 bucket 配额、地域、密钥和 CORS/权限策略",
                             "检查文件大小限制",
-                            "查看 MinIO 错误日志",
-                            "验证 S3 兼容 API 配置"
+                            "验证 STORAGE_TYPE 和对象存储配置"
                         ]
                     }
                 ]

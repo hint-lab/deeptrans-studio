@@ -314,7 +314,7 @@
                             "method": "POST",
                             "path": "/api/upload-proxy",
                             "title": "File Upload Proxy",
-                            "description": "Proxy file upload to object storage (MinIO)"
+                            "description": "Proxy file upload to configured object storage (local MinIO or Tencent COS)"
                         },
                         {
                             "method": "POST",

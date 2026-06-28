@@ -24,11 +24,15 @@
                 },
                 {
                     "name": "pgvector",
-                    "description": "向量数据库，用于翻译记忆的向量检索和语义搜索"
+                    "description": "PostgreSQL 向量扩展，用于翻译记忆 embedding 检索和语义搜索"
                 },
                 {
-                    "name": "MinIO",
-                    "description": "对象存储，存储文档文件、解析产物、静态资源等"
+                    "name": "PGroonga",
+                    "description": "支持 CJK 的 PostgreSQL 全文检索扩展，用于中文、日文、韩文关键词检索"
+                },
+                {
+                    "name": "对象存储",
+                    "description": "本地开发使用 MinIO，生产环境使用腾讯云 COS，存储文档文件、解析产物和静态资源"
                 }
             ]
         },
@@ -102,10 +106,12 @@
                         "memoryId",
                         "sourceText",
                         "targetText",
+                        "embedding",
                         "sourceLang",
                         "targetLang"
                     ],
-                    "relations": ["memory"]
+                    "relations": ["memory"],
+                    "notes": "embedding 字段存储 pgvector 向量；sourceText 和 targetText 通过 PGroonga 建索引以支持 CJK 关键词检索"
                 },
                 {
                     "name": "TranslationStageRecord（翻译阶段记录）",

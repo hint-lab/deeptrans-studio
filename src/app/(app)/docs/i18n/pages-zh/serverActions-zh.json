@@ -314,7 +314,7 @@
                             "method": "POST",
                             "path": "/api/upload-proxy",
                             "title": "文件上传代理",
-                            "description": "代理文件上传到对象存储（MinIO）"
+                            "description": "代理文件上传到已配置的对象存储（本地 MinIO 或腾讯云 COS）"
                         },
                         {
                             "method": "POST",

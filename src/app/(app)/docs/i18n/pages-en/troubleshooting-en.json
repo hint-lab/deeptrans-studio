@@ -168,7 +168,7 @@
                         "solutions": [
                             "View Worker logs: `docker compose logs app_worker`",
                             "Check if task data format is correct",
-                            "Verify related services （pgvector、MinIO、Valkey、 and optional OCR) are normal",
+                            "Verify PostgreSQL/pgvector/PGroonga, Valkey, object storage, and optional OCR are healthy",
                             "Check if API keys and configuration are correct",
                             "View failed tasks in Valkey: `redis-cli KEYS 'bull:*:failed'`"
                         ]
@@ -195,16 +195,16 @@
                         ]
                     },
                     {
-                        "title": "Vector Collection Does Not Exist",
+                        "title": "Translation Memory Embedding Missing",
                         "Problems": [
-                            "Collection does not exist error when searching",
-                            "Vector write failure, collection not found"
+                            "Search returns no semantic matches",
+                            "TranslationMemoryEntry.embedding is empty after import"
                         ],
                         "solutions": [
-                            "Check if collection is created",
-                            "View collection list in Prisma Studio",
-                            "Reinitialize collection (application will auto-create)",
-                            "Check if collection name is correct"
+                            "Run the translation-memory vector backfill action",
+                            "Re-import the translation memory file",
+                            "Verify the embedding model and OPENAI_EMBED_MODEL configuration",
+                            "Check PostgreSQL vector and PGroonga extensions with SQL"
                         ]
                     },
                     {
@@ -214,9 +214,9 @@
                             "Dimension mismatch error when searching"
                         ],
                         "solutions": [
-                            "Check embedding model configuration, ensure dimensions are consistent (default 1536)",
-                            "Delete and rebuild collection (development environment)",
-                            "Verify dimension settings in vector generation code"
+                            "Check embedding model configuration and keep the dimension at 1536 for the current schema",
+                            "Run an explicit re-embedding migration before changing embedding models",
+                            "Verify vector generation code and database schema are aligned"
                         ]
                     }
                 ]
@@ -281,11 +281,10 @@
                             "Insufficient storage space error"
                         ],
                         "solutions": [
-                            "Check disk space: `df -h`",
-                            "Verify MinIO storage path permissions",
+                            "For local MinIO, check disk space and Docker volume permissions",
+                            "For Tencent COS, check bucket quota, region, credentials, and CORS/policy settings",
                             "Check file size limits",
-                            "View MinIO error logs",
-                            "Verify S3-compatible API configuration"
+                            "Verify STORAGE_TYPE and object storage configuration"
                         ]
                     }
                 ]

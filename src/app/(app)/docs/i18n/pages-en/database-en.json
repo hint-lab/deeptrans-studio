@@ -24,11 +24,15 @@
                 },
                 {
                     "name": "pgvector",
-                    "description": "Vector database for vector retrieval and semantic search of translation memories"
+                    "description": "PostgreSQL vector extension for translation-memory embedding retrieval and semantic search"
                 },
                 {
-                    "name": "MinIO",
-                    "description": "Object storage for document files, parsing artifacts, static resources, etc."
+                    "name": "PGroonga",
+                    "description": "CJK-capable PostgreSQL full-text search extension used for Chinese, Japanese, and Korean keyword retrieval"
+                },
+                {
+                    "name": "Object Storage",
+                    "description": "MinIO for local development and Tencent COS for production document files, parsing artifacts, and static resources"
                 }
             ]
         },
@@ -102,10 +106,12 @@
                         "memoryId",
                         "sourceText",
                         "targetText",
+                        "embedding",
                         "sourceLang",
                         "targetLang"
                     ],
-                    "relations": ["memory"]
+                    "relations": ["memory"],
+                    "notes": "embedding stores pgvector data for semantic retrieval; PGroonga indexes sourceText and targetText for CJK keyword search"
                 },
                 {
                     "name": "TranslationStageRecord",

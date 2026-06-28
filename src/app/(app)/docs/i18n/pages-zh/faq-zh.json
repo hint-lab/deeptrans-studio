@@ -59,8 +59,8 @@
                         ]
                     },
                     {
-                        "question": "MinIO 存储的数据在哪里？",
-                        "solution": "MinIO 数据默认存储在 Docker 卷中。可以通过 `docker volume ls` 查看，或配置自定义存储路径。"
+                        "question": "对象存储的数据在哪里？",
+                        "solution": "本地开发使用 MinIO Docker 卷。生产环境使用腾讯云 COS，文件存储在配置的 COS bucket 中。"
                     },
                     {
                         "question": "如何清理 pgvector 向量数据？",
@@ -82,7 +82,7 @@
                     },
                     {
                         "question": "翻译记忆库如何工作？",
-                        "solution": "翻译记忆库使用 PostgreSQL 向量索引存储源文-译文对照。\n在翻译过程中，系统会通过混合搜索（向量检索 + 关键词匹配）查找相似的翻译参考。"
+                        "solution": "翻译记忆库把源文-译文对照存储在 PostgreSQL。pgvector 负责语义向量检索，PGroonga 负责中文、日文、韩文等 CJK 内容的关键词匹配。"
                     },
                     {
                         "question": "如何导入术语词典？",
@@ -130,7 +130,7 @@
                     },
                     {
                         "question": "生产环境需要哪些配置？",
-                        "solution": "关键配置：1) 使用专用数据库和 Valkey 实例，2) 设置强密码和 AUTH_SECRET，3) 配置 HTTPS，4) 设置环境变量 NODE_ENV=production，5) 配置日志和监控。"
+                        "solution": "关键配置：1) 使用专用 PostgreSQL 和 Valkey 实例，2) 配置腾讯云 COS 凭据并设置 STORAGE_TYPE=cos，3) 设置强密码和 AUTH_SECRET，4) 配置 HTTPS，5) 设置 NODE_ENV=production，6) 配置日志和监控。"
                     },
                     {
                         "question": "如何设置 HTTPS？",
