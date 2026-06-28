@@ -10,8 +10,7 @@ import { fetchDocumentItemNeedsMtReviewByIdDB, updateDocumentItemByIdDB } from '
 import { prisma } from '@/lib/db';
 import { createLogger } from '@/lib/logger';
 import { TTL_BATCH, setJSONWithTTL } from '@/lib/redis-ttl';
-import { getStorageConfigFromEnv } from '@/lib/storage/config';
-import { createStorageService } from '@/lib/storage/factory';
+import { getStorageService } from '@/lib/storage/service';
 import { canWriteDocumentItemForOwner } from '@/server/document-item-access';
 import { embedBatchForOwner } from '@/server/embedding';
 import { runPreTranslateForOwner } from '@/server/pre-translate';
@@ -32,7 +31,6 @@ const logger = createLogger(
 );
 
 const connection = getQueueConnection();
-const storageService = createStorageService(getStorageConfigFromEnv());
 
 async function assertJobCanWriteItem(jobData: any) {
     const itemId = String(jobData?.id || '');
@@ -294,7 +292,7 @@ const memoryImportWorker = createWorker(
         });
         if (!memory) throw new Error('UNAUTHORIZED_MEMORY');
 
-        const buf = await storageService.getObjectBuffer(fileKey);
+        const buf = await getStorageService().getObjectBuffer(fileKey);
 
         // parse file
         let pairs: Array<{ source: string; target: string; notes?: string }> = [];

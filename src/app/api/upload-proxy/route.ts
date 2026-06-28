@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { guardMessage, guardStatus, requireUser, requireWritableProject } from '@/lib/guards';
-import { getStorageConfigFromEnv } from '@/lib/storage/config';
-import { createStorageService } from '@/lib/storage/factory';
-
-const storageService = createStorageService(getStorageConfigFromEnv());
+import { getStorageService } from '@/lib/storage/service';
 
 export async function POST(req: NextRequest) {
     try {
@@ -27,14 +24,14 @@ export async function POST(req: NextRequest) {
             ? `projects/${(await requireWritableProject(projectId, authCtx)).id}`
             : `users/${authCtx.userId}/uploads`;
 
-        const getUrl = await storageService.getUploadUrl(
+        const getUrl = await getStorageService().getUploadUrl(
             file.name,
             file.type || 'application/octet-stream',
             namespace
         );
 
         const arrayBuffer = await file.arrayBuffer();
-        await storageService.putObject({
+        await getStorageService().putObject({
             fileName: getUrl.fileName,
             body: Buffer.from(arrayBuffer),
             contentType: file.type || 'application/octet-stream',

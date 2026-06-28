@@ -2,8 +2,7 @@
 
 import { createLogger } from '@/lib/logger';
 import { requireOwnedProject, requireUser, requireWritableProject } from '@/lib/guards';
-import { getStorageConfigFromEnv } from '@/lib/storage/config';
-import { createStorageService } from '@/lib/storage/factory';
+import { getStorageService } from '@/lib/storage/service';
 const logger = createLogger(
     {
         type: 'actions:upload',
@@ -15,9 +14,6 @@ const logger = createLogger(
         includeCaller: false, // 日志不包含调用者
     }
 );
-// 创建存储服务实例
-const storageService = createStorageService(getStorageConfigFromEnv());
-
 type UploadScope = {
     projectId?: string;
 };
@@ -59,7 +55,7 @@ export async function getUploadUrlAction(
         }
 
         // 获取上传 URL
-        const result = await storageService.getUploadUrl(fileName, contentType, namespace);
+        const result = await getStorageService().getUploadUrl(fileName, contentType, namespace);
         logger.debug('获取上传 URL 成功:', result);
 
         return {
@@ -86,14 +82,14 @@ export async function uploadFileAction(formData: FormData) {
             return { success: false, error: '缺少文件' };
         }
 
-        const result = await storageService.getUploadUrl(
+        const result = await getStorageService().getUploadUrl(
             file.name,
             (file as any).type || 'application/octet-stream',
             namespace
         );
 
         const arrayBuffer = await file.arrayBuffer();
-        await storageService.putObject({
+        await getStorageService().putObject({
             fileName: result.fileName,
             body: Buffer.from(arrayBuffer),
             contentType: (file as any).type || 'application/octet-stream',
@@ -120,7 +116,7 @@ export async function getFileUrlAction(fileName: string) {
         await requireUser();
         if (!fileName) return { success: false, error: '缺少文件名' };
         await assertReadableObject(fileName);
-        const url = await storageService.getFileUrl(fileName);
+        const url = await getStorageService().getFileUrl(fileName);
         return { success: true, data: { fileUrl: url } };
     } catch (error) {
         return {
