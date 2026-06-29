@@ -32,19 +32,18 @@ const ProjectListPage = () => {
     useEffect(() => {
         let mounted = true;
 
-        // 初始加载
-        loadProjects();
+        const loadCurrentPage = async () => {
+            const { data, total } = await fetchUserProjectsAction(currentPage, PAGE_SIZE);
+            if (!mounted) return;
+            setProjects(data as any);
+            setTotalCount(total);
+        };
 
-        // 轮询 (注意：轮询应该请求当前所在的页码)
-        const timer = setInterval(() => {
-            if (mounted) loadProjects();
-        }, 5000);
+        void loadCurrentPage();
 
         return () => {
             mounted = false;
-            clearInterval(timer);
         };
-        // 依赖项加入 currentPage，当页码改变时，自动触发重新加载
     }, [currentPage]);
 
     // 翻页处理
