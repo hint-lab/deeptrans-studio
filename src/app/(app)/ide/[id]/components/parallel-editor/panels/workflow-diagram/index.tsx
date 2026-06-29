@@ -1,19 +1,14 @@
 'use client';
-import { useCallback } from 'react';
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useTheme } from 'next-themes';
 import { ReactFlowProvider } from '@xyflow/react';
-import { useParams, useRouter } from 'next/navigation';
 import {
     ReactFlow,
     addEdge,
     Background,
-    Controls,
-    Edge,
     BackgroundVariant,
     useNodesState,
     useEdgesState,
-    MarkerType,
 } from '@xyflow/react';
 // 导入自定义组件
 import { nodeTypes } from './nodes';
@@ -29,9 +24,6 @@ export interface AgentNodeData {
 }
 
 export default function WorkflowDiagramPanel() {
-    const params = useParams<{ id: string }>();
-    const projectId = (params as any)?.id as string | undefined;
-    const router = useRouter();
     const { theme } = useTheme();
     const [mounted, setMounted] = useState(false);
     const workflows = useWorkflowData();
@@ -45,20 +37,6 @@ export default function WorkflowDiagramPanel() {
         },
         [setEdges]
     );
-    // if (!mounted) {
-    //     return <div className="h-[600px] w-full bg-gradient-to-br from-slate-50 to-gray-100 dark:from-gray-900 dark:to-slate-900 p-4">加载中...</div>;
-    // }
-    useEffect(() => {
-        console.log('节点:', nodes);
-        console.log('边:', edges);
-
-        // 特别检查边的定义
-        edges.forEach(edge => {
-            console.log(`边 ${edge.id}: 从 ${edge.source} 到 ${edge.target}`);
-            console.log(`sourceHandle: ${edge.sourceHandle}, targetHandle: ${edge.targetHandle}`);
-        });
-    }, [nodes, edges]);
-
     // 确保只在客户端渲染
     useEffect(() => {
         setMounted(true);

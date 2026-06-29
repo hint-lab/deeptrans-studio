@@ -6,7 +6,7 @@ import { LANGUAGES } from '@/constants/languages';
 import { useTranslationContent, useTranslationLanguage } from '@/hooks/useTranslation';
 import { createLogger } from '@/lib/logger';
 import { ArrowLeftRight, FileText, Mic, Undo2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Button } from 'src/components/ui/button';
 import { Textarea } from 'src/components/ui/textarea';
 const logger = createLogger({
@@ -28,31 +28,28 @@ const TextTranslationTable = () => {
     const { sourceText, targetText, setSourceTranslationText, setTargetTranslationText } =
         useTranslationContent();
     const [isTranslating, setIsTranslating] = useState(false);
-
-    useEffect(() => {
-        setSourceTranslationLanguage(targetLanguage);
-        setTargetTranslationLanguage(sourceLanguage);
-    }, [sourceLanguage, targetLanguage]);
+    const [translationError, setTranslationError] = useState<string | null>(null);
 
     const handleTranslation = async () => {
-        if (!sourceText.trim()) return;
+        const text = sourceText.trim();
+        if (!text || isTranslating) return;
 
+        setTranslationError(null);
+        setTargetTranslationText('');
+        setIsTranslating(true);
         try {
-            setIsTranslating(true);
-            // 模拟翻译请求
-            setTimeout(async () => {
-                setTargetTranslationText(sourceText);
-                const pre = await runPreTranslateAction(
-                    sourceText,
-                    sourceLanguage,
-                    targetLanguage,
-                    { prompt: undefined }
-                );
-                setTargetTranslationText((pre as any)?.translation || '');
-                setIsTranslating(false);
-            }, 1000);
+            const pre = await runPreTranslateAction(text, sourceLanguage, targetLanguage, {
+                prompt: undefined,
+            });
+            const translation = (pre as any)?.translation;
+            if (!translation) {
+                throw new Error('翻译服务未返回结果');
+            }
+            setTargetTranslationText(translation);
         } catch (error) {
             logger.error('handleTranslation 失败:', error);
+            setTranslationError(error instanceof Error ? error.message : '翻译失败，请稍后重试');
+        } finally {
             setIsTranslating(false);
         }
     };
@@ -60,12 +57,15 @@ const TextTranslationTable = () => {
     const clearText = () => {
         setSourceTranslationText('');
         setTargetTranslationText('');
+        setTranslationError(null);
     };
 
     const swapLanguages = () => {
         setSourceTranslationLanguage(targetLanguage);
         setTargetTranslationLanguage(sourceLanguage);
-        // 语言交换逻辑（需要与LanguageSelect组件配合）
+        setSourceTranslationText(targetText);
+        setTargetTranslationText(sourceText);
+        setTranslationError(null);
     };
 
     return (
@@ -144,8 +144,14 @@ const TextTranslationTable = () => {
                 {/* 输出区域 */}
                 <div className="flex flex-col">
                     {isTranslating ? (
-                        <div className="flex-1 bg-card p-4">
-                            <Skeleton className="h-[300px] w-full rounded-md" />
+                        <div className="flex-1 space-y-3 bg-card p-4">
+                            <Skeleton className="h-5 w-4/5 rounded-md" />
+                            <Skeleton className="h-5 w-2/3 rounded-md" />
+                            <Skeleton className="h-5 w-3/4 rounded-md" />
+                        </div>
+                    ) : translationError ? (
+                        <div className="flex min-h-[300px] flex-1 items-start bg-card p-4 text-sm text-destructive">
+                            {translationError}
                         </div>
                     ) : (
                         <Textarea

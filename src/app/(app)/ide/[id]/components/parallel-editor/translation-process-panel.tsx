@@ -3,9 +3,8 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAgentWorkflowSteps } from '@/hooks/useAgentWorkflowSteps';
 import { useTranslationState } from '@/hooks/useTranslation';
-import { createLogger } from '@/lib/logger';
 import { useTranslations } from 'next-intl';
-import React, { useEffect, useRef } from 'react'; // 引入 useRef
+import React, { useEffect, useRef } from 'react';
 import LoggingPanel from './panels/logging';
 import MtReviewPanel from './panels/mt-review';
 import PostEditPanel from './panels/post-edit';
@@ -14,15 +13,6 @@ import SignoffPanel from './panels/signoff';
 import MTWorkflowPanel from './panels/workflow-diagram/MTWorkflowPanel';
 import PostEditWorkflowPanel from './panels/workflow-diagram/PostEditWorkflowPanel';
 import QAWorkflowPanel from './panels/workflow-diagram/QAWorkflowPanel';
-
-const logger = createLogger({
-    type: 'parallel-editor:translation-process-panel',
-}, {
-    json: false,
-    pretty: false,
-    colors: true,
-    includeCaller: false,
-});
 
 interface TranslationProcessPanelProps {
     panelTab: string;
@@ -58,14 +48,11 @@ export const TranslationProcessPanel: React.FC<TranslationProcessPanelProps> = (
 
         // 只有当 currentStage 真正发生变化时，才执行切换逻辑
         if (currentStage && currentStage !== prevStageRef.current) {
-            logger.info('TranslationProcessPanel: currentStage changed from', prevStageRef.current, 'to', currentStage);
-
             // 更新 ref
             prevStageRef.current = currentStage;
 
             if (stageToTabMap[currentStage]) {
                 const targetTab = stageToTabMap[currentStage];
-                logger.info('TranslationProcessPanel: Auto-switching to tab:', targetTab);
                 setPanelTab(targetTab);
             }
         }
@@ -77,7 +64,6 @@ export const TranslationProcessPanel: React.FC<TranslationProcessPanelProps> = (
             // 这里是否需要保护取决于业务逻辑：PE运行时是否强制用户看流程图？
             // 如果是，保持原样。如果不是，可以加上类似 prevRunning 的判断。
             // 目前看似合理，因为运行中看流程图比较直观。
-            logger.info('TranslationProcessPanel: PE running, switching to post-edit-flow');
             setPanelTab('post-edit-flow');
         }
     }, [isPERunning, panelTab, setPanelTab]);
@@ -86,7 +72,6 @@ export const TranslationProcessPanel: React.FC<TranslationProcessPanelProps> = (
         <Tabs value={panelTab} onValueChange={setPanelTab} className="flex h-full flex-col pb-12">
             <div className="relative z-10 border-b bg-muted/20 px-2">
                 <TabsList className="pointer-events-auto h-9 bg-transparent">
-                    {/* ... TabsTrigger 内容保持不变 ... */}
                     <TabsTrigger value="pre-flow" className="text-xs">
                         {t('preWorkflow')}
                     </TabsTrigger>
@@ -114,7 +99,6 @@ export const TranslationProcessPanel: React.FC<TranslationProcessPanelProps> = (
                 </TabsList>
             </div>
 
-            {/* ... TabsContent 内容保持不变 ... */}
             <TabsContent value="pre-flow" className="m-1 flex-1 p-1">
                 <MTWorkflowPanel />
             </TabsContent>
