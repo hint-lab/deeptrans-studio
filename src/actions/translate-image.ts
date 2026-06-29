@@ -2,6 +2,7 @@
 'use server'
 import { createLogger } from '@/lib/logger';
 import { requireUser } from '@/lib/guards';
+import { pdfParseToStructuredJson } from '@/lib/parsers/pdf-parser';
 const logger = createLogger({
     type: 'actions:translate-image',
 }, {
@@ -13,14 +14,14 @@ const logger = createLogger({
 // 配置语言支持
 const SUPPORTED_LANGUAGES = {
     auto: ['auto', '自动检测'],
-    zh: ['zh', '中文'],
-    'zh-CN': ['zh', '中文'],
+    zh: ['ch', '中文'],
+    'zh-CN': ['ch', '中文'],
     en: ['en', '英语'],
-    ja: ['ja', '日语'],
-    ko: ['ko', '韩语'],
-    fr: ['fr', '法语'],
-    es: ['es', '西班牙语'],
-    de: ['de', '德语'],
+    ja: ['japan', '日语'],
+    ko: ['korean', '韩语'],
+    fr: ['latin', '法语'],
+    es: ['latin', '西班牙语'],
+    de: ['latin', '德语'],
 } as const
 
 type SupportedLang = keyof typeof SUPPORTED_LANGUAGES
@@ -46,8 +47,8 @@ type OcrActionResult =
       }
 
 function normalizeOcrLanguage(language?: string) {
-    if (!language || language === 'auto') return 'auto'
-    if (language === 'zh-CN' || language === 'zh') return 'zh'
+    if (!language || language === 'auto') return process.env.MINERU_LANGUAGE || 'ch'
+    if (language === 'zh-CN' || language === 'zh') return 'ch'
     if (language in SUPPORTED_LANGUAGES) {
         return SUPPORTED_LANGUAGES[language as SupportedLang][0]
     }
@@ -125,16 +126,6 @@ function extractOcrText(data: unknown): string {
     return parseTextPayload(data)
 }
 
-async function readJsonResponse(response: Response) {
-    const text = await response.text()
-    if (!text) return null
-    try {
-        return JSON.parse(text)
-    } catch {
-        return { text }
-    }
-}
-
 export async function fetchTextFromImg(
     imageUrl: string,
     options?: TranslateImageOptions
@@ -143,52 +134,20 @@ export async function fetchTextFromImg(
     const language = normalizeOcrLanguage(options?.sourceLang || 'auto')
     const shouldEnhance = options?.enhanceImage ?? true
     const timeout = options?.timeout || 60000
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), timeout)
 
     try {
-        const ocr_auth_url = process.env.OCR_AUTH_URL ?? 'http://localhost:5000/api/v1/auth/token';
-        const ocr_base_url = process.env.OCR_BASE_URL ?? 'http://localhost:5000/api/v1/ocr/url';
-        logger.info('OCR request started:', { language, enhanceImage: shouldEnhance })
-        const res = await fetch(ocr_auth_url, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            signal: controller.signal,
-            body: JSON.stringify({
-                "client_id": process.env.OCR_CLIENT_ID || "default_client",
-                "client_secret": process.env.OCR_CLIENT_SECRET
-            }),
-        });
-        const resjson = await readJsonResponse(res);
-        const access_token = resjson?.data?.access_token;
-        if (!res.ok || !access_token) {
-            logger.error('获取访问令牌失败:', { status: res.status, body: resjson });
-            throw new Error(`后端服务错误: ${res.status}`);
-        }
-        const response = await fetch(ocr_base_url, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${access_token}`,
-            },
-            signal: controller.signal,
-            body: JSON.stringify({
-                "file_url": imageUrl,
-                "language": language,
-                "enhance_image": shouldEnhance,
-            }),
-        });
-        const data = await readJsonResponse(response);
-        if (!response.ok) {
-            logger.error('OCR请求失败:', { status: response.status, body: data })
-            throw new Error(`后端服务错误: ${response.status}`);
-        }
+        logger.info('MinerU image OCR started:', { language, enhanceImage: shouldEnhance })
+        const data = await pdfParseToStructuredJson(imageUrl, {
+            language,
+            isOcr: true,
+            enableTable: true,
+            enableFormula: false,
+            timeoutMs: timeout,
+        })
 
         const text = extractOcrText(data)
         if (!text) {
-            logger.error('OCR返回为空:', { body: data })
+            logger.error('MinerU image OCR returned empty text:', { source: data?.structured?.source })
             return {
                 success: false,
                 error: '未识别到图片文字',
@@ -196,7 +155,11 @@ export async function fetchTextFromImg(
             }
         }
 
-        logger.info('OCR request completed:', { chars: text.length, language })
+        logger.info('MinerU image OCR completed:', {
+            chars: text.length,
+            language,
+            source: data?.structured?.source,
+        })
         return {
             success: true,
             text,
@@ -210,13 +173,11 @@ export async function fetchTextFromImg(
                 : error instanceof Error
                   ? error.message
                   : '图片识别失败'
-        logger.error('OCR处理错误:', error);
+        logger.error('MinerU图片识别错误:', error);
         return {
             success: false,
             error: message,
         }
-    } finally {
-        clearTimeout(timeoutId)
     }
 
 }

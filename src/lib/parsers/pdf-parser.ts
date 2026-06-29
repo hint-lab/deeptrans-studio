@@ -48,7 +48,15 @@ function buildStructured(text: string) {
     return { paragraphs, structured, html: html ? `<div>${html}</div>` : undefined };
 }
 
-function getMineruConfig() {
+type MineruParseOptions = {
+    language?: string;
+    isOcr?: boolean;
+    enableTable?: boolean;
+    enableFormula?: boolean;
+    timeoutMs?: number;
+};
+
+function getMineruConfig(options?: MineruParseOptions) {
     const mode = (process.env.MINERU_API_MODE || 'agent').toLowerCase();
     const token = process.env.MINERU_API_TOKEN;
     return {
@@ -62,12 +70,12 @@ function getMineruConfig() {
             process.env.MINERU_AGENT_BASE_URL || 'https://mineru.net/api/v1/agent'
         ).replace(/\/$/, ''),
         modelVersion: process.env.MINERU_MODEL_VERSION || 'vlm',
-        timeoutMs: Number(process.env.MINERU_TIMEOUT_MS || 300000),
+        timeoutMs: options?.timeoutMs ?? Number(process.env.MINERU_TIMEOUT_MS || 300000),
         pollIntervalMs: Number(process.env.MINERU_POLL_INTERVAL_MS || 3000),
-        language: process.env.MINERU_LANGUAGE || 'ch',
-        isOcr: process.env.MINERU_IS_OCR === 'true',
-        enableTable: process.env.MINERU_ENABLE_TABLE !== 'false',
-        enableFormula: process.env.MINERU_ENABLE_FORMULA !== 'false',
+        language: options?.language || process.env.MINERU_LANGUAGE || 'ch',
+        isOcr: options?.isOcr ?? process.env.MINERU_IS_OCR === 'true',
+        enableTable: options?.enableTable ?? process.env.MINERU_ENABLE_TABLE !== 'false',
+        enableFormula: options?.enableFormula ?? process.env.MINERU_ENABLE_FORMULA !== 'false',
         pageRange: process.env.MINERU_PAGE_RANGE || undefined,
     };
 }
@@ -123,8 +131,8 @@ async function fetchText(url: string, timeoutMs: number) {
     }
 }
 
-async function parseWithMineru(url: string) {
-    const cfg = getMineruConfig();
+async function parseWithMineru(url: string, options?: MineruParseOptions) {
+    const cfg = getMineruConfig(options);
     if (cfg.mode === 'standard' || cfg.mode === 'precise') return parseWithMineruStandard(url, cfg);
     if (cfg.mode === 'agent') return parseWithMineruAgent(url, cfg);
     throw new Error(`未知 MinerU API 模式: ${cfg.mode}`);
@@ -276,9 +284,10 @@ async function parsePdfLocally(url: string) {
 }
 
 export async function pdfParseToStructuredJson(
-    url: string
+    url: string,
+    options?: MineruParseOptions
 ): Promise<{ text: string; html?: string; contentType?: string; structured?: any }> {
     if (process.env.MINERU_DISABLE === 'true') return parsePdfLocally(url);
 
-    return parseWithMineru(url);
+    return parseWithMineru(url, options);
 }
