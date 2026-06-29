@@ -11,7 +11,6 @@ import { toast } from 'sonner';
 import { PostEditMenu } from './components/post-edit-menu';
 import { QualityMenu } from './components/quality-menu';
 import { RunMenu } from './components/run-menu';
-import { SignoffMenu } from './components/signoff-menu';
 import { TranslateMenu } from './components/translate-menu';
 // 改为通过 API 路由调用，避免前端解析服务端依赖
 import {
@@ -39,7 +38,6 @@ import { useActiveDocumentItem } from '@/hooks/useActiveDocumentItem';
 import { useRunningState } from '@/hooks/useRunning';
 import { useUserSettings } from '@/hooks/useUserSettings';
 import { createLogger } from '@/lib/logger';
-import { CheckCircle2, UserCheck } from 'lucide-react';
 import { useSession } from 'next-auth/react';
 import { useLocale, useTranslations } from 'next-intl';
 import { useState as useReactState } from 'react';
@@ -54,62 +52,6 @@ const logger = createLogger({
     colors: true, // 仅当json：false时启用颜色输出可用
     includeCaller: false, // 日志不包含调用者
 });
-
-function ReviewStageMarker({
-    active,
-    completed,
-}: {
-    active: boolean;
-    completed: boolean;
-}) {
-    const tStage = useTranslations('IDE.translationStages');
-    const label = tStage('status.reviewing');
-
-    return (
-        <div
-            data-stage-label="review"
-            aria-label={label}
-            title={label}
-            className={[
-                'relative flex h-10 w-12 items-center justify-center px-2 py-2 font-medium transition-all duration-200 md:px-4 md:py-3 xl:w-36',
-                active
-                    ? 'text-indigo-600 dark:text-indigo-400'
-                    : completed
-                        ? 'text-emerald-600 dark:text-emerald-400'
-                        : 'text-gray-500 dark:text-gray-400',
-            ].join(' ')}
-        >
-            <span className="relative z-10 flex items-center gap-1">
-                <UserCheck className="h-4 w-4 flex-none shrink-0" />
-                <span className="hidden whitespace-nowrap text-sm xl:inline">{label}</span>
-            </span>
-        </div>
-    );
-}
-
-function CompletedStageMarker({ active }: { active: boolean }) {
-    const tStage = useTranslations('IDE.translationStages');
-    const label = tStage('COMPLETED');
-
-    return (
-        <div
-            data-stage-label="completed"
-            aria-label={label}
-            title={label}
-            className={[
-                'relative flex h-10 w-12 items-center justify-center px-2 py-2 font-medium transition-all duration-200 md:px-4 md:py-3 xl:w-28',
-                active
-                    ? 'text-emerald-600 dark:text-emerald-400'
-                    : 'text-gray-500 dark:text-gray-400',
-            ].join(' ')}
-        >
-            <span className="relative z-10 flex items-center gap-1">
-                <CheckCircle2 className="h-4 w-4 flex-none shrink-0" />
-                <span className="hidden whitespace-nowrap text-sm xl:inline">{label}</span>
-            </span>
-        </div>
-    );
-}
 
 export function ActionSection() {
     // 在组件顶层获取所有需要的状态
@@ -1297,17 +1239,6 @@ export function ActionSection() {
                     onBatchTranslate={handleBatchTranslate}
                     progressPercent={batchProgress}
                 />
-                <ReviewStageMarker
-                    active={currentStage === 'MT_REVIEW'}
-                    completed={[
-                        'QA',
-                        'QA_REVIEW',
-                        'POST_EDIT',
-                        'POST_EDIT_REVIEW',
-                        'SIGN_OFF',
-                        'COMPLETED',
-                    ].includes(currentStage || '')}
-                />
                 <QualityMenu
                     isTranslating={
                         isRunning &&
@@ -1319,15 +1250,6 @@ export function ActionSection() {
                         .some((it: any) => it.status === 'MT_REVIEW')}
                     onEvaluate={handleEvaluateMode}
                     progressPercent={batchProgress}
-                />
-                <ReviewStageMarker
-                    active={currentStage === 'QA_REVIEW'}
-                    completed={[
-                        'POST_EDIT',
-                        'POST_EDIT_REVIEW',
-                        'SIGN_OFF',
-                        'COMPLETED',
-                    ].includes(currentStage || '')}
                 />
                 <PostEditMenu
                     isTranslating={isRunning &&
@@ -1475,165 +1397,6 @@ export function ActionSection() {
                         }
                     }}
                 />
-                <ReviewStageMarker
-                    active={currentStage === 'POST_EDIT_REVIEW'}
-                    completed={['SIGN_OFF', 'COMPLETED'].includes(currentStage || '')}
-                />
-
-                {/* 签发菜单（与其他按钮同一行显示） */}
-                <SignoffMenu
-                    isRunning={isRunning}
-                    canSignoff={(explorerTabs?.documentTabs ?? [])
-                        .flatMap(t => t.items ?? [])
-                        .some((it: any) => it.status === 'POST_EDIT_REVIEW')}
-                    onSignoffCurrent={async () => {
-                        try {
-                            const id = (activeDocumentItem as any)?.id;
-                            if (!id) return;
-                            // 检查当前分段状态是否为 POST_EDIT_REVIEW
-                            let currentItemStatus = activeDocumentItem?.status;
-                            // 从 explorerTabs 中查找最新的状态
-                            const tabs = explorerTabs?.documentTabs ?? [];
-                            for (const tab of tabs) {
-                                const item = (tab.items ?? []).find((it: any) => it.id === id);
-                                if (item) {
-                                    currentItemStatus = item.status;
-                                    break;
-                                }
-                            }
-                            if (currentItemStatus !== 'POST_EDIT_REVIEW') {
-                                toast.error(
-                                    `当前分段状态为 ${currentItemStatus || '未知'}，无法签发。仅译后编辑复核状态可以进行签发`
-                                );
-                                return;
-                            }
-                            setIsRunning(true);
-                            setCurrentOperation('signoff_single');
-                            try {
-                                await updateDocItemStatusAction(id, 'SIGN_OFF');
-                                // 只记录 SIGN_OFF 事件，COMPLETED 事件应该在后续流程中记录
-                                await recordGoToNextTranslationProcessEventAction(
-                                    id,
-                                    'SIGN_OFF',
-                                    'HUMAN',
-                                    'SUCCESS'
-                                );
-                            } catch { }
-                            setExplorerTabs((prev: any) => {
-                                if (!prev?.documentTabs) return prev;
-                                return {
-                                    ...prev,
-                                    documentTabs: prev.documentTabs.map((tab: any) => ({
-                                        ...tab,
-                                        items: (tab.items ?? []).map((it: any) =>
-                                            it.id === id ? { ...it, status: 'SIGN_OFF' } : it
-                                        ),
-                                    })),
-                                };
-                            });
-                            setCurrentStage('SIGN_OFF' as any);
-                        } finally {
-                            setIsRunning(false);
-                            setCurrentOperation('idle');
-                        }
-                    }}
-                    onBatchSignoff={async () => {
-                        try {
-                            const tabs = explorerTabs?.documentTabs ?? [];
-                            const aid = (activeDocumentItem as any)?.id;
-                            const currentTab = tabs.find((t: any) =>
-                                (t.items ?? []).some((it: any) => it.id === aid)
-                            );
-                            const items: any[] = (currentTab?.items ?? []) as any[];
-                            if (!items.length) return;
-
-                            setProgressTitle('批量签发中');
-                            setBatchProgress(0);
-                            setBatchOpen(true);
-                            setIsRunning(true);
-                            setCurrentOperation('signoff_batch');
-
-                            let done = 0;
-                            const total = items.length;
-
-                            // 只处理 POST_EDIT 状态的分段
-                            const itemsToSignoff = items.filter(
-                                (it: any) => it.status === 'POST_EDIT_REVIEW'
-                            );
-                            const totalToSignoff = itemsToSignoff.length;
-
-                            if (totalToSignoff === 0) {
-                                toast.info('当前页签中没有需要签发的分段');
-                                setBatchOpen(false);
-                                setIsRunning(false);
-                                setCurrentOperation('idle');
-                                return;
-                            }
-
-                            for (const it of itemsToSignoff) {
-                                try {
-                                    await updateDocItemStatusAction(it.id, 'SIGN_OFF');
-                                    // 只记录 SIGN_OFF 事件
-                                    await recordGoToNextTranslationProcessEventAction(
-                                        it.id,
-                                        'SIGN_OFF',
-                                        'HUMAN',
-                                        'SUCCESS'
-                                    );
-                                } catch (e) {
-                                    logger.error(`签发分段 ${it.id} 失败:`, e);
-                                }
-                                done += 1;
-                                setBatchProgress(Math.round((done / totalToSignoff) * 100));
-                            }
-
-                            // 更新当前激活项（如果也在处理列表中）
-                            try {
-                                if ((activeDocumentItem as any)?.id) {
-                                    const currentItem = itemsToSignoff.find(
-                                        (it: any) => it.id === (activeDocumentItem as any)?.id
-                                    );
-                                    if (currentItem) {
-                                        setCurrentStage('SIGN_OFF' as any);
-                                    }
-                                }
-                            } catch { }
-
-                            // 本地同步（只更新处理过的分段）
-                            setExplorerTabs((prev: any) => {
-                                if (!prev?.documentTabs) return prev;
-                                return {
-                                    ...prev,
-                                    documentTabs: prev.documentTabs.map((tab: any) => {
-                                        if (tab.id === currentTab?.id) {
-                                            return {
-                                                ...tab,
-                                                items: (tab.items ?? []).map((it: any) => {
-                                                    const shouldUpdate = itemsToSignoff.some(
-                                                        (x: any) => x.id === it.id
-                                                    );
-                                                    return shouldUpdate
-                                                        ? { ...it, status: 'SIGN_OFF' }
-                                                        : it;
-                                                }),
-                                            };
-                                        }
-                                        return tab;
-                                    }),
-                                };
-                            });
-
-                            setBatchOpen(false);
-                            toast.success(`批量签发完成：共处理 ${totalToSignoff} 个分段`);
-                        } catch (e) {
-                            toast.error(`批量签发失败：${String(e)}`);
-                        } finally {
-                            setIsRunning(false);
-                            setCurrentOperation('idle');
-                        }
-                    }}
-                />
-                <CompletedStageMarker active={currentStage === 'COMPLETED'} />
             </div>
             <BatchProgressDialog
                 open={batchOpen}
