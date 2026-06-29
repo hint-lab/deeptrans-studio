@@ -57,7 +57,6 @@ export default function DocumentIntelligencePage() {
     } | null>(null);
     const [fileName, setFileName] = useState<string | null>(null);
     const [isTranslating, setIsTranslating] = useState(false);
-    const [translationProgress, setTranslationProgress] = useState(0);
     const [translationResult, setTranslationResult] = useState<{
         content: string;
         sourceLanguage: string;
@@ -152,30 +151,24 @@ export default function DocumentIntelligencePage() {
         }
 
         setIsTranslating(true);
-        setTranslationProgress(0);
         setTaskStatus('processing');
-
-        // 模拟进度更新（实际应用中可能来自WebSocket或轮询）
-        const progressInterval = setInterval(() => {
-            setTranslationProgress(prev => {
-                if (prev >= 90) {
-                    clearInterval(progressInterval);
-                    return prev;
-                }
-                return prev + 10;
-            });
-        }, 500);
+        const startedAt = Date.now();
 
         try {
             const { success, data, error } = await parseDocxAction(uploadedFile.fileUrl);
+            if (!success) {
+                throw new Error(error || t('translationFailed'));
+            }
             let content = '';
-            let previewHtml: string | undefined;
             if (data) {
                 content = String(data.text || '').trim();
             }
+            if (!content) {
+                throw new Error(t('ocrEmpty'));
+            }
             // 构建翻译参数
             const translationParams = {
-                sourceText: data?.text || '',
+                sourceText: content,
                 sourceLanguage: sourceLanguage,
                 targetLanguage: targetLanguage
             };
@@ -189,15 +182,12 @@ export default function DocumentIntelligencePage() {
                     translatedContent: res.translation,
                     sourceLanguage: translationParams.sourceLanguage,
                     targetLanguage: translationParams.targetLanguage,
-                    engine: "deepseek",
+                    engine: translationEngine,
                     fileName: uploadedFile.fileName,
-                    // 可选的其他字段
-                    wordCount: 1250,
-                    timeUsed: 3.5
+                    characterCount: content.length,
+                    timeUsed: Number(((Date.now() - startedAt) / 1000).toFixed(1))
                 }
             };
-            clearInterval(progressInterval);
-            setTranslationProgress(100);
 
             if (result.success && result.data) {
                 setTranslatedContent(result.data.translatedContent);
@@ -215,13 +205,11 @@ export default function DocumentIntelligencePage() {
                 //toast.error(result.error || t('translationFailed'));
             }
         } catch (error) {
-            clearInterval(progressInterval);
             setTaskStatus('failed');
             logger.error('Translation error:', error);
             toast.error(t('translationError'));
         } finally {
             setIsTranslating(false);
-            setTimeout(() => setTranslationProgress(0), 1000);
         }
     };
     // 加载公共/私有词典（不加载词条）
@@ -843,7 +831,7 @@ export default function DocumentIntelligencePage() {
                                 {isTranslating ? (
                                     <>
                                         <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                                        {t('translating')} {translationProgress}%
+                                        {t('translating')}
                                     </>
                                 ) : (
                                     t('startTranslation')
@@ -853,10 +841,7 @@ export default function DocumentIntelligencePage() {
                             {taskStatus === 'processing' && (
                                 <div className="flex-1">
                                     <div className="h-2 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
-                                        <div
-                                            className="h-full rounded-full bg-gradient-to-r from-blue-500 to-purple-600 transition-all duration-300"
-                                            style={{ width: `${translationProgress}%` }}
-                                        />
+                                        <div className="h-full w-1/3 animate-pulse rounded-full bg-blue-600" />
                                     </div>
                                 </div>
                             )}

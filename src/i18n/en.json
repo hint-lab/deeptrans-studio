@@ -170,6 +170,7 @@
             "readyForTranslation": "ready For Translation",
             "downloadSuccess": "download Success",
             "translationSuccess": "translation Success",
+            "ocrEmpty": "No text was parsed from the document",
             "copiedToClipboard": "copied To Clipboard",
             "translationResult": "Translation Result",
             "downloadResult": "Download Result",

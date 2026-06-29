@@ -172,6 +172,7 @@
             "downloadResult": "下载翻译结果",
             "downloadSuccess": "下载成功",
             "translationSuccess": "翻译成功",
+            "ocrEmpty": "未解析到文档文字",
             "copiedToClipboard": "复制到剪贴板",
             "loadDictionariesFailed": "加载词典失败",
             "noFileSelected": "没有选择文件",
