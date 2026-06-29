@@ -29,7 +29,11 @@ const logger = createLogger(
 );
 // 本地子组件：状态点与状态徽章
 const ItemStatusDot = ({ status }: { status: string }) => {
-    return <span className={`h-2 w-2 rounded-full ${getTranslationStageDotClass(status)}`} />;
+    return (
+        <span
+            className={`inline-block h-2 w-2 flex-none shrink-0 rounded-full ${getTranslationStageDotClass(status)}`}
+        />
+    );
 };
 const ItemStatusBadge = ({ status }: { status: string }) => {
     const t = useTranslations('IDE.explorerPanel');
