@@ -199,6 +199,8 @@
         "ImageTranslate": {
             "translationError": "Translation Error",
             "translationFailed": "Translation Failed",
+            "ocrFailed": "Image recognition failed",
+            "ocrEmpty": "No text was recognized in the image",
             "pleaseTryAgain": "Please try again",
             "retry": "Retry",
             "title": "Image Translation",

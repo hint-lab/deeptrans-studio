@@ -199,6 +199,8 @@
         "ImageTranslate": {
             "translationError": "翻译出错",
             "translationFailed": "翻译失败",
+            "ocrFailed": "图片识别失败",
+            "ocrEmpty": "未识别到图片文字",
             "pleaseTryAgain": "请重试",
             "retry": "重试",
             "title": "图片翻译",

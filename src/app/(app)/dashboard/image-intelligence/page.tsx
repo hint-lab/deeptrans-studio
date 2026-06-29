@@ -75,6 +75,7 @@ export default function ImageIntelligencePage() {
     // 文档识别翻译参数
     const [taskStatus, setTaskStatus] = useState('idle');
     const [translatedContent, setTranslatedContent] = useState<string | null>(null);
+    const [recognizedText, setRecognizedText] = useState<string | null>(null);
     const [sourceLanguage, setSourceLanguage] = useState('auto');
     const [targetLanguage, setTargetLanguage] = useState('zh');
     const [translationEngine, setTranslationEngine] = useState('deepseek');
@@ -125,6 +126,7 @@ export default function ImageIntelligencePage() {
         setFileName(fileInfo.fileName);
         setTaskStatus('pending');
         setTranslatedContent(null);
+        setRecognizedText(null);
         setTranslationResult(null);
         setUploadedFile(fileInfo);
         toast.success(t('uploadSuccess'));
@@ -171,24 +173,23 @@ export default function ImageIntelligencePage() {
         }, 500);
 
         try {
-            // 调用 Server Action
-            const { data } = await fetchTextFromImg(uploadedFile.fileUrl, {
-                targetLang: targetLanguage as any,
+            const ocrResult = await fetchTextFromImg(uploadedFile.fileUrl, {
+                sourceLang: sourceLanguage,
+                targetLang: targetLanguage,
                 enhanceImage: true,
                 timeout: 60000
             })
-            const jsonString = data.ocr_result.text;
-            // 2. 将字符串解析为真正的数组对象
-            const items = JSON.parse(jsonString);
 
-            // 3. 过滤 type 为 'text' 的项，并提取 text 字段
-            //items.filter((item: any) => item.type === 'text').map((item: any) => item.text);
-            // 2. 过滤并拼接
-            const combinedText = items
-                .filter((item: any) => item.type === "text")
-                .map((item: any) => item.text)
-                .join('\n'); // 使用换行符拼接
-            // 构建翻译参数
+            if (!ocrResult.success) {
+                throw new Error(ocrResult.error || t('ocrFailed'));
+            }
+
+            const combinedText = ocrResult.text.trim();
+            if (!combinedText) {
+                throw new Error(t('ocrEmpty'));
+            }
+
+            setRecognizedText(combinedText);
             logger.info("提取的图片内容:", combinedText)
             const translationParams = {
                 sourceText: combinedText || '',
@@ -754,6 +755,9 @@ export default function ImageIntelligencePage() {
                                                 setUploadedFile(null);
                                                 setFileName(null);
                                                 setTaskStatus('idle');
+                                                setRecognizedText(null);
+                                                setTranslatedContent(null);
+                                                setTranslationResult(null);
                                             }}
                                         >
                                             <X className="h-4 w-4" />
@@ -880,14 +884,25 @@ export default function ImageIntelligencePage() {
                                 <Button
                                     className="w-40"
                                     onClick={() => {
-                                        // 复制到剪贴板
-                                        handleTranslateDocument
-                                        toast.success(t('translationFailed'));
+                                        void handleTranslateDocument();
                                     }}>
                                     {t('retry')}
                                 </Button>
                             )}
                         </div>
+
+                        {recognizedText && (
+                            <div className="mt-6 rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-800">
+                                <div className="mb-2 text-sm font-semibold">
+                                    {t('ocrResult')}
+                                </div>
+                                <ScrollArea className="max-h-48 rounded-md border bg-white p-3 dark:bg-gray-900">
+                                    <div className="whitespace-pre-wrap text-sm leading-relaxed text-gray-700 dark:text-gray-200">
+                                        {recognizedText}
+                                    </div>
+                                </ScrollArea>
+                            </div>
+                        )}
 
                         {translatedContent && translationResult && (
                             <div className="mt-6 rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-800">
