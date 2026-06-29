@@ -3,8 +3,6 @@ import { MenubarMenu, MenubarTrigger, MenubarContent, MenubarItem } from '@/comp
 import { cn } from '@/lib/utils';
 import { Icons } from '@/components/icons';
 import { BookText } from 'lucide-react';
-import { useTranslationLanguage } from '@/hooks/useTranslation';
-import { useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 interface TranslateMenuProps {
@@ -22,12 +20,7 @@ export function TranslateMenu({
     onBatchTranslate,
     progressPercent,
 }: TranslateMenuProps) {
-    const { sourceLanguage, targetLanguage } = useTranslationLanguage();
     const t = useTranslations('IDE.menus.translate');
-
-    useEffect(() => {
-        // console.log(sourceLanguage, targetLanguage);
-    }, [sourceLanguage, targetLanguage]);
 
     return (
         <MenubarMenu>

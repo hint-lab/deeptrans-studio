@@ -146,7 +146,6 @@ const RightSidebar: React.FC = () => {
                             </Button>
                             <Button
                                 onClick={() => {
-                                    console.log('send mail:', { contactTitle, contactMessage });
                                     setContactOpen(false);
                                     setContactTitle('');
                                     setContactMessage('');

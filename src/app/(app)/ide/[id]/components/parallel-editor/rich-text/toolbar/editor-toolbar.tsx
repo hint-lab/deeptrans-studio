@@ -29,7 +29,6 @@ interface EditorToolbarProps {
 const EditorToolbar = ({ editor, onSave }: EditorToolbarProps) => {
     const t = useTranslations('IDE.editor');
     const handleSave = () => {
-        console.log('save document');
         onSave?.();
     };
 

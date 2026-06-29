@@ -112,7 +112,6 @@ export default function PreTranslatePanel() {
                     translation: String((row as any)?.translation || ''),
                 }))
                 .filter(x => x.term);
-            console.log('genEmbedded', filtered);
             const embeddedText = await embedAndTranslateAction(
                 sourceText,
                 sourceLanguage || 'auto',
