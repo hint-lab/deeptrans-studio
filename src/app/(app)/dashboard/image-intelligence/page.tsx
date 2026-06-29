@@ -150,11 +150,6 @@ export default function ImageIntelligencePage() {
             return;
         }
 
-        if (!session?.user?.id) {
-            toast.error(t('loginRequired'));
-            return;
-        }
-
         setIsTranslating(true);
         setTaskStatus('processing');
         const startedAt = Date.now();
@@ -177,7 +172,6 @@ export default function ImageIntelligencePage() {
             }
 
             setRecognizedText(combinedText);
-            logger.info("提取的图片内容:", combinedText)
             const translationParams = {
                 sourceText: combinedText || '',
                 sourceLanguage: sourceLanguage,

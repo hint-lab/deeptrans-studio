@@ -68,6 +68,7 @@ export function MediaTranslationWorkspace({
             <div className="p-4">
                 <div className="flex items-center gap-4">
                     <Button
+                        type="button"
                         className="w-40"
                         onClick={() => {
                             void onTranslate();
@@ -94,6 +95,7 @@ export function MediaTranslationWorkspace({
 
                     {status === 'failed' && (
                         <Button
+                            type="button"
                             className="w-40"
                             variant="outline"
                             onClick={() => {
@@ -130,7 +132,12 @@ export function MediaTranslationWorkspace({
                             </div>
                             <div className="flex items-center gap-2">
                                 <Badge variant="outline">{result.fileName}</Badge>
-                                <Button variant="outline" size="sm" onClick={copyResult}>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={copyResult}
+                                >
                                     {labels.copy}
                                 </Button>
                             </div>
@@ -143,12 +150,12 @@ export function MediaTranslationWorkspace({
                         </ScrollArea>
 
                         <div className="mt-4 flex gap-3">
-                            <Button onClick={onDownload}>
+                            <Button type="button" onClick={onDownload}>
                                 <FileText className="mr-2 h-4 w-4" />
                                 {labels.downloadResult}
                             </Button>
                             {onSave && labels.saveToMyTranslations && (
-                                <Button variant="outline" onClick={onSave}>
+                                <Button type="button" variant="outline" onClick={onSave}>
                                     <BookOpen className="mr-2 h-4 w-4" />
                                     {labels.saveToMyTranslations}
                                 </Button>

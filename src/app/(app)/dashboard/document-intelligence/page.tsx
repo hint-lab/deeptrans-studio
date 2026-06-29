@@ -145,11 +145,6 @@ export default function DocumentIntelligencePage() {
             return;
         }
 
-        if (!session?.user?.id) {
-            toast.error(t('loginRequired'));
-            return;
-        }
-
         setIsTranslating(true);
         setTaskStatus('processing');
         const startedAt = Date.now();
