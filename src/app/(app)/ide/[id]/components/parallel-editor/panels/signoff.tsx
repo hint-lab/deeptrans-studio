@@ -146,7 +146,13 @@ export default function SignoffPanel() {
                 )}
             </div>
             <div className="mt-2 w-full overflow-x-auto rounded border bg-white dark:border-slate-800 dark:bg-slate-900">
-                <div className="relative flex w-full items-start gap-6 px-4 py-4">
+                <div
+                    className="relative grid w-full items-start px-4 py-4"
+                    style={{
+                        gridTemplateColumns: `repeat(${Math.max(timeline.length, 1)}, minmax(112px, 1fr))`,
+                        minWidth: timeline.length ? `${timeline.length * 112}px` : undefined,
+                    }}
+                >
                     {timeline.length ? (
                         timeline.map((s, i) => {
                             const isDone = s.status === 'SUCCESS';
@@ -160,11 +166,11 @@ export default function SignoffPanel() {
                                         ? 'bg-yellow-400 border-yellow-500'
                                         : 'bg-white dark:bg-slate-900 border-blue-300 dark:border-blue-700';
                             return (
-                                <div key={s.key} className="relative flex flex-col items-center">
+                                <div key={s.key} className="relative flex min-w-0 flex-col items-center text-center">
                                     {/* 连接线 */}
                                     {i < timeline.length - 1 && (
                                         <div
-                                            className={`absolute left-4 right-[-3rem] top-3 h-[2px] ${isFail ? 'bg-red-200 dark:bg-red-900' : isDone ? 'bg-blue-200 dark:bg-blue-900' : 'bg-blue-100 dark:bg-blue-800'}`}
+                                            className={`absolute left-1/2 right-[-50%] top-3 h-[2px] ${isFail ? 'bg-red-200 dark:bg-red-900' : isDone ? 'bg-blue-200 dark:bg-blue-900' : 'bg-blue-100 dark:bg-blue-800'}`}
                                         />
                                     )}
                                     {/* 节点 */}
@@ -172,12 +178,12 @@ export default function SignoffPanel() {
                                         className={`z-10 h-6 w-6 rounded-full border-2 ${dotCls} shadow`}
                                     />
                                     {/* 标签 */}
-                                    <div className="mt-2 whitespace-nowrap text-[11px] text-foreground/80">
+                                    <div className="mt-2 w-full px-1 text-center text-[11px] text-foreground/80">
                                         {s.label}
                                     </div>
                                     {/* 状态文案 */}
                                     <div
-                                        className={`mt-0.5 text-[10px] ${isFail ? 'text-red-600' : isDone ? 'text-blue-600' : 'text-foreground/50'}`}
+                                        className={`mt-0.5 w-full px-1 text-center text-[10px] ${isFail ? 'text-red-600' : isDone ? 'text-blue-600' : 'text-foreground/50'}`}
                                     >
                                         <div>
                                             {isFail
