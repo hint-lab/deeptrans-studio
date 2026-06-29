@@ -1,7 +1,6 @@
 'use client';
 import { fetchDictionariesAction, fetchDictionaryEntriesAction } from '@/actions/dictionary';
-import { runPreTranslateAction } from '@/actions/pre-translate';
-import { fetchTextFromImg } from '@/actions/translate-image';
+import { fetchTextFromImg, translateRecognizedImageText } from '@/actions/translate-image';
 import { FileUpload, IMAGE_ACCEPTED_FILE_TYPES } from '@/components/file-upload';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -196,10 +195,14 @@ export default function ImageIntelligencePage() {
                 sourceLanguage: sourceLanguage,
                 targetLanguage: targetLanguage
             };
-            // 调用翻译API
-            const res = await runPreTranslateAction(translationParams.sourceText,
+            const res = await translateRecognizedImageText(
+                translationParams.sourceText,
                 translationParams.sourceLanguage,
-                translationParams.targetLanguage);
+                translationParams.targetLanguage
+            );
+            if (!res.success) {
+                throw new Error(res.error || t('translationFailed'));
+            }
             const result = {
                 success: true,
                 data: {

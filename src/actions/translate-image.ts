@@ -3,6 +3,7 @@
 import { createLogger } from '@/lib/logger';
 import { requireUser } from '@/lib/guards';
 import { pdfParseToStructuredJson } from '@/lib/parsers/pdf-parser';
+import { chatText } from '@/lib/llm';
 const logger = createLogger({
     type: 'actions:translate-image',
 }, {
@@ -53,6 +54,26 @@ function normalizeOcrLanguage(language?: string) {
         return SUPPORTED_LANGUAGES[language as SupportedLang][0]
     }
     return language
+}
+
+function getLanguageName(language?: string) {
+    const normalized = language || 'auto';
+    const names: Record<string, string> = {
+        auto: 'auto-detected source language',
+        zh: 'Chinese',
+        'zh-CN': 'Chinese',
+        ch: 'Chinese',
+        en: 'English',
+        ja: 'Japanese',
+        japan: 'Japanese',
+        ko: 'Korean',
+        korean: 'Korean',
+        fr: 'French',
+        es: 'Spanish',
+        de: 'German',
+        latin: 'Latin-script language',
+    };
+    return names[normalized] || normalized;
 }
 
 function readPath(value: unknown, path: string[]) {
@@ -180,6 +201,49 @@ export async function fetchTextFromImg(
         }
     }
 
+}
+
+export async function translateRecognizedImageText(
+    text: string,
+    sourceLanguage?: string,
+    targetLanguage?: string
+): Promise<{ success: true; translation: string } | { success: false; error: string }> {
+    await requireUser();
+    const source = getLanguageName(sourceLanguage);
+    const target = getLanguageName(targetLanguage || 'zh');
+    const content = String(text || '').trim();
+
+    if (!content) {
+        return { success: false, error: '图片识别结果为空' };
+    }
+
+    try {
+        const translation = await chatText(
+            [
+                {
+                    role: 'system',
+                    content:
+                        'You are a professional image text translator. Translate the user provided OCR text accurately. Preserve markdown headings, line breaks, numbers, and basic formatting. Output only the translated text.',
+                },
+                {
+                    role: 'user',
+                    content: `Source language: ${source}\nTarget language: ${target}\n\nOCR text:\n${content}`,
+                },
+            ],
+            { temperature: 0.1, maxTokens: 2000 }
+        );
+
+        return {
+            success: true,
+            translation: translation || content,
+        };
+    } catch (error) {
+        logger.error('图片文本翻译失败:', error);
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : '图片文本翻译失败',
+        };
+    }
 }
 // 获取支持的语言列表
 export async function getSupportedLanguages() {
