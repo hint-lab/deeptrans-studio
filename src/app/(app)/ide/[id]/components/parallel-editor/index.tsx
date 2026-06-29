@@ -501,6 +501,7 @@ export default function ParallelEditor({ className }: { className?: string }) {
                 // 同步阶段状态（确保切换分段后状态正确）
                 const currentStage = (documentItem as any)?.status || 'NOT_STARTED';
                 setCurrentStage(currentStage as any);
+                setSourceLoading(false);
 
                 // 自动触发 baseline 翻译：如果没有译文且状态为 NOT_STARTED
                 if (

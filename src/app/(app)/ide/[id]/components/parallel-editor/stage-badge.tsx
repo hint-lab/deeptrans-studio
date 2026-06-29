@@ -3,9 +3,9 @@
 import { updateDocItemStatusAction } from '@/actions/document-item';
 import { Button } from '@/components/ui/button';
 import {
-    TRANSLATION_MAIN_FLOW_NODES,
     TRANSLATION_REVIEW_STAGES,
     TRANSLATION_STAGES_SEQUENCE,
+    getTranslationStageBadgeClass,
     getTranslationStageLabel,
 } from '@/constants/translationStages';
 import { useActiveDocumentItem } from '@/hooks/useActiveDocumentItem';
@@ -231,57 +231,34 @@ const StageBadgeBar: React.FC<StageBadgeBarProps> = ({
         }
     }, [activeDocumentItem.id]);
 
-    // --- 混合渲染逻辑 ---
     const renderVisualStepper = () => {
-        // 当前真实阶段在总流程中的索引
         const currentRealStepIdx = steps.indexOf(currentStage as TranslationStage);
 
-        return TRANSLATION_MAIN_FLOW_NODES.map((node, index) => {
-            // 判断此节点是否包含当前阶段
-            const isNodeActive = node.stages.includes(currentStage);
-
-            // 判断此节点是否已完成：
-            // 逻辑：该节点包含的最后一个阶段，是否在“当前真实阶段”之前？
-            const lastStageInNode = node.stages[node.stages.length - 1];
-            const lastStageIdx = steps.indexOf(lastStageInNode as TranslationStage);
-            const isNodeDone = currentRealStepIdx > lastStageIdx;
-
-            const isReviewActive =
-                TRANSLATION_REVIEW_STAGES.includes(currentStage as any) && isNodeActive;
-
-            // 获取显示标签
-            const label = getTranslationStageLabel(node.labelStage, tStage);
-
-            // 样式基类
-            let containerCls = "flex items-center px-2 py-[2px] rounded-full border transition-all duration-200 relative";
-
-            if (isReviewActive) {
-                // 人工复核状态：橙红色，和自动流程的蓝紫色区分开。
-                containerCls += " bg-orange-600 border-orange-700 text-white shadow ring-2 ring-orange-400/35";
-            } else if (isNodeDone) {
-                // 已完成状态：统一紫色/Indigo
-                containerCls += " bg-indigo-500 border-indigo-600 text-white shadow";
-            } else if (isNodeActive) {
-                // 进行中状态：深紫色高亮 + 光晕
-                containerCls += " bg-indigo-600 border-indigo-700 text-white shadow ring-2 ring-indigo-400/40";
-            } else {
-                // 未开始状态：灰色
-                containerCls += " bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-foreground/70";
-            }
+        return steps.map((stage, index) => {
+            const stageIdx = steps.indexOf(stage);
+            const isActive = stage === currentStage;
+            const isDone = currentRealStepIdx > stageIdx;
+            const isReview = TRANSLATION_REVIEW_STAGES.includes(stage as any);
+            const label = getTranslationStageLabel(stage, tStage);
+            const badgeClass =
+                isActive || isDone
+                    ? getTranslationStageBadgeClass(stage)
+                    : 'px-2 py-[2px] rounded-full whitespace-nowrap border text-[10px] transition-all duration-200 bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-foreground/70';
+            const activeRing = isActive
+                ? isReview
+                    ? ' ring-2 ring-orange-400/35'
+                    : ' ring-2 ring-indigo-400/35'
+                : '';
 
             return (
-                <div key={node.id} className="flex items-center">
-                    <div className={containerCls}>
-                        {isRunning && isNodeActive && (
+                <div key={stage} className="flex items-center">
+                    <div className={`${badgeClass} relative flex items-center gap-1${activeRing}`}>
+                        {isRunning && isActive && (
                             <Loader2 className="mr-1 h-3 w-3 animate-spin opacity-90" />
                         )}
-
-                        <div className="flex flex-col items-center leading-none">
-                            <span>{label}</span>
-                        </div>
+                        <span>{label}</span>
                     </div>
-                    {/* 连接线 */}
-                    {index < TRANSLATION_MAIN_FLOW_NODES.length - 1 && (
+                    {index < steps.length - 1 && (
                         <ChevronRight className="mx-1 h-3 w-3 text-foreground/40" />
                     )}
                 </div>
@@ -292,8 +269,7 @@ const StageBadgeBar: React.FC<StageBadgeBarProps> = ({
     return (
         <div className={`h-10 w-full bg-background pl-2 pr-1 text-xs ${className ?? ''}`}>
             <div className="flex w-full items-center justify-between gap-2 h-full">
-                {/* 左侧：混合进度条 */}
-                <div className="flex items-center overflow-x-auto no-scrollbar">
+                <div className="flex min-w-0 items-center overflow-x-auto no-scrollbar">
                     {renderVisualStepper()}
 
                     {currentStage === 'ERROR' && (
