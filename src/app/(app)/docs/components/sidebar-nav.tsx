@@ -21,6 +21,7 @@ export function SidebarNav({ items }: { items: NavItem[] }) {
                     <Link
                         key={item.href}
                         href={item.href}
+                        prefetch={false}
                         className={cn(
                             'rounded-md px-3 py-2',
                             active

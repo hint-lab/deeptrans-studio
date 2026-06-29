@@ -37,6 +37,7 @@ export default async function LearnLayout({ children }: { children: ReactNode })
                             <Link
                                 key={item.href}
                                 href={item.href}
+                                prefetch={false}
                                 className={cn(
                                     'shrink-0 rounded-full border border-primary/20 bg-primary/5 px-3 py-1.5 text-primary hover:bg-primary/10'
                                 )}

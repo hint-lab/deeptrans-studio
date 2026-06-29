@@ -71,11 +71,12 @@ export function DocsHeader({ onSearchChange }: { onSearchChange?: (q: string) =>
                         <Link
                             href="/dashboard"
                             scroll={false}
+                            prefetch={false}
                             className="flex h-8 w-8 items-center justify-center rounded-md p-0 transition-colors hover:bg-accent"
                         >
                             <Home size="16" className="text-foreground" />
                         </Link>
-                        <Link href="/dashboard" scroll={false} className="flex items-center">
+                        <Link href="/dashboard" scroll={false} prefetch={false} className="flex items-center">
                             <span className="block dark:hidden">
                                 <Image
                                     src="/logo3.svg"
@@ -102,6 +103,7 @@ export function DocsHeader({ onSearchChange }: { onSearchChange?: (q: string) =>
                             <Link
                                 href="/docs"
                                 scroll={false}
+                                prefetch={false}
                                 className="ml-3 text-lg font-bold tracking-tight transition-colors hover:text-primary"
                             >
                                 Docs

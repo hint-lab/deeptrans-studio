@@ -45,6 +45,7 @@ export default function Sidebar() {
                     <Link
                         className={`link ${pathname === '/dashboard' ? 'active' : ''}`}
                         href="/dashboard"
+                        prefetch={false}
                     >
                         <Button
                             variant="ghost"
@@ -63,6 +64,7 @@ export default function Sidebar() {
                     <Link
                         className={`link ${pathname === '/dashboard/instant-translate' ? 'active' : ''}`}
                         href="/dashboard/instant-translate"
+                        prefetch={false}
                     >
                         <Button
                             variant="ghost"
@@ -81,6 +83,7 @@ export default function Sidebar() {
                     <Link
                         className={`link ${pathname === '/dashboard/image-intelligence' ? 'active' : ''}`}
                         href="/dashboard/image-intelligence"
+                        prefetch={false}
                     >
                         <Button
                             variant="ghost"
@@ -99,6 +102,7 @@ export default function Sidebar() {
                     <Link
                         className={`link ${pathname === '/dashboard/document-intelligence' ? 'active' : ''}`}
                         href="/dashboard/document-intelligence"
+                        prefetch={false}
                     >
                         <Button
                             variant="ghost"
@@ -117,6 +121,7 @@ export default function Sidebar() {
                     <Link
                         className={`link ${pathname === '/dashboard/dictionaries' ? 'active' : ''}`}
                         href="/dashboard/dictionaries"
+                        prefetch={false}
                     >
                         <Button
                             variant="ghost"
@@ -135,6 +140,7 @@ export default function Sidebar() {
                     <Link
                         className={`link ${pathname === '/dashboard/memories' ? 'active' : ''}`}
                         href="/dashboard/memories"
+                        prefetch={false}
                     >
                         <Button
                             variant="ghost"
@@ -152,7 +158,7 @@ export default function Sidebar() {
 
                     {/* 模型管理入口已移除 */}
 
-                    <Link className={`link ${pathname === '/docs' ? 'active' : ''}`} href="/docs">
+                    <Link className={`link ${pathname === '/docs' ? 'active' : ''}`} href="/docs" prefetch={false}>
                         <Button
                             variant="ghost"
                             className={cn(
@@ -170,6 +176,7 @@ export default function Sidebar() {
                     <Link
                         className={`link ${pathname === '/support' ? 'active' : ''}`}
                         href="https://github.com/hint-lab/deeptrans-studio"
+                        prefetch={false}
                     >
                         <Button
                             variant="ghost"

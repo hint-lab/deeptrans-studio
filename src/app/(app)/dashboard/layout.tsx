@@ -16,8 +16,8 @@ export default function DashboardLayout({ children }: PropsWithChildren) {
     useEffect(() => {
         const handleVisibilityChange = () => {
             if (document.visibilityState === 'visible') {
-                // 页面变为可见，检查session
-                if (status !== "authenticated") {
+                // 页面变为可见时只刷新已登录会话，避免登录跳转期间触发无效 session fetch。
+                if (status === "authenticated") {
                     update();
                 }
 
@@ -40,10 +40,7 @@ export default function DashboardLayout({ children }: PropsWithChildren) {
 
     if (!mounted) {
         return (
-            <div className="fixed relative inset-0 overflow-hidden bg-gradient-to-br from-[#0f1020] via-[#11122a] to-[#0b0c1a]">
-                <div className="pointer-events-none absolute -top-[20%] -left-[10%] h-[70vh] w-[70vw] rounded-full bg-[radial-gradient(circle,_var(--tw-gradient-stops))] from-indigo-600/20 via-purple-600/5 to-transparent blur-[120px] animate-pulse" style={{ animationDuration: '4s' }} />
-                <div className="pointer-events-none absolute -bottom-[20%] -right-[10%] h-[60vh] w-[60vw] rounded-full bg-[radial-gradient(circle,_var(--tw-gradient-stops))] from-fuchsia-600/20 via-violet-600/5 to-transparent blur-[120px] animate-pulse" style={{ animationDuration: '5s' }} />
-                <div className="pointer-events-none absolute top-[20%] left-[20%] h-[50vh] w-[50vw] rounded-full bg-[radial-gradient(circle,_var(--tw-gradient-stops))] from-blue-600/10 via-transparent to-transparent blur-[100px] animate-pulse" style={{ animationDuration: '6s' }} />
+            <div className="fixed inset-0 overflow-hidden bg-slate-50 text-slate-950 dark:bg-slate-950 dark:text-slate-50">
                 <div className="fixed left-0 right-0 top-0 z-50 h-10 bg-background/95 backdrop-blur" />
                 <div className={sidebarClass} />
                 <div className={contentClass} />
@@ -52,11 +49,7 @@ export default function DashboardLayout({ children }: PropsWithChildren) {
     }
 
     return (
-        <div className="fixed relative inset-0 overflow-hidden bg-gradient-to-br from-[#0f1020] via-[#11122a] to-[#0b0c1a]">
-            {/* 背景装饰 - 高级发光光晕 */}
-            <div className="pointer-events-none absolute -top-[20%] -left-[10%] h-[70vh] w-[70vw] rounded-full bg-[radial-gradient(circle,_var(--tw-gradient-stops))] from-indigo-600/20 via-purple-600/5 to-transparent blur-[120px] animate-pulse" style={{ animationDuration: '4s' }} />
-            <div className="pointer-events-none absolute -bottom-[20%] -right-[10%] h-[60vh] w-[60vw] rounded-full bg-[radial-gradient(circle,_var(--tw-gradient-stops))] from-fuchsia-600/20 via-violet-600/5 to-transparent blur-[120px] animate-pulse" style={{ animationDuration: '5s' }} />
-            <div className="pointer-events-none absolute top-[20%] left-[20%] h-[50vh] w-[50vw] rounded-full bg-[radial-gradient(circle,_var(--tw-gradient-stops))] from-blue-600/10 via-transparent to-transparent blur-[100px] animate-pulse" style={{ animationDuration: '6s' }} />
+        <div className="fixed inset-0 overflow-hidden bg-slate-50 text-slate-950 dark:bg-slate-950 dark:text-slate-50">
             {/* Header */}
             <div className="fixed left-0 right-0 top-0 z-50 h-10 bg-primary">
                 <Header />
