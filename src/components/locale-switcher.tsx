@@ -2,6 +2,7 @@
 
 import { setCookie } from 'cookies-next';
 import { useLocale } from 'next-intl';
+import { useRouter } from 'next/navigation';
 import { useTransition } from 'react';
 import { Languages } from 'lucide-react';
 import {
@@ -27,13 +28,14 @@ export default function LocaleSwitcher({
     iconOnly = false,
 }: LocaleSwitcherProps) {
     const locale = useLocale();
+    const router = useRouter();
     const [isPending, startTransition] = useTransition();
     const currentLocale = locales.find(l => l.code === locale);
 
     function switchTo(nextLocale: string) {
         startTransition(() => {
             setCookie('NEXT_LOCALE', nextLocale, { path: '/' });
-            window.location.reload();
+            router.refresh();
         });
     }
 
