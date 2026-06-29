@@ -5,6 +5,7 @@ import { runPreTranslateAction } from '@/actions/pre-translate';
 import { DOCX_ACCEPTED_FILE_TYPES, FileUpload } from '@/components/file-upload';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { MediaTranslationWorkspace } from '../components/media-translation-workspace';
 import {
     Dialog,
     DialogContent,
@@ -25,7 +26,6 @@ import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { createLogger } from '@/lib/logger';
 import {
-    BookOpen,
     FileText,
     Globe,
     Search,
@@ -817,106 +817,27 @@ export default function DocumentIntelligencePage() {
                     </div>
                 )}
 
-                <div className="rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
-                    <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
-                        <div className="text-lg font-medium">{t('translate')}</div>
-                    </div>
-                    <div className="p-4">
-                        <div className="flex items-center space-x-4">
-                            <Button
-                                className="w-40"
-                                onClick={handleTranslateDocument}
-                                disabled={!uploadedFile || isTranslating || taskStatus === 'processing'}
-                            >
-                                {isTranslating ? (
-                                    <>
-                                        <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                                        {t('translating')}
-                                    </>
-                                ) : (
-                                    t('startTranslation')
-                                )}
-                            </Button>
-
-                            {taskStatus === 'processing' && (
-                                <div className="flex-1">
-                                    <div className="h-2 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
-                                        <div className="h-full w-1/3 animate-pulse rounded-full bg-blue-600" />
-                                    </div>
-                                </div>
-                            )}
-                            {taskStatus === 'failed' && (
-                                <Button
-                                    className="w-40"
-                                    onClick={() => {
-                                        // 复制到剪贴板
-                                        handleTranslateDocument
-                                        toast.success(t('translationFailed'));
-                                    }}>
-                                    {t('retry')}
-                                </Button>
-                            )}
-                        </div>
-
-                        {translatedContent && translationResult && (
-                            <div className="mt-6 rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-800">
-                                <div className="mb-4 flex items-center justify-between">
-                                    <div>
-                                        <div className="text-lg font-semibold">
-                                            {t('translationResult')}
-                                        </div>
-                                        <div className="text-sm text-gray-500 dark:text-gray-400">
-                                            {t('sourceLanguage')}: {translationResult.sourceLanguage} →
-                                            {t('targetLanguage')}: {translationResult.targetLanguage}
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center space-x-2">
-                                        <Badge variant="outline">
-                                            {translationResult.fileName}
-                                        </Badge>
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => {
-                                                // 复制到剪贴板
-                                                navigator.clipboard.writeText(translatedContent);
-                                                toast.success(t('copiedToClipboard'));
-                                            }}
-                                        >
-                                            {t('copy')}
-                                        </Button>
-                                    </div>
-                                </div>
-
-                                <ScrollArea className="h-96 rounded-md border p-4">
-                                    <div className="whitespace-pre-wrap text-sm leading-relaxed">
-                                        {translatedContent}
-                                    </div>
-                                </ScrollArea>
-
-                                <div className="mt-4 flex space-x-3">
-                                    <Button
-                                        onClick={handleDownloadResult}
-                                        className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700"
-                                    >
-                                        <FileText className="mr-2 h-4 w-4" />
-                                        {t('downloadResult')}
-                                    </Button>
-                                    <Button
-                                        variant="outline"
-                                        onClick={() => {
-                                            // 保存到我的翻译
-                                            //handleSaveTranslation();
-                                        }}
-                                    >
-                                        <BookOpen className="mr-2 h-4 w-4" />
-                                        {t('saveToMyTranslations')}
-                                    </Button>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                </div>
+                <MediaTranslationWorkspace
+                    labels={{
+                        translate: t('translate'),
+                        translating: t('translating'),
+                        startTranslation: t('startTranslation'),
+                        retry: t('retry'),
+                        translationResult: t('translationResult'),
+                        sourceLanguage: t('sourceLanguage'),
+                        targetLanguage: t('targetLanguage'),
+                        copy: t('copy'),
+                        copiedToClipboard: t('copiedToClipboard'),
+                        downloadResult: t('downloadResult'),
+                    }}
+                    canTranslate={Boolean(uploadedFile)}
+                    isTranslating={isTranslating}
+                    status={taskStatus}
+                    translatedContent={translatedContent}
+                    result={translationResult}
+                    onTranslate={handleTranslateDocument}
+                    onDownload={handleDownloadResult}
+                />
             </div>
         </div>
     );
