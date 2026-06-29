@@ -47,7 +47,8 @@ export async function textToStructuredJson(url: string): Promise<{ text: string;
             // 简化：所有文本视为普通 run（无格式）
             // 若需解析 **bold** 或 *italic*，可用 remark + custom plugin
             const runs = [{
-                text: para + '  ', // 模拟 pdf2json 末尾空格习惯
+                // Keep the trailing spaces expected by the existing structured parser consumers.
+                text: para + '  ',
                 bold: false,
                 italic: false,
                 underline: false,
@@ -68,7 +69,6 @@ export async function textToStructuredJson(url: string): Promise<{ text: string;
                 runs,
                 placeholderSpans,
             });
-            logger.info("text structured: ", structured.paragraphs[0] || "null")
         }
         return { text, html, contentType, structured };
 

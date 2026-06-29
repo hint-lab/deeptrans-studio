@@ -24,7 +24,7 @@ import { Badge } from '@/components/ui/badge';
 import { Loader2, FileText, Eye, Settings, CheckCircle2 } from 'lucide-react';
 import { LANGUAGES } from '@/constants/languages';
 import { toast } from 'sonner';
-import { importMemoryFromForm, listMemoriesAction } from '@/actions/memories';
+import { listMemoriesAction } from '@/actions/memories';
 import { useTranslations } from 'next-intl';
 export function ImportMemoryDialog({ onCompleted }: { onCompleted?: () => void }) {
     const t = useTranslations('Dashboard.Memories.ImportDialog');

@@ -29,6 +29,13 @@ type ImportInput = {
     sourceKey?: string;
     targetKey?: string;
     notesKey?: string;
+    onProgress?: (event: {
+        type: 'init' | 'progress';
+        currentBatch: number;
+        totalBatches: number;
+        progress: number;
+        stage: 'embedding' | 'vector';
+    }) => void | Promise<void>;
 };
 
 function parseCSV(text: string) {
@@ -112,10 +119,20 @@ function parseTMX(xml: string, srcPref?: string, tgtPref?: string) {
 
 export async function importMemoryAction(input: ImportInput) {
     const authCtx = await requireUser();
-    const { file, memoryId, sourceLang, targetLang, sourceKey, targetKey, notesKey } = input;
+    const { file, memoryId, sourceLang, targetLang, sourceKey, targetKey, notesKey, onProgress } =
+        input;
     const name = (file as any).name || 'upload';
     const ext = name.slice(name.lastIndexOf('.') + 1).toLowerCase();
     const buf = Buffer.from(await file.arrayBuffer());
+    const emitProgress = async (event: {
+        type: 'init' | 'progress';
+        currentBatch: number;
+        totalBatches: number;
+        progress: number;
+        stage: 'embedding' | 'vector';
+    }) => {
+        if (onProgress) await onProgress(event);
+    };
 
     let entries: Array<{ source: string; target: string; notes?: string }> = [];
     if (ext === 'tmx' || ext === 'xml')
@@ -124,6 +141,16 @@ export async function importMemoryAction(input: ImportInput) {
     else if (ext === 'xlsx' || ext === 'xls')
         entries = parseExcel(buf, { sourceKey, targetKey, notesKey });
     else return { success: false, error: '仅支持 TMX/CSV/TSV/XLSX/XLS' } as const;
+
+    const batchSize = 200;
+    const totalBatches = Math.max(1, Math.ceil(entries.length / batchSize));
+    await emitProgress({
+        type: 'init',
+        currentBatch: 0,
+        totalBatches,
+        progress: entries.length ? 5 : 100,
+        stage: 'embedding',
+    });
 
     const hasTm = (prisma as any).translationMemory && (prisma as any).translationMemoryEntry;
     if (!hasTm) {
@@ -161,15 +188,22 @@ export async function importMemoryAction(input: ImportInput) {
         try {
             logger.log(`[MEMORY_IMPORT] 开始生成 ${entries.length} 条记录的嵌入向量...`);
             const texts = entries.map(e => `${e.source}\n${e.target}`);
-            const batchSize = 200; // 设置为 200，留一些余量
 
             for (let i = 0; i < texts.length; i += batchSize) {
                 const batch = texts.slice(i, i + batchSize);
+                const currentBatch = Math.floor(i / batchSize) + 1;
                 logger.log(
                     `[MEMORY_IMPORT] 处理第 ${i + 1}-${Math.min(i + batch.length, texts.length)} 条记录...`
                 );
                 const batchVectors = await embedBatchAction(batch);
                 vectors.push(...batchVectors);
+                await emitProgress({
+                    type: 'progress',
+                    currentBatch,
+                    totalBatches,
+                    progress: Math.min(70, 10 + Math.round((currentBatch / totalBatches) * 60)),
+                    stage: 'embedding',
+                });
             }
 
             logger.log(
@@ -178,6 +212,13 @@ export async function importMemoryAction(input: ImportInput) {
         } catch (error) {
             logger.error(`[MEMORY_IMPORT] 嵌入向量生成失败:`, error);
         }
+        await emitProgress({
+            type: 'progress',
+            currentBatch: totalBatches,
+            totalBatches,
+            progress: 80,
+            stage: 'vector',
+        });
         const created = await prisma.$transaction(
             entries.map(e =>
                 (prisma as any).translationMemoryEntry.create({
@@ -218,6 +259,13 @@ export async function importMemoryAction(input: ImportInput) {
             if (points.length) {
                 await upsertVectors({ collection: 'TranslationMemory', points });
                 logger.log(`[MEMORY_IMPORT] 成功写入 Postgres 向量索引: ${points.length} 条记录`);
+                await emitProgress({
+                    type: 'progress',
+                    currentBatch: totalBatches,
+                    totalBatches,
+                    progress: 95,
+                    stage: 'vector',
+                });
             } else {
                 logger.warn(`[MEMORY_IMPORT] 警告: 没有有效向量可写入 Postgres 向量索引`);
             }
@@ -231,7 +279,10 @@ export async function importMemoryAction(input: ImportInput) {
 }
 
 // 允许从客户端直接以 Server Action 方式调用（FormData）
-export async function importMemoryFromForm(form: FormData) {
+export async function importMemoryFromForm(
+    form: FormData,
+    onProgress?: ImportInput['onProgress']
+) {
     'use server';
     try {
         await requireUser();
@@ -251,6 +302,7 @@ export async function importMemoryFromForm(form: FormData) {
             sourceKey,
             targetKey,
             notesKey,
+            onProgress,
         });
     } catch (e: any) {
         return { success: false, error: e?.message || String(e) } as const;

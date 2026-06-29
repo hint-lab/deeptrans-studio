@@ -22,6 +22,5 @@ export default async function IDEPage({ params }: { params: Promise<{ id: string
         notFound();
     }
 
-    // TODO: 渲染 IDE UI（此处仅占位）。
     return <></>;
 }

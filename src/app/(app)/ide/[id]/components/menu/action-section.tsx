@@ -1116,6 +1116,69 @@ export function ActionSection() {
     };
 
 
+    const handleBatchPostEdit = async () => {
+        try {
+            const tabs = explorerTabs?.documentTabs ?? [];
+
+            const needPostEditItems: DocumentItemTab[] = tabs.flatMap(t =>
+                (t.items ?? []).filter((item: any) => item.status === 'QA_REVIEW')
+            );
+
+            const total = needPostEditItems.length;
+            if (!total) {
+                toast.error('没有需要进入译后编辑的分段：所有分段都已进入译后编辑或未处于质检复核阶段');
+                return;
+            }
+
+            setIsRunning(true);
+            setCurrentOperation('post_edit_batch');
+            setProgressTitle('批量译后编辑中');
+            setBatchProgress(0);
+            setBatchOpen(true);
+            logInfo(`批量译后编辑开始：共 ${total} 个需要进入译后编辑的分段`);
+
+            let done = 0;
+            for (const it of needPostEditItems) {
+                try {
+                    await updateDocItemStatusAction(it.id, 'POST_EDIT');
+                    await recordGoToNextTranslationProcessEventAction(
+                        it.id,
+                        'POST_EDIT',
+                        'AGENT',
+                        'SUCCESS'
+                    );
+                } catch (e) {
+                    logger.error(`更新分段 ${it.id} 状态失败:`, e);
+                }
+                done += 1;
+                setBatchProgress(Math.round((done / total) * 100));
+            }
+
+            try {
+                const currentId = (activeDocumentItem as any)?.id;
+                if (currentId && needPostEditItems.some((it: any) => it.id === currentId)) {
+                    setCurrentStage('POST_EDIT' as any);
+                }
+            } catch { }
+
+            try {
+                const tabsRes = await fetch(
+                    `/api/explorer-tabs?projectId=${encodeURIComponent((explorerTabs as any)?.projectId || '')}`
+                ).then(r => r.json());
+                setExplorerTabs(tabsRes);
+            } catch { }
+
+            setBatchOpen(false);
+            toast.success(`批量译后编辑完成：共处理 ${total} 个分段`);
+        } catch (e) {
+            toast.error(`批量译后编辑失败：${String(e)}`);
+        } finally {
+            setIsRunning(false);
+            setCurrentOperation('idle');
+        }
+    };
+
+
     // 全局快捷键：⌘B 批量预译；⌘E 批量评估；⌘⇧S 批量签发
     useEffect(() => {
         const onKeyDown = (e: KeyboardEvent) => {
@@ -1137,9 +1200,7 @@ export function ActionSection() {
             // ⌘P
             if (key === 'p') {
                 e.preventDefault();
-                // 调用批量译后编辑
-                // TODO: 需要实现批量译后编辑功能
-                logger.debug('批量译后编辑快捷键触发');
+                void handleBatchPostEdit();
                 return;
             }
             // ⌘⇧S
@@ -1324,78 +1385,7 @@ export function ActionSection() {
                             setCurrentOperation('idle');
                         }
                     }}
-                    onBatchPostEdit={async () => {
-                        try {
-                            const tabs = explorerTabs?.documentTabs ?? [];
-
-                            // 只获取需要进入译后编辑的分段：QA_REVIEW 状态
-                            const needPostEditItems: DocumentItemTab[] = tabs.flatMap(t =>
-                                (t.items ?? []).filter((item: any) => item.status === 'QA_REVIEW')
-                            );
-
-                            const total = needPostEditItems.length;
-                            if (!total) {
-                                toast.error(
-                                    '没有需要进入译后编辑的分段：所有分段都已进入译后编辑或未处于质检复核阶段'
-                                );
-                                return;
-                            }
-
-                            setIsRunning(true);
-                            setCurrentOperation('post_edit_batch');
-                            setProgressTitle('批量译后编辑中');
-                            setBatchProgress(0);
-                            setBatchOpen(true);
-                            logInfo(`批量译后编辑开始：共 ${total} 个需要进入译后编辑的分段`);
-
-                            let done = 0;
-                            for (const it of needPostEditItems) {
-                                try {
-                                    await updateDocItemStatusAction(it.id, 'POST_EDIT');
-                                    // 记录译后编辑事件
-                                    await recordGoToNextTranslationProcessEventAction(
-                                        it.id,
-                                        'POST_EDIT',
-                                        'AGENT',
-                                        'SUCCESS'
-                                    );
-                                } catch (e) {
-                                    logger.error(`更新分段 ${it.id} 状态失败:`, e);
-                                }
-                                done += 1;
-                                setBatchProgress(Math.round((done / total) * 100));
-                            }
-
-                            // 如果当前激活项也在处理列表中，更新其状态
-                            try {
-                                const currentId = (activeDocumentItem as any)?.id;
-                                if (currentId) {
-                                    const currentItem = needPostEditItems.find(
-                                        (it: any) => it.id === currentId
-                                    );
-                                    if (currentItem) {
-                                        setCurrentStage('POST_EDIT' as any);
-                                    }
-                                }
-                            } catch { }
-
-                            // 刷新左侧视图
-                            try {
-                                const tabsRes = await fetch(
-                                    `/api/explorer-tabs?projectId=${encodeURIComponent((explorerTabs as any)?.projectId || '')}`
-                                ).then(r => r.json());
-                                setExplorerTabs(tabsRes);
-                            } catch { }
-
-                            setBatchOpen(false);
-                            toast.success(`批量译后编辑完成：共处理 ${total} 个分段`);
-                        } catch (e) {
-                            toast.error(`批量译后编辑失败：${String(e)}`);
-                        } finally {
-                            setIsRunning(false);
-                            setCurrentOperation('idle');
-                        }
-                    }}
+                    onBatchPostEdit={handleBatchPostEdit}
                 />
             </div>
             <BatchProgressDialog

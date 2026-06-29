@@ -108,7 +108,7 @@
                         },
                         {
                             "method": "POST",
-                            "path": "/api/auth/send-code",
+                            "path": "/api/auth/send-email",
                             "title": "发送验证码",
                             "description": "向指定邮箱发送登录验证码"
                         },

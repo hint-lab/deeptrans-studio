@@ -70,15 +70,21 @@ const PreviewCard: React.FC = () => {
 
     // 0. 全局库检测
     useEffect(() => {
+        if (pdfLibReady && docxLibReady) return;
+        let attempts = 0;
         const checkLibs = () => {
             if (typeof window === 'undefined') return;
             if (!pdfLibReady && (window as any).pdfjsLib) setPdfLibReady(true);
             if (!docxLibReady && (window as any).docx && (window as any).JSZip) setDocxLibReady(true);
         };
         checkLibs();
-        const timer = setInterval(checkLibs, 500);
+        const timer = setInterval(() => {
+            attempts += 1;
+            checkLibs();
+            if (attempts >= 20) clearInterval(timer);
+        }, 500);
         return () => clearInterval(timer);
-    }, [pdfLibReady, docxLibReady]);
+    }, [pdfLibReady, docxLibReady, jszipLoaded]);
 
     // 1. 获取 URL 并通过预加载识别类型
     useEffect(() => {
@@ -472,7 +478,14 @@ const PreviewCard: React.FC = () => {
             <Script src={PDFJS_URL} onLoad={() => setPdfLibReady((p) => p || true)} />
             <Script src={JSZIP_URL} onLoad={() => setJszipLoaded(true)} />
             {jszipLoaded && (
-                <Script src={DOCX_JS_URL} />
+                <Script
+                    src={DOCX_JS_URL}
+                    onLoad={() => {
+                        if ((window as any).docx && (window as any).JSZip) {
+                            setDocxLibReady(true);
+                        }
+                    }}
+                />
             )}
 
             <div className="flex items-center justify-between border-b bg-muted/40 px-2 py-1 text-[11px] text-foreground/70">

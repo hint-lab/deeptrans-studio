@@ -108,7 +108,7 @@
                         },
                         {
                             "method": "POST",
-                            "path": "/api/auth/send-code",
+                            "path": "/api/auth/send-email",
                             "title": "Send Verification Code",
                             "description": "Send login verification code to specified email"
                         },
