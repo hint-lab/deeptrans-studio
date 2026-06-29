@@ -2,7 +2,11 @@
 import { renameDocumentAction } from '@/actions/document';
 import { fetchProjectTabsAction } from '@/actions/explorer-tabs';
 import { Skeleton } from '@/components/ui/skeleton';
-import { getTranslationStageLabel } from '@/constants/translationStages';
+import {
+    getTranslationStageBadgeClass,
+    getTranslationStageDotClass,
+    getTranslationStageLabel,
+} from '@/constants/translationStages';
 import { useActiveDocumentItem } from '@/hooks/useActiveDocumentItem';
 import { useExplorerTabs } from '@/hooks/useExplorerTabs';
 import { createLogger } from '@/lib/logger';
@@ -25,49 +29,12 @@ const logger = createLogger(
 );
 // 本地子组件：状态点与状态徽章
 const ItemStatusDot = ({ status }: { status: string }) => {
-    const isHuman =
-        status === 'MT_REVIEW' ||
-        status === 'QA_REVIEW' ||
-        status === 'POST_EDIT' ||
-        status === 'SIGN_OFF';
-    const isCompleted = status === 'COMPLETED';
-
-    let dotClass = 'w-2 h-2 rounded-full bg-gray-400';
-
-    if (isCompleted) {
-        dotClass = 'w-2 h-2 rounded-full bg-green-600';
-    } else if (isHuman) {
-        //dotClass = 'w-2 h-2 rounded-full bg-amber-500';
-        dotClass = 'w-2 h-2 rounded-full bg-indigo-500';
-    } else if (status !== 'NOT_STARTED') {
-        dotClass = 'w-2 h-2 rounded-full bg-indigo-500';
-    }
-
-    return <span className={dotClass} />;
+    return <span className={`h-2 w-2 rounded-full ${getTranslationStageDotClass(status)}`} />;
 };
 const ItemStatusBadge = ({ status }: { status: string }) => {
-    const base =
-        'px-2 py-[2px] rounded-full whitespace-nowrap border text-[10px] transition-all duration-200';
-    const isHuman =
-        status === 'MT_REVIEW' ||
-        status === 'QA_REVIEW' ||
-        status === 'POST_EDIT' ||
-        status === 'SIGN_OFF';
-    const isCompleted = status === 'COMPLETED';
-
-    let cls = `${base} bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-foreground/70`;
-
-    if (isCompleted) {
-        cls = `${base} bg-green-600 border-green-700 text-white shadow`;
-    } else if (isHuman) {
-        //cls = `${base} bg-amber-500 border-amber-600 text-white shadow`;
-        cls = `${base} bg-amber-500 border-indigo-600 text-white shadow`;
-    } else if (status !== 'NOT_STARTED') {
-        cls = `${base} bg-indigo-500 border-indigo-600 text-white shadow`;
-    }
-
     const t = useTranslations('IDE.explorerPanel');
     const tStage = useTranslations('IDE.translationStages');
+    const cls = getTranslationStageBadgeClass(status);
     const label = getTranslationStageLabel(status as TranslationStage, tStage) || t('prepare');
     return <span className={cls}>{label}</span>;
 };

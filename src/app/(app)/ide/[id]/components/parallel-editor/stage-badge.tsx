@@ -3,6 +3,8 @@
 import { updateDocItemStatusAction } from '@/actions/document-item';
 import { Button } from '@/components/ui/button';
 import {
+    TRANSLATION_MAIN_FLOW_NODES,
+    TRANSLATION_REVIEW_STAGES,
     TRANSLATION_STAGES_SEQUENCE,
     getTranslationStageLabel,
 } from '@/constants/translationStages';
@@ -38,32 +40,6 @@ export type StageBadgeBarProps = {
     className?: string;
     label?: string;
 };
-
-// --- 核心配置：定义视觉上的节点结构 ---
-// 顶部只展示三个生产主阶段；人工复核作为对应阶段的状态高亮，不作为独立节点重复展示。
-const REVIEW_STAGES = ['MT_REVIEW', 'QA_REVIEW', 'POST_EDIT_REVIEW'] as const;
-
-const VISUAL_FLOW_CONFIG: Array<{
-    id: string;
-    labelStage: TranslationStage;
-    stages: TranslationStage[];
-}> = [
-    {
-        id: 'MT_STEP',
-        labelStage: 'MT',
-        stages: ['MT', 'MT_REVIEW'],
-    },
-    {
-        id: 'QA_STEP',
-        labelStage: 'QA',
-        stages: ['QA', 'QA_REVIEW'],
-    },
-    {
-        id: 'PE_STEP',
-        labelStage: 'POST_EDIT',
-        stages: ['POST_EDIT', 'POST_EDIT_REVIEW'],
-    }
-];
 
 const StageBadgeBar: React.FC<StageBadgeBarProps> = ({
     className,
@@ -260,7 +236,7 @@ const StageBadgeBar: React.FC<StageBadgeBarProps> = ({
         // 当前真实阶段在总流程中的索引
         const currentRealStepIdx = steps.indexOf(currentStage as TranslationStage);
 
-        return VISUAL_FLOW_CONFIG.map((node, index) => {
+        return TRANSLATION_MAIN_FLOW_NODES.map((node, index) => {
             // 判断此节点是否包含当前阶段
             const isNodeActive = node.stages.includes(currentStage);
 
@@ -270,7 +246,8 @@ const StageBadgeBar: React.FC<StageBadgeBarProps> = ({
             const lastStageIdx = steps.indexOf(lastStageInNode as TranslationStage);
             const isNodeDone = currentRealStepIdx > lastStageIdx;
 
-            const isReviewActive = REVIEW_STAGES.includes(currentStage as any) && isNodeActive;
+            const isReviewActive =
+                TRANSLATION_REVIEW_STAGES.includes(currentStage as any) && isNodeActive;
 
             // 获取显示标签
             const label = getTranslationStageLabel(node.labelStage, tStage);
@@ -304,7 +281,7 @@ const StageBadgeBar: React.FC<StageBadgeBarProps> = ({
                         </div>
                     </div>
                     {/* 连接线 */}
-                    {index < VISUAL_FLOW_CONFIG.length - 1 && (
+                    {index < TRANSLATION_MAIN_FLOW_NODES.length - 1 && (
                         <ChevronRight className="mx-1 h-3 w-3 text-foreground/40" />
                     )}
                 </div>

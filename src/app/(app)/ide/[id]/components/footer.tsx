@@ -1,6 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useExplorerTabs } from '@/hooks/useExplorerTabs';
 import { useTranslations } from 'next-intl';
+import {
+    TRANSLATION_STAGE_PROGRESS_GROUPS,
+    getTranslationStageGroup,
+    type TranslationStageGroup,
+} from '@/constants/translationStages';
 
 type Tasks = 'preTrans' | 'polishTrans' | 'verifyTrans' | 'none';
 
@@ -10,13 +15,12 @@ const Footer = () => {
     const [currentTask, setCurrentTask] = useState<Tasks>('none');
 
     const [progress, setProgress] = useState<number>(0);
-    const [counts, setCounts] = useState<Record<string, number>>({
-        NOT_STARTED: 0,
-        MT: 0,
-        QA: 0,
-        POST_EDIT: 0,
-        SIGN_OFF: 0,
-    });
+    const emptyCounts = (): Record<TranslationStageGroup, number> =>
+        TRANSLATION_STAGE_PROGRESS_GROUPS.reduce(
+            (acc, group) => ({ ...acc, [group.key]: 0 }),
+            {} as Record<TranslationStageGroup, number>
+        );
+    const [counts, setCounts] = useState<Record<TranslationStageGroup, number>>(emptyCounts);
     const { explorerTabs } = useExplorerTabs();
 
     // 基于当前文档项状态，计算整体进度与分布
@@ -26,38 +30,17 @@ const Footer = () => {
         const total = allItems.length;
         if (!total) {
             setProgress(0);
-            setCounts({ NOT_STARTED: 0, MT: 0, QA: 0, POST_EDIT: 0, SIGN_OFF: 0 });
+            setCounts(emptyCounts());
             return;
         }
-        // 映射TranslationStage到统计分类
-        const stageToLegacy: Record<string, string> = {
-            NOT_STARTED: 'NOT_STARTED',
-            MT: 'MT',
-            MT_REVIEW: 'MT',
-            QA: 'QA',
-            QA_REVIEW: 'QA',
-            POST_EDIT: 'POST_EDIT',
-            POST_EDIT_REVIEW: 'POST_EDIT',
-            SIGN_OFF: 'SIGN_OFF',
-            COMPLETED: 'SIGN_OFF',
-            ERROR: 'NOT_STARTED',
-            CANCELED: 'NOT_STARTED',
-        };
-        const init: Record<string, number> = {
-            NOT_STARTED: 0,
-            MT: 0,
-            QA: 0,
-            POST_EDIT: 0,
-            SIGN_OFF: 0,
-        };
-        const nextCounts = allItems.reduce((acc: Record<string, number>, it: any) => {
+        const nextCounts = allItems.reduce((acc: Record<TranslationStageGroup, number>, it: any) => {
             const status = (it?.status as string) || 'NOT_STARTED';
-            const legacyKey = stageToLegacy[status] || 'NOT_STARTED';
-            acc[legacyKey] = (acc[legacyKey] || 0) + 1;
+            const group = getTranslationStageGroup(status);
+            acc[group] = (acc[group] || 0) + 1;
             return acc;
-        }, init);
+        }, emptyCounts());
         setCounts(nextCounts);
-        const approvedCount = nextCounts['SIGN_OFF'] || 0;
+        const approvedCount = nextCounts.signoff || 0;
         const approvedPercent = Math.round((approvedCount / total) * 100);
         setProgress(approvedPercent);
     }, [explorerTabs]);
@@ -85,26 +68,15 @@ const Footer = () => {
                 </div>
                 {/* 右：各子状态统计（常显） */}
                 <div className="flex shrink-0 items-center gap-2 pr-8 text-[10px] leading-[10px]">
-                    <span className="inline-flex items-center gap-1 text-foreground/70">
-                        <span className="inline-block h-2 w-2 rounded bg-gray-400" />
-                        {t('statusProgress.waiting')} {counts.NOT_STARTED}
-                    </span>
-                    <span className="inline-flex items-center gap-1 text-fuchsia-600">
-                        <span className="inline-block h-2 w-2 rounded bg-fuchsia-500" />
-                        {t('statusProgress.pretrans')} {counts.MT}
-                    </span>
-                    <span className="inline-flex items-center gap-1 text-purple-600">
-                        <span className="inline-block h-2 w-2 rounded bg-purple-600" />
-                        {t('statusProgress.qa')} {counts.QA}
-                    </span>
-                    <span className="inline-flex items-center gap-1 text-violet-600">
-                        <span className="inline-block h-2 w-2 rounded bg-violet-500" />
-                        {t('statusProgress.postedit')} {counts.POST_EDIT}
-                    </span>
-                    <span className="inline-flex items-center gap-1 text-blue-600">
-                        <span className="inline-block h-2 w-2 rounded bg-blue-500" />
-                        {t('statusProgress.signoff')} {counts.SIGN_OFF}
-                    </span>
+                    {TRANSLATION_STAGE_PROGRESS_GROUPS.map(group => (
+                        <span
+                            key={group.key}
+                            className={`inline-flex items-center gap-1 ${group.textClass}`}
+                        >
+                            <span className={`inline-block h-2 w-2 rounded ${group.dotClass}`} />
+                            {t(`statusProgress.${group.labelKey}`)} {counts[group.key] || 0}
+                        </span>
+                    ))}
                 </div>
             </div>
         </footer>
