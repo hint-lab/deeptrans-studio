@@ -40,43 +40,28 @@ export type StageBadgeBarProps = {
 };
 
 // --- 核心配置：定义视觉上的节点结构 ---
-// 每个真实阶段单独显示，避免把人工复核合并进自动处理节点里。
-const VISUAL_FLOW_CONFIG = [
+// 顶部只展示三个生产主阶段；人工复核作为对应阶段的状态高亮，不作为独立节点重复展示。
+const REVIEW_STAGES = ['MT_REVIEW', 'QA_REVIEW', 'POST_EDIT_REVIEW'] as const;
+
+const VISUAL_FLOW_CONFIG: Array<{
+    id: string;
+    labelStage: TranslationStage;
+    stages: TranslationStage[];
+}> = [
     {
         id: 'MT_STEP',
-        stages: ['MT'],
-    },
-    {
-        id: 'MT_REVIEW_STEP',
-        stages: ['MT_REVIEW'],
+        labelStage: 'MT',
+        stages: ['MT', 'MT_REVIEW'],
     },
     {
         id: 'QA_STEP',
-        stages: ['QA'],
-    },
-    {
-        id: 'QA_REVIEW_STEP',
-        stages: ['QA_REVIEW'],
+        labelStage: 'QA',
+        stages: ['QA', 'QA_REVIEW'],
     },
     {
         id: 'PE_STEP',
-        stages: ['POST_EDIT'],
-        isGroup: false,
-    },
-    {
-        id: 'PE_REVIEW_STEP',
-        stages: ['POST_EDIT_REVIEW'],
-        isGroup: false,
-    },
-    {
-        id: 'SIGN_OFF_STEP',
-        stages: ['SIGN_OFF'],
-        isGroup: false,
-    },
-    {
-        id: 'COMPLETED_STEP',
-        stages: ['COMPLETED'],
-        isGroup: false,
+        labelStage: 'POST_EDIT',
+        stages: ['POST_EDIT', 'POST_EDIT_REVIEW'],
     }
 ];
 
@@ -277,7 +262,7 @@ const StageBadgeBar: React.FC<StageBadgeBarProps> = ({
 
         return VISUAL_FLOW_CONFIG.map((node, index) => {
             // 判断此节点是否包含当前阶段
-            const isNodeActive = node.stages.includes(currentStage as string);
+            const isNodeActive = node.stages.includes(currentStage);
 
             // 判断此节点是否已完成：
             // 逻辑：该节点包含的最后一个阶段，是否在“当前真实阶段”之前？
@@ -285,13 +270,18 @@ const StageBadgeBar: React.FC<StageBadgeBarProps> = ({
             const lastStageIdx = steps.indexOf(lastStageInNode as TranslationStage);
             const isNodeDone = currentRealStepIdx > lastStageIdx;
 
+            const isReviewActive = REVIEW_STAGES.includes(currentStage as any) && isNodeActive;
+
             // 获取显示标签
-            const label = getTranslationStageLabel(node.stages[0] as TranslationStage, tStage);
+            const label = getTranslationStageLabel(node.labelStage, tStage);
 
             // 样式基类
             let containerCls = "flex items-center px-2 py-[2px] rounded-full border transition-all duration-200 relative";
 
-            if (isNodeDone) {
+            if (isReviewActive) {
+                // 人工复核状态：橙红色，和自动流程的蓝紫色区分开。
+                containerCls += " bg-orange-600 border-orange-700 text-white shadow ring-2 ring-orange-400/35";
+            } else if (isNodeDone) {
                 // 已完成状态：统一紫色/Indigo
                 containerCls += " bg-indigo-500 border-indigo-600 text-white shadow";
             } else if (isNodeActive) {
