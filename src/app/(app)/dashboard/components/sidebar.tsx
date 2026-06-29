@@ -19,6 +19,7 @@ import {
     MessageSquareIcon,
     FileTextIcon,
     Image as ImageIcon,
+    Building2Icon,
 } from 'lucide-react';
 import { useSidebar } from '@/hooks/useSidebar';
 import { useTranslations } from 'next-intl';
@@ -152,6 +153,25 @@ export default function Sidebar() {
                             <FolderSymlink size="16" />
                             <span className={isSidebarOpen ? 'inline' : 'hidden'}>
                                 {t('translationMemory')}
+                            </span>
+                        </Button>
+                    </Link>
+
+                    <Link
+                        className={`link ${pathname === '/dashboard/tenant' ? 'active' : ''}`}
+                        href="/dashboard/tenant"
+                        prefetch={false}
+                    >
+                        <Button
+                            variant="ghost"
+                            className={cn(
+                                'w-full gap-2',
+                                isSidebarOpen ? 'justify-start' : 'justify-center'
+                            )}
+                        >
+                            <Building2Icon size="16" />
+                            <span className={isSidebarOpen ? 'inline' : 'hidden'}>
+                                {t('tenantManagement')}
                             </span>
                         </Button>
                     </Link>

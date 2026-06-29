@@ -60,6 +60,7 @@
         "documentTranslate": "文档翻译",
         "translationMemory": "翻译记忆",
         "dictionaries": "词库管理",
+        "tenantManagement": "租户管理",
         "settings": "设置",
         "autoDetect": "自动检测",
         "english": "英语",
