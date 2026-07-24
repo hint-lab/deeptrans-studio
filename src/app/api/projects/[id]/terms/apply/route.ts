@@ -1,13 +1,11 @@
 import { bulkUpsertEntriesAction, findProjectDictionaryAction } from '@/actions/dictionary';
-import { extractDocumentTermsAction, translateTermsBatchAction } from '@/actions/project-init';
+import { translateTermsBatchAction } from '@/actions/project-init';
 import { findBlankDictionaryEntriesBySourcesDB, updateDictionaryEntryTargetTextDB } from '@/db/dictionaryEntry';
 import { updateDocumentStatusDB } from '@/db/document';
-import { extractTextFromUrl } from '@/lib/file-parser';
 import { guardMessage, guardStatus, requireOwnedProjectDocument, requireUser, requireWritableProject } from '@/lib/guards';
 import { scopedProjectBatchId } from '@/lib/init-artifact-keys';
 import { createLogger } from '@/lib/logger';
 import { getRedis } from '@/lib/redis';
-import { setJSONWithTTL, TTL_BATCH } from '@/lib/redis-ttl';
 import { DocumentStatus } from '@/types/enums';
 import { NextRequest, NextResponse } from 'next/server';
 const logger = createLogger({
@@ -91,37 +89,6 @@ export async function POST(req: NextRequest, ctx: any) {
                 } finally {
                     logger.info('格式化docTerms', { count: unique.length });
                 }
-            }
-        }
-        // 兜底：若 Redis 中暂无术语，尝试即时抽取一个简版术语表（不经队列）
-        if (!unique.length) {
-            try {
-                if (ownedDocument?.url) {
-                    const { text } = await extractTextFromUrl(ownedDocument.url);
-                    const head = String(text || '').slice(0, 4000);
-                    if (head) {
-                        const quick = await extractDocumentTermsAction(head, {
-                            maxTerms: 80,
-                            chunkSize: 2000,
-                            overlap: 200,
-                        });
-                        unique = Array.from(
-                            new Set(
-                                (quick || []).map(t => String(t?.term || '').trim()).filter(Boolean)
-                            )
-                        );
-                        if (unique.length) {
-                            await setJSONWithTTL(
-                                redis,
-                                `docTerms.${scopedBatchId}.item.terms.all`,
-                                { id: 'terms.all', terms: quick },
-                                TTL_BATCH
-                            );
-                        }
-                    }
-                }
-            } catch {
-                logger.error("即时抽取简版术语表时出错!")
             }
         }
         if (!unique.length) {

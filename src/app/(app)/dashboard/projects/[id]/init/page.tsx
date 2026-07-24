@@ -1,16 +1,14 @@
 'use client';
-import { applySegmentAction, getLatestDocumentStatusForProjectAction, updateDocumentStatusByIdAction, type PreviewSegmentItem } from '@/actions/document';
+import {
+    getLatestDocumentStatusForProjectAction,
+    updateDocumentStatusByIdAction,
+    type PreviewSegmentItem,
+} from '@/actions/document';
 import { Button } from '@/components/ui/button';
 import { useProjectInit } from '@/hooks/useProjectInit';
+import type { SegmentGranularity } from '@/lib/document-segmentation';
 import { createLogger } from '@/lib/logger';
-import {
-    Coffee,
-    Loader,
-    Loader2,
-    Redo2,
-    Square,
-    SquareCheckBig
-} from 'lucide-react';
+import { Coffee, Loader, Loader2, Redo2, Square, SquareCheckBig } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
@@ -19,14 +17,17 @@ import ParsePanel from './components/ParsePanel';
 import SegmentPanel from './components/SegmentPanel';
 import Stepper from './components/Stepper';
 import TermsPanel from './components/TermsPanel';
-const logger = createLogger({
-    type: 'client:project-init-page',
-}, {
-    json: false,// 开启json格式输出
-    pretty: false, // 关闭开发环境美化输出
-    colors: true, // 仅当json：false时启用颜色输出可用
-    includeCaller: false, // 日志不包含调用者
-});
+const logger = createLogger(
+    {
+        type: 'client:project-init-page',
+    },
+    {
+        json: false, // 开启json格式输出
+        pretty: false, // 关闭开发环境美化输出
+        colors: true, // 仅当json：false时启用颜色输出可用
+        includeCaller: false, // 日志不包含调用者
+    }
+);
 export default function ProjectInitPage() {
     const t = useTranslations('Dashboard.Init');
     const { id } = useParams<{ id: string }>();
@@ -34,7 +35,7 @@ export default function ProjectInitPage() {
     const router = useRouter();
     const { entry, restart, updateBatchId, updateStep, updateProgress } = useProjectInit(projectId);
     const batchId = entry?.batchId || '';
-    logger.info('ProjectInitPage render projectId, batchId', `${projectId}, ${batchId}`)
+    logger.info('ProjectInitPage render projectId, batchId', `${projectId}, ${batchId}`);
     const segPct = entry?.segPct || 0;
     const termPct = entry?.termPct || 0;
     const segPctRef = useRef(0);
@@ -60,7 +61,7 @@ export default function ProjectInitPage() {
 
     async function runParse() {
         if (!projectId) return;
-        setPreviewHtml("");
+        setPreviewHtml('');
         setStarting(true);
         try {
             const u = new URL(`/api/projects/${projectId}/parse`, window.location.origin);
@@ -86,44 +87,35 @@ export default function ProjectInitPage() {
         }
     }
     // 预览兜底：没有服务端 HTML 时，用纯文本拼简易 HTML
-    useEffect(() => { }, [preview, previewHtml]);
-
-    async function startSegment() {
-        if (!projectId) return;
-        setStarting(true);
-        try {
-            const u = new URL(`/api/projects/${projectId}/segment`, window.location.origin);
-            u.searchParams.set('batchId', batchId);
-            //logger.info('startSegment: ', u.toString())
-            const r = await fetch(u.toString(), { method: 'POST' });
-            if (!r.ok) throw new Error('segment failed');
-            // 状态由全局轮询同步
-        } catch {
-            setPhase('ERROR');
-        } finally {
-            setStarting(false);
-        }
-    }
+    useEffect(() => {}, [preview, previewHtml]);
 
     const [maxTerms, setMaxTerms] = useState<number>(120);
     const [chunkSize, setChunkSize] = useState<number>(8000);
     const [overlap, setOverlap] = useState<number>(300);
     const [termPrompt, setTermPrompt] = useState<string>('');
-    const [termPreview, setTermPreview] = useState<Array<{ term: string; score?: number }>>([]);
+    const [termPreview, setTermPreview] = useState<
+        Array<{ term: string; count?: number; score?: number }>
+    >([]);
     const [dictMatches, setDictMatches] = useState<
         Array<{ term: string; translation: string; notes?: string; source?: string }>
     >([]);
+    const [dictCheckedTerms, setDictCheckedTerms] = useState<string[]>([]);
     const [autoApplyTerms, setAutoApplyTerms] = useState<boolean>(true);
     const [termPreviewLoading, setTermPreviewLoading] = useState(false);
+    const [termPreviewError, setTermPreviewError] = useState<string | null>(null);
     const [applyingTerms, setApplyingTerms] = useState(false);
     const [termsApplied, setTermsApplied] = useState(false);
 
     // segment 预览交互（与 segment-preview 页面对齐）
     const [segItems, setSegItems] = useState<PreviewSegmentItem[]>([]);
+    const [segBodyCount, setSegBodyCount] = useState(0);
     const [segLoading, setSegLoading] = useState(false);
     const [segError, setSegError] = useState<string | null>(null);
+    const [segmentShowFull, setSegmentShowFull] = useState(false);
+    const [segmentGranularity, setSegmentGranularity] = useState<SegmentGranularity>('balanced');
     const [segmentDocumentId, setSegmentDocumentId] = useState<string>('');
     const segDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const segRequestRef = useRef(0);
     const [applying, setApplying] = useState(false);
     const [showApplyModal, setShowApplyModal] = useState(false);
     const [cancelApplyRequested, setCancelApplyRequested] = useState(false);
@@ -135,7 +127,7 @@ export default function ProjectInitPage() {
     const termApplyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     // 三阶段术语流程（提取 -> 插入已有词条 -> 预翻译未知词条）
     const [termFlow, setTermFlow] = useState<
-        'idle' | 'extracting' | 'applying' | 'translating' | 'done'
+        'idle' | 'extracting' | 'review' | 'applying' | 'translating' | 'done'
     >('idle');
     const [applyStatsInsert, setApplyStatsInsert] = useState<{
         inserted: number;
@@ -159,6 +151,12 @@ export default function ProjectInitPage() {
     async function startTerms() {
         if (!projectId) return false;
         setStarting(true);
+        setTerms([]);
+        setDictMatches([]);
+        setDictCheckedTerms([]);
+        setTermsApplied(false);
+        termPctRef.current = 0;
+        updateProgress(undefined, 0);
         termFailureNotifiedRef.current = false;
         try {
             const r = await fetch(`/api/projects/${projectId}/terms`, {
@@ -244,15 +242,19 @@ export default function ProjectInitPage() {
     async function loadTermPreview() {
         if (!projectId || !batchId) return;
         setTermPreviewLoading(true);
+        setTermPreviewError(null);
+        setTermPreview([]);
         try {
             const r = await fetch(`/api/projects/${projectId}/terms/preview`, {
                 method: 'POST',
                 headers: { 'content-type': 'application/json' },
-                body: JSON.stringify({ batchId, maxTerms, prompt: termPrompt }),
+                body: JSON.stringify({ batchId, maxTerms, chunkSize, overlap, prompt: termPrompt }),
             });
-            const j = await r.json();
-            if (Array.isArray(j?.terms)) setTermPreview(j.terms);
-        } catch {
+            const j = await r.json().catch(() => ({}));
+            if (!r.ok) throw new Error(j?.error || '术语预览生成失败，请重试');
+            setTermPreview(Array.isArray(j?.terms) ? j.terms : []);
+        } catch (error: any) {
+            setTermPreviewError(error?.message || '术语预览生成失败，请重试');
         } finally {
             setTermPreviewLoading(false);
         }
@@ -270,42 +272,23 @@ export default function ProjectInitPage() {
             if (cancelApplyRequested) return;
             try {
                 setApplying(true);
-                // 1) 触发全量分割（非预览），在服务端按 JSON paragraphs 生成完整段落
-                try {
-                    const uPost = new URL(
-                        `/api/projects/${projectId}/segment`,
-                        window.location.origin
-                    );
-                    uPost.searchParams.set('batchId', batchId);
-                    await fetch(uPost.toString(), { method: 'POST' });
-                } catch { }
-                // 2) 拉取全量段落，失败则回退到预览段落
-                let fullSegs: any[] = [];
-                try {
-                    for (let i = 0; i < 4; i++) {
-                        const u = new URL(
-                            `/api/projects/${projectId}/segment`,
-                            window.location.origin
-                        );
-                        u.searchParams.set('batchId', batchId);
-                        u.searchParams.set('wait', '2000');
-                        const r = await fetch(u.toString());
-                        const j = await r.json();
-                        const segs = Array.isArray(j?.segments) ? j.segments : [];
-                        if (segs.length) {
-                            fullSegs = segs;
-                            break;
-                        }
-                    }
-                } catch { }
-                const toApply = fullSegs.length ? fullSegs : segItems;
-                const res = await applySegmentAction(segmentDocumentId, toApply);
-                if ((res as any)?.count >= 0) {
-                    updateProgress(100, undefined);
-                    segPctRef.current = 100;
-                    updateStep('terms');
-                }
-            } catch {
+                const uPost = new URL(`/api/projects/${projectId}/segment`, window.location.origin);
+                uPost.searchParams.set('batchId', batchId);
+                const response = await fetch(uPost.toString(), {
+                    method: 'POST',
+                    headers: { 'content-type': 'application/json' },
+                    body: JSON.stringify({ segment: { granularity: segmentGranularity } }),
+                });
+                const result = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(result?.error || '应用全文分割失败，请重试');
+                if (Number(result?.count || 0) <= 0) throw new Error('全文没有可应用的分割结果');
+                updateProgress(100, undefined);
+                segPctRef.current = 100;
+                updateStep('terms');
+            } catch (error: any) {
+                toast.error('应用全文分割失败', {
+                    description: error?.message || '请重试',
+                });
             } finally {
                 setApplying(false);
                 setShowApplyModal(false);
@@ -328,7 +311,7 @@ export default function ProjectInitPage() {
             if (statusAbortRef.current) {
                 try {
                     statusAbortRef.current.abort();
-                } catch { }
+                } catch {}
             }
             const controller = new AbortController();
             statusAbortRef.current = controller;
@@ -360,6 +343,7 @@ export default function ProjectInitPage() {
                 updateProgress(nextA, nextB);
                 if (Array.isArray(j?.terms)) setTerms(j.terms);
                 if (Array.isArray(j?.dict)) setDictMatches(j.dict);
+                if (Array.isArray(j?.dictCheckedTerms)) setDictCheckedTerms(j.dictCheckedTerms);
                 if (b >= 100) termFailureNotifiedRef.current = false;
                 if (!(a >= 100 && b >= 100)) {
                     longPoll(a, b);
@@ -387,19 +371,21 @@ export default function ProjectInitPage() {
             if (statusAbortRef.current) {
                 try {
                     statusAbortRef.current.abort();
-                } catch { }
+                } catch {}
             }
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [projectId, batchId]);
 
-    // 术语提取完成后，若处于流程中，则继续应用（不自动关闭模态）
+    // 正式提取完成后先回到结果页审阅，不自动写入词库。
     useEffect(() => {
         if (termPct >= 100 && showTermApplyModal && termFlow === 'extracting') {
-            void applyTermsPipeline();
+            setTermApplying(false);
+            setShowTermApplyModal(false);
+            setTermFlow('review');
+            toast.success('术语提取完成，请确认结果后再写入词库');
         }
     }, [termPct, showTermApplyModal, termFlow]);
-    // 取消原有的自动写入逻辑，改由流程控制
 
     // 获取当前项目的最新文档，用于预览/应用
     useEffect(() => {
@@ -407,53 +393,58 @@ export default function ProjectInitPage() {
             try {
                 const s = await getLatestDocumentStatusForProjectAction(projectId);
                 if (s && s.documentId) setSegmentDocumentId(s.documentId);
-            } catch { }
+            } catch {}
         })();
     }, [projectId]);
 
-    async function loadSegPreview(opts?: { all?: boolean }) {
+    async function loadSegPreview(opts?: { all?: boolean; regenerate?: boolean }) {
         if (!projectId || !batchId) return;
+        const requestId = ++segRequestRef.current;
         setSegLoading(true);
         setSegError(null);
         try {
-            // 触发预览分段：使用 segment 模式 + preview/headChars
-            const headChars = 2000;
-            const uPost = new URL(`/api/projects/${projectId}/segment`, window.location.origin);
-            uPost.searchParams.set('batchId', batchId);
-            uPost.searchParams.set('preview', '1');
-            uPost.searchParams.set('headChars', String(headChars));
-            await fetch(uPost.toString(), { method: 'POST' });
-            // 短轮询最多 3 次，等待 worker 返回
-            let got: any[] = [];
-            for (let i = 0; i < 3; i++) {
-                const u = new URL(`/api/projects/${projectId}/segment`, window.location.origin);
-                u.searchParams.set('batchId', batchId);
-                u.searchParams.set('preview', '1');
-                if (opts?.all) u.searchParams.set('all', '1');
-                u.searchParams.set('wait', '3000');
-                const r = await fetch(u.toString());
-                const j = await r.json();
-                const segs = Array.isArray(j?.segments) ? j.segments : [];
-                if (segs.length) {
-                    got = segs;
-                    break;
-                }
+            if (opts?.regenerate !== false) {
+                const uPost = new URL(`/api/projects/${projectId}/segment`, window.location.origin);
+                uPost.searchParams.set('batchId', batchId);
+                uPost.searchParams.set('preview', '1');
+                const previewResponse = await fetch(uPost.toString(), {
+                    method: 'POST',
+                    headers: { 'content-type': 'application/json' },
+                    body: JSON.stringify({ segment: { granularity: segmentGranularity } }),
+                });
+                const previewResult = await previewResponse.json().catch(() => ({}));
+                if (!previewResponse.ok)
+                    throw new Error(previewResult?.error || '分割预览生成失败，请重试');
             }
-            setSegItems(got);
+
+            const u = new URL(`/api/projects/${projectId}/segment`, window.location.origin);
+            u.searchParams.set('batchId', batchId);
+            u.searchParams.set('preview', '1');
+            u.searchParams.set('granularity', segmentGranularity);
+            if (opts?.all ?? segmentShowFull) u.searchParams.set('all', '1');
+            const response = await fetch(u.toString());
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(result?.error || '分割预览读取失败，请重试');
+            if (requestId === segRequestRef.current) {
+                setSegItems(Array.isArray(result?.segments) ? result.segments : []);
+                setSegBodyCount(
+                    Number(
+                        result?.bodyCount ??
+                            (Array.isArray(result?.segments)
+                                ? result.segments.filter(
+                                      (item: PreviewSegmentItem) =>
+                                          String(item?.type || '').toUpperCase() !== 'TITLE'
+                                  ).length
+                                : 0)
+                    )
+                );
+            }
         } catch (e: any) {
-            setSegError(String(e?.message || e));
+            if (requestId === segRequestRef.current) setSegError(String(e?.message || e));
         } finally {
-            setSegLoading(false);
+            if (requestId === segRequestRef.current) setSegLoading(false);
         }
     }
-
-    // 进入分割步骤时加载一次预览
-    useEffect(() => {
-        if (currentStep === 'segment' && segmentDocumentId) {
-            loadSegPreview();
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentStep, segmentDocumentId]);
 
     // 进入 terms 步骤时加载术语预览
     useEffect(() => {
@@ -463,18 +454,18 @@ export default function ProjectInitPage() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [currentStep]);
 
-    // 粒度/提示变更时自动刷新预览（防抖），仅在分割步骤生效
+    // 进入步骤或粒度变化时刷新一次预览；快速滑动时仅保留最后一次请求。
     useEffect(() => {
         if (currentStep !== 'segment' || !segmentDocumentId) return;
         if (segDebounceRef.current) clearTimeout(segDebounceRef.current);
         segDebounceRef.current = setTimeout(() => {
             loadSegPreview();
-        }, 500);
+        }, 350);
         return () => {
             if (segDebounceRef.current) clearTimeout(segDebounceRef.current);
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentStep, segmentDocumentId]);
+    }, [currentStep, segmentDocumentId, segmentGranularity]);
 
     // 顶部步骤条使用统一 Stepper 组件
 
@@ -501,6 +492,10 @@ export default function ProjectInitPage() {
                                         setPreviewHtml('');
                                         setSegItems([]);
                                         setSegError(null);
+                                        setSegmentShowFull(false);
+                                        setSegmentGranularity('balanced');
+                                        setTermPreview([]);
+                                        setTermPreviewError(null);
                                         resetTermApplyResult();
                                         setTermFlow('idle');
                                         updateStep('parse');
@@ -550,10 +545,19 @@ export default function ProjectInitPage() {
                         {currentStep === 'segment' && (
                             <SegmentPanel
                                 segItems={segItems}
+                                bodyCount={segBodyCount}
                                 segLoading={segLoading}
                                 segError={segError}
-                                onResegment={o => {
-                                    if (segmentDocumentId) void loadSegPreview({ all: o?.all });
+                                granularity={segmentGranularity}
+                                onGranularityChange={setSegmentGranularity}
+                                showFull={segmentShowFull}
+                                onShowFullChange={value => {
+                                    setSegmentShowFull(value);
+                                    if (segmentDocumentId)
+                                        void loadSegPreview({
+                                            all: value,
+                                            regenerate: false,
+                                        });
                                 }}
                                 busy={segLoading || starting}
                             />
@@ -571,14 +575,15 @@ export default function ProjectInitPage() {
                                 setTermPrompt={setTermPrompt}
                                 termPreview={termPreview}
                                 termPreviewLoading={termPreviewLoading}
+                                termPreviewError={termPreviewError}
                                 terms={terms}
                                 dict={dictMatches}
+                                dictCheckedTerms={dictCheckedTerms}
                                 autoApplyTerms={autoApplyTerms}
                                 setAutoApplyTerms={setAutoApplyTerms}
                                 termPct={termPct}
                                 starting={starting}
                                 onPreview={loadTermPreview}
-                                onStart={startTerms}
                                 onApply={async () => {
                                     await applyTermsPipeline();
                                 }}
@@ -627,7 +632,11 @@ export default function ProjectInitPage() {
                                                 'PARSING'
                                             );
                                         }}
-                                        disabled={starting || !previewHtml}
+                                        disabled={
+                                            starting ||
+                                            !previewHtml ||
+                                            previewHtml.startsWith('ERROR:')
+                                        }
                                     >
                                         {t('next')}
                                     </Button>
@@ -669,7 +678,7 @@ export default function ProjectInitPage() {
                                                     try {
                                                         setTermApplying(true);
                                                         await startTerms();
-                                                    } catch { }
+                                                    } catch {}
                                                 }, 500);
                                             }}
                                             disabled={starting || (termPct > 0 && termPct < 100)}
@@ -685,7 +694,7 @@ export default function ProjectInitPage() {
                                                 setTermFlow('applying');
                                                 void applyTermsPipeline();
                                             }}
-                                            disabled={applyingTerms}
+                                            disabled={applyingTerms || (!termsApplied && !terms.length)}
                                         >
                                             {applyingTerms ? '写入中…' : '手动写入词库'}
                                         </Button>
@@ -702,7 +711,7 @@ export default function ProjectInitPage() {
                                                 setTermFlow('applying');
                                                 void applyTermsPipeline();
                                             }}
-                                            disabled={applyingTerms}
+                                            disabled={applyingTerms || (!termsApplied && !terms.length)}
                                         >
                                             {t('next')}
                                         </Button>
@@ -731,7 +740,9 @@ export default function ProjectInitPage() {
                                         }}
                                     >
                                         {/* 可选：在按钮内部也显示一个小圈圈 */}
-                                        {isNavigatingToIDE && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                        {isNavigatingToIDE && (
+                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                        )}
                                         {t('gotoIDE')}
                                     </Button>
                                 </>
@@ -812,8 +823,8 @@ export default function ProjectInitPage() {
                                         {applyStatsInsert
                                             ? `${t('statsInserted', { n: applyStatsInsert.inserted })}${applyStatsInsert.updated ? ` ${t('statsUpdated', { n: applyStatsInsert.updated })}` : ''}`
                                             : termFlow === 'applying'
-                                                ? t('statusTranslating')
-                                                : t('statusPending')}
+                                              ? t('statusTranslating')
+                                              : t('statusPending')}
                                     </div>
                                 </div>
                                 <div className="flex items-center justify-between rounded border bg-muted/10 px-2 py-1">
@@ -836,8 +847,8 @@ export default function ProjectInitPage() {
                                             ? translateCount !== null
                                                 ? `${t('statsTranslated', { n: translateCount })}`
                                                 : termFlow === 'translating'
-                                                    ? t('statusTranslating')
-                                                    : t('statusPending')
+                                                  ? t('statusTranslating')
+                                                  : t('statusPending')
                                             : t('statusOff')}
                                     </div>
                                 </div>

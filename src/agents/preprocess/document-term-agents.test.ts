@@ -23,6 +23,25 @@ test('keeps statistical candidates for a single document chunk', () => {
     );
 
     assert.ok(candidates.length > 0);
+    assert.ok(candidates.some(candidate => candidate.term === '学前教育'));
+    assert.equal(
+        candidates.some(candidate => /[\u3400-\u9fff]\s+[\u3400-\u9fff]/.test(candidate.term)),
+        false
+    );
+});
+
+test('builds readable Chinese multi-word term candidates', () => {
+    const candidates = buildStatCandidates(
+        '生态环境主管部门开展环境影响评价。生态环境主管部门公开环境质量信息。',
+        8000,
+        300,
+        80
+    );
+    const terms = new Set(candidates.map(candidate => candidate.term));
+
+    assert.ok(terms.has('生态环境'));
+    assert.ok(terms.has('生态环境主管部门'));
+    assert.equal([...terms].some(term => /[\u3400-\u9fff]\s+[\u3400-\u9fff]/.test(term)), false);
 });
 
 test('falls back to statistical candidates when LLM scoring is not an array', () => {

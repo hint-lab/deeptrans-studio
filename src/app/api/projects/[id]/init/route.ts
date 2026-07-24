@@ -1,13 +1,20 @@
 import { queryDictionaryEntriesExactByScope } from '@/actions/dictionary';
 import { uploadFileAction } from '@/actions/upload';
+import { updateDocumentStructuredDB } from '@/db/document';
+import { DOCUMENT_TERMS_RUN_ERROR, resolveDocumentTermsStatus } from '@/lib/document-term-job';
 import {
-    updateDocumentStructuredDB
-} from '@/db/document';
+    DEFAULT_SEGMENT_GRANULARITY,
+    limitSegmentPreview,
+    normalizeSegmentGranularity,
+    segmentPreviewActiveGranularityKey,
+    segmentPreviewBatchId,
+} from '@/lib/document-segmentation';
 import {
-    DOCUMENT_TERMS_RUN_ERROR,
-    resolveDocumentTermsStatus,
-} from '@/lib/document-term-job';
-import { guardMessage, guardStatus, requireOwnedProject, requireWritableProject } from '@/lib/guards';
+    guardMessage,
+    guardStatus,
+    requireOwnedProject,
+    requireWritableProject,
+} from '@/lib/guards';
 import { readInitStructuredRaw, scopedProjectBatchId } from '@/lib/init-artifact-keys';
 import { getRedis } from '@/lib/redis';
 import { NextRequest, NextResponse } from 'next/server';
@@ -22,7 +29,7 @@ async function handlePersist(only: any, batchId: string, projectIdFromParams: st
     let structuredObj: any = undefined;
     try {
         structuredObj = structuredStored ? JSON.parse(String(structuredStored)) : undefined;
-    } catch { }
+    } catch {}
     const htmlContent = String(previewHtmlStored || '');
     if (!structuredObj && !htmlContent) {
         return NextResponse.json({ error: 'no parse artifacts to persist' }, { status: 400 });
@@ -72,7 +79,7 @@ async function handlePersist(only: any, batchId: string, projectIdFromParams: st
     };
     try {
         await updateDocumentStructuredDB(only.id, stored);
-    } catch { }
+    } catch {}
     return NextResponse.json({ ok: true, step: 'persist', artifacts: stored });
 }
 
@@ -84,7 +91,7 @@ export async function POST(req: NextRequest, ctx: any) {
         let body: any = {};
         try {
             body = await req.json();
-        } catch { }
+        } catch {}
         const batchId = String(q.get('batchId') || body?.batchId || '');
         const mode = (q.get('action') as any) || body?.mode;
         const terms = body?.terms || undefined;
@@ -92,7 +99,8 @@ export async function POST(req: NextRequest, ctx: any) {
             headChars: Number(q.get('headChars') || body?.segment?.headChars || 0) || undefined,
             preview: q.get('preview') === '1' ? true : body?.segment?.preview === true,
         } as { headChars?: number; preview?: boolean };
-        if (!projectIdFromParams) return NextResponse.json({ error: 'missing project id' }, { status: 400 });
+        if (!projectIdFromParams)
+            return NextResponse.json({ error: 'missing project id' }, { status: 400 });
         if (!batchId) return NextResponse.json({ error: 'missing batchId' }, { status: 400 });
 
         const project = await requireWritableProject(projectIdFromParams);
@@ -131,7 +139,10 @@ export async function POST(req: NextRequest, ctx: any) {
 
         return NextResponse.json({ error: 'bad mode' }, { status: 400 });
     } catch (e: any) {
-        return NextResponse.json({ error: guardMessage(e) || 'start failed' }, { status: guardStatus(e) });
+        return NextResponse.json(
+            { error: guardMessage(e) || 'start failed' },
+            { status: guardStatus(e) }
+        );
     }
 }
 
@@ -151,7 +162,16 @@ export async function GET(req: NextRequest, ctx: any) {
         const previewMode = req.nextUrl.searchParams.get('preview') === '1';
         const showAll = req.nextUrl.searchParams.get('all') === '1';
         const scopedBatchId = scopedProjectBatchId(projectIdFromParams, batchId);
-        const segBatch = previewMode ? `preview:${scopedBatchId}` : scopedBatchId;
+        const requestedGranularity = req.nextUrl.searchParams.get('granularity');
+        const activeGranularity = previewMode
+            ? await redis.get(segmentPreviewActiveGranularityKey(scopedBatchId))
+            : null;
+        const selectedGranularity = normalizeSegmentGranularity(
+            requestedGranularity || activeGranularity || DEFAULT_SEGMENT_GRANULARITY
+        );
+        const segBatch = previewMode
+            ? segmentPreviewBatchId(scopedBatchId, selectedGranularity)
+            : scopedBatchId;
 
         const toPct = (t: any, d: any) =>
             Number(t) > 0 ? Math.min(100, Math.round((Number(d) / Number(t)) * 100)) : 0;
@@ -192,13 +212,16 @@ export async function GET(req: NextRequest, ctx: any) {
                 notes?: string;
                 source?: string;
             }> = [];
+            let dictCheckedTerms: string[] = [];
             try {
                 const obj = termsJson ? JSON.parse(String(termsJson)) : null;
-                if (obj && Array.isArray(obj.terms)) terms = obj.terms.slice(0, 20);
-            } catch { }
+                if (obj && Array.isArray(obj.terms)) terms = obj.terms;
+            } catch {}
             let segments: Array<{ type: string; sourceText: string }> | undefined;
+            let cachedSegmentGranularity: unknown;
             try {
                 const obj = segItemJson ? JSON.parse(String(segItemJson)) : null;
+                cachedSegmentGranularity = obj?.granularity;
                 const arr = obj && Array.isArray(obj.segments) ? obj.segments : undefined;
                 if (arr) {
                     segments = arr.map((s: any) => ({
@@ -224,10 +247,9 @@ export async function GET(req: NextRequest, ctx: any) {
                         if (parts.length) segments = parts;
                     }
                 }
-            } catch { }
-            if (previewMode && Array.isArray(segments) && !showAll) {
-                segments = segments.slice(0, 20);
-            }
+            } catch {}
+            const limitedSegments = limitSegmentPreview(segments, !previewMode || showAll);
+            segments = limitedSegments.segments;
             const fullHtml = (await redis.get(`init.${scopedBatchId}.previewHtml`)) || '';
             const limitHtml = (() => {
                 try {
@@ -243,27 +265,35 @@ export async function GET(req: NextRequest, ctx: any) {
             // 基于提取的术语做一次精确词典命中查询（限制前 20 个术语），用于前端高亮
             try {
                 const uniqueTerms = Array.from(
-                    new Set((terms || []).map(t => String(t?.term || '').trim()).filter(Boolean))
+                    new Set(
+                        (terms || [])
+                            .slice(0, 20)
+                            .map(t => String(t?.term || '').trim())
+                            .filter(Boolean)
+                    )
                 );
+                dictCheckedTerms = uniqueTerms;
                 const out: Array<{
                     term: string;
                     translation: string;
                     notes?: string;
                     source?: string;
                 }> = [];
-                for (const t of uniqueTerms) {
-                    const r = await queryDictionaryEntriesExactByScope(t, { limit: 10 });
+                const results = await Promise.all(
+                    uniqueTerms.map(t => queryDictionaryEntriesExactByScope(t, { limit: 10 }))
+                );
+                for (const r of results) {
                     if (r?.success && Array.isArray(r.data) && r.data.length) {
                         for (const row of r.data as any[]) out.push(row);
                     }
                 }
                 dict = out;
-            } catch { }
+            } catch {}
 
             let docxStructured: any = undefined;
             try {
                 docxStructured = structuredRaw ? JSON.parse(String(structuredRaw)) : undefined;
-            } catch { }
+            } catch {}
             return {
                 segProgress,
                 termsProgress,
@@ -277,7 +307,13 @@ export async function GET(req: NextRequest, ctx: any) {
                 previewHtmlLimited: limitHtml || '',
                 terms,
                 dict,
+                dictCheckedTerms,
                 segments,
+                totalCount: limitedSegments.totalCount,
+                bodyCount: limitedSegments.bodyCount,
+                granularity: normalizeSegmentGranularity(
+                    cachedSegmentGranularity || selectedGranularity
+                ),
                 docxStructured,
             };
         }
@@ -320,6 +356,9 @@ export async function GET(req: NextRequest, ctx: any) {
         const status = await readStatus();
         return NextResponse.json(status);
     } catch (e: any) {
-        return NextResponse.json({ error: guardMessage(e) || 'status failed' }, { status: guardStatus(e) });
+        return NextResponse.json(
+            { error: guardMessage(e) || 'status failed' },
+            { status: guardStatus(e) }
+        );
     }
 }

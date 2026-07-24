@@ -1,44 +1,66 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getRedis } from '@/lib/redis';
-import { extractMonolingualTermsAction } from '@/actions/pre-translate';
 import { extractTextFromUrl } from '@/lib/file-parser';
 import { guardMessage, guardStatus, requireOwnedProject } from '@/lib/guards';
-import { scopedProjectBatchId } from '@/lib/init-artifact-keys';
+import { readInitStructuredRaw, scopedProjectBatchId } from '@/lib/init-artifact-keys';
+import { buildStatCandidates } from '@/lib/terms/termStats';
 
 export async function POST(req: NextRequest, context: any) {
     try {
-        const { batchId, maxTerms, prompt } = (await req.json()) as {
+        const { batchId, maxTerms, chunkSize, overlap } = (await req.json()) as {
             batchId?: string;
             maxTerms?: number;
-            prompt?: string;
+            chunkSize?: number;
+            overlap?: number;
         };
         const redis = await getRedis();
         let text = '';
         const { id: projectId } = await (context?.params || {});
         const project = await requireOwnedProject(projectId);
         if (batchId) {
-            const preview = await redis.get(`init.${scopedProjectBatchId(projectId, batchId)}.preview`);
-            if (typeof preview === 'string' && preview.trim()) text = preview;
+            const scopedBatchId = scopedProjectBatchId(projectId, batchId);
+            const structuredRaw = await readInitStructuredRaw(redis, scopedBatchId);
+            try {
+                const structured = structuredRaw ? JSON.parse(String(structuredRaw)) : null;
+                if (Array.isArray(structured?.paragraphs)) {
+                    text = structured.paragraphs
+                        .map((paragraph: any) => String(paragraph?.text || '').trim())
+                        .filter(Boolean)
+                        .join('\n\n');
+                }
+            } catch {
+                text = '';
+            }
         }
         if (!text) {
             const only = project.documents?.[0];
             if (only?.url) {
                 const { text: full } = await extractTextFromUrl(only.url);
-                text = String(full || '').slice(0, 2000);
+                text = String(full || '').trim();
             }
         }
         if (!text) return NextResponse.json({ terms: [] });
-        const limit = Math.max(10, Math.min(200, Number(maxTerms || 50)));
-        const terms = await extractMonolingualTermsAction(text, { prompt });
-        const uniq = new Map<string, { term: string; score?: number }>();
-        for (const t of terms || []) {
-            const k = String(t?.term || '').trim();
-            if (!k) continue;
-            if (!uniq.has(k))
-                uniq.set(k, { term: k, score: typeof t?.score === 'number' ? t.score : undefined });
-        }
-        return NextResponse.json({ terms: Array.from(uniq.values()).slice(0, limit) });
+        const limit = Math.max(10, Math.min(200, Number(maxTerms || 120)));
+        const normalizedChunkSize = Math.max(1000, Math.min(12000, Number(chunkSize || 8000)));
+        const normalizedOverlap = Math.max(
+            0,
+            Math.min(Math.floor(normalizedChunkSize / 4), Number(overlap || 300))
+        );
+        const terms = buildStatCandidates(
+            text,
+            normalizedChunkSize,
+            normalizedOverlap,
+            Math.max(limit, limit * 5)
+        ).slice(0, limit);
+        return NextResponse.json({
+            terms,
+            previewMode: 'local-statistical',
+            sourceCharacters: text.length,
+        });
     } catch (e: any) {
-        return NextResponse.json({ error: guardMessage(e) || 'preview failed' }, { status: guardStatus(e) });
+        return NextResponse.json(
+            { error: guardMessage(e) || 'preview failed' },
+            { status: guardStatus(e) }
+        );
     }
 }

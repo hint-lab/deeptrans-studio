@@ -1,22 +1,45 @@
 import { getFileUrlAction } from '@/actions/upload';
 import { updateDocumentStatusDB } from '@/db/document';
-import { createDocumentItemsBulkDB, deleteDocumentItemsByDocumentIdDB } from '@/db/documentItem';
+import { replaceDocumentItemsAtomicDB } from '@/db/documentItem';
 import { extractTextFromUrl } from '@/lib/file-parser';
-import { guardMessage, guardStatus, requireOwnedProject, requireOwnedProjectDocument, requireWritableProject } from '@/lib/guards';
-import { initStructuredKey, readInitStructuredRaw, scopedProjectBatchId } from '@/lib/init-artifact-keys';
+import {
+    guardMessage,
+    guardStatus,
+    requireOwnedProject,
+    requireOwnedProjectDocument,
+    requireWritableProject,
+} from '@/lib/guards';
+import {
+    initStructuredKey,
+    readInitStructuredRaw,
+    scopedProjectBatchId,
+} from '@/lib/init-artifact-keys';
+import {
+    DEFAULT_SEGMENT_GRANULARITY,
+    limitSegmentPreview,
+    normalizeSegmentGranularity,
+    segmentPreviewActiveGranularityKey,
+    segmentPreviewBatchId,
+    segmentPreviewGenerationKey,
+    segmentStructuredParagraphs,
+    type StructuredParagraph,
+} from '@/lib/document-segmentation';
 import { createLogger } from '@/lib/logger';
 import { getRedis } from '@/lib/redis';
 import { TTL_BATCH, TTL_PROGRESS, setJSONWithTTL, setTextWithTTL } from '@/lib/redis-ttl';
 import { DocumentStatus } from '@/types/enums';
 import { NextRequest, NextResponse } from 'next/server';
-const logger = createLogger({
-    type: 'request:segment',
-}, {
-    json: false,// 开启json格式输出
-    pretty: false, // 关闭开发环境美化输出
-    colors: true, // 仅当json：false时启用颜色输出可用
-    includeCaller: false, // 日志不包含调用者
-});
+const logger = createLogger(
+    {
+        type: 'request:segment',
+    },
+    {
+        json: false, // 开启json格式输出
+        pretty: false, // 关闭开发环境美化输出
+        colors: true, // 仅当json：false时启用颜色输出可用
+        includeCaller: false, // 日志不包含调用者
+    }
+);
 async function buildTextFromStructuredHelper(
     only: any,
     opts?: { isPreview?: boolean; headChars?: number; maxParas?: number }
@@ -32,7 +55,7 @@ async function buildTextFromStructuredHelper(
             try {
                 const r = await getFileUrlAction(String(artifacts.jsonFile));
                 jsonUrl = (r as any)?.data?.fileUrl || null;
-            } catch { }
+            } catch {}
         }
         if (!jsonUrl) return '';
         const r = await fetch(jsonUrl);
@@ -62,6 +85,14 @@ async function buildTextFromStructuredHelper(
     }
 }
 
+function paragraphsFromText(text: string): StructuredParagraph[] {
+    return String(text || '')
+        .split(/\n\s*\n|\r?\n/)
+        .map(value => value.trim())
+        .filter(Boolean)
+        .map(value => ({ text: value, level: null, styleName: 'Normal' }));
+}
+
 export async function POST(req: NextRequest, ctx: any) {
     let ownedDocumentId = '';
     try {
@@ -71,13 +102,20 @@ export async function POST(req: NextRequest, ctx: any) {
         let body: any = {};
         try {
             body = await req.json();
-        } catch { }
+        } catch {}
         const batchId = String(q.get('batchId') || body?.batchId || '');
         const docIdFromReq = String(q.get('docId') || body?.documentId || '') || undefined;
         const segment = {
             headChars: Number(q.get('headChars') || body?.segment?.headChars || 0) || undefined,
             preview: q.get('preview') === '1' ? true : body?.segment?.preview === true,
-        } as { headChars?: number; preview?: boolean };
+            granularity: normalizeSegmentGranularity(
+                q.get('granularity') || body?.segment?.granularity || DEFAULT_SEGMENT_GRANULARITY
+            ),
+        } as {
+            headChars?: number;
+            preview?: boolean;
+            granularity: ReturnType<typeof normalizeSegmentGranularity>;
+        };
         if (!batchId) return NextResponse.json({ error: 'missing batchId' }, { status: 400 });
 
         const project = await requireWritableProject(projectIdFromParams);
@@ -90,6 +128,12 @@ export async function POST(req: NextRequest, ctx: any) {
         ownedDocumentId = only.id;
         // 构造正文（优先 structured）
         const isPreview = segment?.preview === true;
+        let previewGeneration: number | undefined;
+        if (isPreview) {
+            const generationKey = segmentPreviewGenerationKey(scopedBatchId);
+            previewGeneration = await redis.incr(generationKey);
+            await redis.expire(generationKey, Math.max(60, TTL_BATCH));
+        }
         const previewHead = Math.max(500, Math.min(8000, Number(segment?.headChars ?? 2000)));
         let bodyText = await buildTextFromStructuredHelper(
             only,
@@ -99,11 +143,13 @@ export async function POST(req: NextRequest, ctx: any) {
             try {
                 const { text } = await extractTextFromUrl(only.url);
                 bodyText = String(text || '').trim();
-            } catch { }
+            } catch {}
         }
         if (!bodyText) return NextResponse.json({ error: 'empty content' }, { status: 400 });
 
-        const segBatch = isPreview ? `preview:${scopedBatchId}` : scopedBatchId;
+        const segBatch = isPreview
+            ? segmentPreviewBatchId(scopedBatchId, segment.granularity)
+            : scopedBatchId;
 
         if (isPreview) {
             // 直接按 structured JSON 的 paragraphs 输出分段（透传 level/styleName/runs/placeholderSpans）
@@ -124,7 +170,7 @@ export async function POST(req: NextRequest, ctx: any) {
                     const obj = JSON.parse(String(raw));
                     if (Array.isArray(obj?.paragraphs)) paragraphs = obj.paragraphs as any[];
                 }
-            } catch { }
+            } catch {}
             // 若 Redis 不存在，尝试从对象存储读取
             if (!paragraphs.length) {
                 try {
@@ -134,47 +180,50 @@ export async function POST(req: NextRequest, ctx: any) {
                         try {
                             const r = await getFileUrlAction(String(artifacts.jsonFile));
                             jsonUrl = (r as any)?.data?.fileUrl || null;
-                        } catch { }
+                        } catch {}
                     }
                     if (jsonUrl) {
                         const r = await fetch(jsonUrl);
                         const j = await r.json();
                         if (Array.isArray(j?.paragraphs)) paragraphs = j.paragraphs as any[];
                     }
-                } catch { }
+                } catch {}
             }
+            const sourceParagraphs = paragraphs.length ? paragraphs : paragraphsFromText(bodyText);
             const out: Array<{ type: string; sourceText: string; metadata?: any }> = [];
             const title = String((only as any)?.originalName || '').trim();
-            if (title) out.push({ type: 'TITLE', sourceText: title, metadata: { level: 1 } });
-            for (const p of paragraphs.slice(0, 200)) {
-                const t = String((p as any)?.text || '').trim();
-                if (!t) continue;
-                const level = (p as any)?.level ?? null;
-                const styleName = (p as any)?.styleName;
-                const runs = (p as any)?.runs;
-                const placeholderSpans = (p as any)?.placeholderSpans;
-                // 类型推导：Heading -> HEADING-n，普通段 -> PARAGRAPH，保留 styleName 标记
-                const type =
-                    level && level >= 1 && level <= 6
-                        ? `HEADING-${level}`
-                        : styleName
-                            ? String(styleName).toUpperCase()
-                            : 'PARAGRAPH';
+            if (title)
                 out.push({
-                    type,
-                    sourceText: t,
-                    metadata: { level, styleName, runs, placeholderSpans },
+                    type: 'TITLE',
+                    sourceText: title,
+                    metadata: { level: 1, segmentGranularity: segment.granularity },
                 });
-            }
+            out.push(...segmentStructuredParagraphs(sourceParagraphs, segment.granularity));
             await setTextWithTTL(redis, `seg.${segBatch}.total`, '1', TTL_PROGRESS);
             await setTextWithTTL(redis, `seg.${segBatch}.done`, '1', TTL_PROGRESS);
             await setJSONWithTTL(
                 redis,
                 `seg.${segBatch}.item.seg.all`,
-                { segments: out },
+                { segments: out, granularity: segment.granularity },
                 TTL_BATCH
             );
-            return NextResponse.json({ ok: true, step: 'segment-preview' });
+            const latestGeneration = Number(
+                await redis.get(segmentPreviewGenerationKey(scopedBatchId))
+            );
+            if (previewGeneration === latestGeneration) {
+                await setTextWithTTL(
+                    redis,
+                    segmentPreviewActiveGranularityKey(scopedBatchId),
+                    segment.granularity,
+                    TTL_BATCH
+                );
+            }
+            return NextResponse.json({
+                ok: true,
+                step: 'segment-preview',
+                count: out.length,
+                granularity: segment.granularity,
+            });
         }
 
         // 非预览：直接按 structured JSON 的 paragraphs 输出全量分段（不入队）
@@ -191,7 +240,7 @@ export async function POST(req: NextRequest, ctx: any) {
                 const obj = JSON.parse(String(raw));
                 if (Array.isArray(obj?.paragraphs)) paragraphsAll = obj.paragraphs as any[];
             }
-        } catch { }
+        } catch {}
         if (!paragraphsAll.length) {
             try {
                 const artifacts = (only as any)?.structured?.artifacts;
@@ -200,77 +249,64 @@ export async function POST(req: NextRequest, ctx: any) {
                     try {
                         const r = await getFileUrlAction(String(artifacts.jsonFile));
                         jsonUrl = (r as any)?.data?.fileUrl || null;
-                    } catch { }
+                    } catch {}
                 }
                 if (jsonUrl) {
                     const r = await fetch(jsonUrl);
                     const j = await r.json();
                     if (Array.isArray(j?.paragraphs)) paragraphsAll = j.paragraphs as any[];
                 }
-            } catch { }
+            } catch {}
         }
+        const sourceParagraphsAll = paragraphsAll.length
+            ? paragraphsAll
+            : paragraphsFromText(bodyText);
         const outAll: Array<{ type: string; sourceText: string; metadata?: any }> = [];
         const titleFull = String((only as any)?.originalName || '').trim();
         if (titleFull)
-            outAll.push({ type: 'TITLE', sourceText: titleFull, metadata: { level: 1 } });
-        for (const p of paragraphsAll) {
-            const t = String((p as any)?.text || '').trim();
-            if (!t) continue;
-            const level = (p as any)?.level ?? null;
-            const styleName = (p as any)?.styleName;
-            const runs = (p as any)?.runs;
-            const placeholderSpans = (p as any)?.placeholderSpans;
-            const type =
-                level && level >= 1 && level <= 6
-                    ? `HEADING-${level}`
-                    : styleName
-                        ? String(styleName).toUpperCase()
-                        : 'PARAGRAPH';
             outAll.push({
-                type,
-                sourceText: t,
-                metadata: { level, styleName, runs, placeholderSpans },
+                type: 'TITLE',
+                sourceText: titleFull,
+                metadata: { level: 1, segmentGranularity: segment.granularity },
             });
-        }
+        outAll.push(...segmentStructuredParagraphs(sourceParagraphsAll, segment.granularity));
+        if (!outAll.length) throw new Error('no document items to persist');
+
+        const docId = String((only as any)?.id || '');
+        const items = outAll.map((segmentItem, index) => ({
+            documentId: docId,
+            order: index + 1,
+            sourceText: segmentItem.sourceText,
+            targetText: null,
+            status: 'NOT_STARTED' as any,
+            type: segmentItem.type || 'TEXT',
+            metadata: segmentItem.metadata ?? null,
+        }));
+        const persisted = await replaceDocumentItemsAtomicDB(docId, items);
+        logger.info(`持久化文档${docId}内容到数据库`, { count: persisted.count });
+
         await setTextWithTTL(redis, `seg.${segBatch}.total`, '1', TTL_PROGRESS);
         await setTextWithTTL(redis, `seg.${segBatch}.done`, '1', TTL_PROGRESS);
         await setJSONWithTTL(
             redis,
             `seg.${segBatch}.item.seg.all`,
-            { segments: outAll },
+            { segments: outAll, granularity: segment.granularity },
             TTL_BATCH
         );
-        // 持久化为 DocumentItem，供 IDE 使用
-        try {
-            const docId = (only as any)?.id;
-            if (docId && outAll.length) {
-                try {
-                    await deleteDocumentItemsByDocumentIdDB(docId);
-                } catch { }
-                const items = outAll.map((s, idx) => ({
-                    documentId: docId,
-                    order: idx + 1,
-                    sourceText: s.sourceText,
-                    targetText: null,
-                    status: 'NOT_STARTED' as any,
-                    type: s.type || 'TEXT',
-                    metadata: s.metadata ?? null,
-                }));
-                if (items.length) await createDocumentItemsBulkDB(items as any);
-                logger.info(`持久化文档${docId}内容到数据库`)
-            }
-        } catch (err) {
-            logger.error(`持久化文档${(only as any)?.id}内容到数据库失败`, (err as Error)?.message)
-        }
         try {
             await updateDocumentStatusDB(only.id, DocumentStatus.SEGMENTING as any);
-        } catch { }
-        return NextResponse.json({ ok: true, step: 'segment' });
+        } catch {}
+        return NextResponse.json({
+            ok: true,
+            step: 'segment',
+            count: persisted.count,
+            granularity: segment.granularity,
+        });
     } catch (e: any) {
         if (ownedDocumentId) {
             try {
                 await updateDocumentStatusDB(ownedDocumentId, DocumentStatus.ERROR as any);
-            } catch { }
+            } catch {}
         }
         return NextResponse.json({ error: guardMessage(e) }, { status: guardStatus(e) });
     }
@@ -289,8 +325,17 @@ export async function GET(req: NextRequest, ctx: any) {
         const previewMode = req.nextUrl.searchParams.get('preview') === '1';
         const showAll = req.nextUrl.searchParams.get('all') === '1';
         const scopedBatchId = scopedProjectBatchId(projectIdFromParams, batchId);
-        const segBatch = previewMode ? `preview:${scopedBatchId}` : scopedBatchId;
         const redis = await getRedis();
+        const requestedGranularity = req.nextUrl.searchParams.get('granularity');
+        const activeGranularity = previewMode
+            ? await redis.get(segmentPreviewActiveGranularityKey(scopedBatchId))
+            : null;
+        const selectedGranularity = normalizeSegmentGranularity(
+            requestedGranularity || activeGranularity || DEFAULT_SEGMENT_GRANULARITY
+        );
+        const segBatch = previewMode
+            ? segmentPreviewBatchId(scopedBatchId, selectedGranularity)
+            : scopedBatchId;
         const toPct = (t: any, d: any) =>
             Number(t) > 0 ? Math.min(100, Math.round((Number(d) / Number(t)) * 100)) : 0;
         async function readStatus() {
@@ -301,8 +346,10 @@ export async function GET(req: NextRequest, ctx: any) {
             ]);
             const segProgress = toPct(segT, segD);
             let segments: Array<{ type: string; sourceText: string; metadata?: any }> | undefined;
+            let cachedGranularity: unknown;
             try {
                 const obj = segItemJson ? JSON.parse(String(segItemJson)) : null;
+                cachedGranularity = obj?.granularity;
                 const arr = obj && Array.isArray(obj.segments) ? obj.segments : undefined;
                 if (arr) {
                     segments = arr.map((s: any) => ({
@@ -330,10 +377,17 @@ export async function GET(req: NextRequest, ctx: any) {
                         if (parts.length) segments = parts;
                     }
                 }
-            } catch { }
-            if (previewMode && Array.isArray(segments) && !showAll)
-                segments = segments.slice(0, 20);
-            return { segProgress, segments };
+            } catch {}
+            const limited = limitSegmentPreview(segments, !previewMode || showAll);
+            return {
+                segProgress,
+                segments: limited.segments,
+                totalCount: limited.totalCount,
+                bodyCount: limited.bodyCount,
+                granularity: normalizeSegmentGranularity(
+                    cachedGranularity || selectedGranularity
+                ),
+            };
         }
 
         if (waitMs > 0) {

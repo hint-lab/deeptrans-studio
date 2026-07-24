@@ -53,6 +53,41 @@ export async function createDocumentItemsBulkDB(
     return prisma.documentItem.createMany({ data: items });
 }
 
+/**
+ * Runs the replacement through a supplied transaction runner.
+ * The count check remains inside the transaction so a partial create rolls
+ * the preceding delete back. Exported for transaction-boundary tests.
+ * @internal
+ */
+export async function replaceDocumentItemsAtomicWithRunner(
+    database: {
+        $transaction: <T>(operation: (tx: any) => Promise<T>) => Promise<T>;
+    },
+    documentId: string,
+    items: DocumentItemCreateInput[]
+): Promise<{ count: number }> {
+    if (!documentId) throw new Error('missing document id');
+    if (!Array.isArray(items) || !items.length) throw new Error('no document items to replace');
+
+    return database.$transaction(async (tx: any) => {
+        await tx.documentItem.deleteMany({ where: { documentId } });
+        const created = await tx.documentItem.createMany({ data: items });
+        if (Number(created?.count || 0) !== items.length) {
+            throw new Error(
+                `document item replacement incomplete: expected ${items.length}, created ${Number(created?.count || 0)}`
+            );
+        }
+        return { count: created.count };
+    });
+}
+
+export async function replaceDocumentItemsAtomicDB(
+    documentId: string,
+    items: DocumentItemCreateInput[]
+): Promise<{ count: number }> {
+    return replaceDocumentItemsAtomicWithRunner(prisma, documentId, items);
+}
+
 // 查找：按 id
 export async function findDocumentItemByIdDB(id: string): Promise<DocumentItem | null> {
     return prisma.documentItem.findUnique({ where: { id } });
