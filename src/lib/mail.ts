@@ -10,13 +10,7 @@ const logger = createLogger({
 });
 function createTransporter() {
     if (!process.env.EMAIL_SERVER) return null;
-    const enableMailDebug =
-        process.env.NODE_ENV !== 'production' && process.env.LOGGER_ENABLE_DEBUG === 'true';
-    const options: any = {
-        logger: enableMailDebug,
-        debug: enableMailDebug,
-    };
-    return nodemailer.createTransport(process.env.EMAIL_SERVER as string, options);
+    return nodemailer.createTransport(process.env.EMAIL_SERVER);
 }
 
 function buildVerificationEmail(code: string) {
@@ -60,15 +54,8 @@ export async function sendVerificationEmail(to: string, code: string) {
     const { subject, text, html } = buildVerificationEmail(code);
     logger.debug('mail params validated', { recipientLength: to.length, codeLength: code.length });
     try {
-        // 可提前验证连接配置是否有效
-        await transporter.verify();
-    } catch (e: any) {
-        // 常见原因：端口/secure 错误、凭据错误、发件人未验证
-        logger.error('SMTP connection verification failed:', e);
-        throw new Error(`SMTP 连接验证失败：${e?.message || e}`);
-    }
-
-    try {
+        // sendMail 自身会建立连接并认证。请求内再调用 verify() 会让一封验证码邮件
+        // 触发两次 SMTP 登录，容易命中 163 等服务商的临时认证限制。
         const info = await transporter.sendMail({ from, to, subject, text, html });
         // 在开发环境输出详细信息，方便排查
         if (process.env.NODE_ENV !== 'production') {
