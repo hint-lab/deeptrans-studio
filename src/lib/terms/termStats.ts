@@ -116,7 +116,9 @@ export function buildStatCandidates(
     for (const [t, f] of tokenFreq.entries()) {
         const present = tokenChunkPresence.get(t)?.size ?? 0;
         const coverage = present / totalChunks;
-        if (coverage > 0.8) continue;
+        // A single chunk has no meaningful document-frequency signal. Filtering
+        // coverage=1 in that case removes every unigram candidate.
+        if (totalChunks > 1 && coverage > 0.8) continue;
         if (!/[\u4e00-\u9fff]/.test(t) && t.length < 3) continue;
         candidateMap.set(t, { freq: f, chunks: present });
     }

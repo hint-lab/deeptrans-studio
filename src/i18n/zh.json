@@ -625,6 +625,7 @@
             "step3": "3) 预翻译未知词条",
             "statsInserted": "新增 {n}",
             "statsUpdated": "· 更新 {n}",
+            "statsTranslated": "已翻译 {n}",
             "statusPending": "待开始",
             "statusTranslating": "处理中…",
             "statusOff": "未开启",

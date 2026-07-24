@@ -625,6 +625,7 @@
             "step3": "3) Pre-translate Unknown Terms",
             "statsInserted": "Inserted {n}",
             "statsUpdated": "· Updated {n}",
+            "statsTranslated": "Translated {n}",
             "statusPending": "Pending",
             "statusTranslating": "Translating...",
             "statusOff": "Off",

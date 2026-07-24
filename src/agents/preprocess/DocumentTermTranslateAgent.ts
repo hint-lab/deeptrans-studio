@@ -1,5 +1,15 @@
+import { createLogger } from '@/lib/logger';
+import { documentTermsLlmTimeoutMs } from '@/lib/terms/llm-config';
 import { BaseAgent, type AgentRunContext } from '../base';
 import { createAgentI18n } from '../i18n';
+
+const logger = createLogger(
+    { type: 'agents:documentTermTranslateAgent' },
+    { json: false, pretty: false, colors: true, includeCaller: false }
+);
+
+export const DOCUMENT_TERM_TRANSLATE_BATCH_SIZE = 25;
+export const DOCUMENT_TERM_TRANSLATE_CONCURRENCY = 3;
 
 // 文档术语批量翻译智能体（不依赖外部动作，内部完成提示与调用）
 export interface DocumentTermTranslateInput {
@@ -15,6 +25,41 @@ export interface DocumentTermTranslateItem {
     term: string;
     translation: string;
     notes?: string;
+}
+
+export function normalizeDocumentTermTranslations(
+    result: unknown,
+    requestedTerms: string[]
+): DocumentTermTranslateItem[] {
+    const wrapped = result && typeof result === 'object' ? (result as Record<string, unknown>) : {};
+    const items = Array.isArray(result)
+        ? result
+        : Array.isArray(wrapped.translations)
+          ? wrapped.translations
+          : Array.isArray(wrapped.terms)
+            ? wrapped.terms
+            : Array.isArray(wrapped.items)
+              ? wrapped.items
+              : Array.isArray(wrapped.data)
+                ? wrapped.data
+                : [];
+    const map = new Map<string, DocumentTermTranslateItem>();
+
+    for (const item of items) {
+        const term = String(
+            (item as any)?.term || (item as any)?.sourceText || (item as any)?.source || ''
+        ).trim();
+        if (!term) continue;
+        const translation = String(
+            (item as any)?.translation || (item as any)?.targetText || (item as any)?.target || ''
+        ).trim();
+        const notes = String((item as any)?.notes || '').trim();
+        if (!map.has(term)) {
+            map.set(term, { term, translation, notes: notes || undefined });
+        }
+    }
+
+    return requestedTerms.map(term => map.get(term) || { term, translation: '' });
 }
 
 export class DocumentTermTranslateAgent extends BaseAgent<
@@ -70,37 +115,50 @@ export class DocumentTermTranslateAgent extends BaseAgent<
         });
         const termList = i18n.getAgentPrompt('document_term_translate', 'term_list');
         const returnOnlyArray = i18n.getAgentPrompt('document_term_translate', 'return_only_array');
-
-        const userContent = [
-            sourceLanguage,
-            targetLanguage,
-            extra.length ? extra.join('\n') : undefined,
-            termList,
-            JSON.stringify(terms),
-            returnOnlyArray,
-        ]
-            .filter(Boolean)
-            .join('\n\n');
-
-        try {
-            const messages = this.messages(systemPrompt, userContent);
-            const result = await this.json<
-                Array<{ term: string; translation?: string; notes?: string }>
-            >(messages, { maxTokens: 2000 });
-            const arr = Array.isArray(result) ? result : [];
-            const map = new Map<string, DocumentTermTranslateItem>();
-            for (const it of arr) {
-                const t = String((it as any)?.term || '').trim();
-                if (!t) continue;
-                const tr = String((it as any)?.translation || '').trim();
-                const nt = String((it as any)?.notes || '').trim();
-                if (!map.has(t)) map.set(t, { term: t, translation: tr, notes: nt || undefined });
-            }
-            // 保持输入顺序
-            return terms.map(t => map.get(t) || { term: t, translation: '' });
-        } catch (e) {
-            // 回退：若 LLM 失败，按空译文返回
-            return terms.map(t => ({ term: t, translation: '' }));
+        const timeoutMs = documentTermsLlmTimeoutMs();
+        const batches: string[][] = [];
+        for (let index = 0; index < terms.length; index += DOCUMENT_TERM_TRANSLATE_BATCH_SIZE) {
+            batches.push(terms.slice(index, index + DOCUMENT_TERM_TRANSLATE_BATCH_SIZE));
         }
+
+        const translateBatch = async (batch: string[]) => {
+            const userContent = [
+                sourceLanguage,
+                targetLanguage,
+                extra.length ? extra.join('\n') : undefined,
+                termList,
+                JSON.stringify(batch),
+                returnOnlyArray,
+            ]
+                .filter(Boolean)
+                .join('\n\n');
+
+            try {
+                const messages = this.messages(systemPrompt, userContent);
+                const result = await this.json<unknown>(messages, {
+                    maxTokens: Math.min(6000, Math.max(2000, batch.length * 120)),
+                    timeoutMs,
+                });
+                const normalized = normalizeDocumentTermTranslations(result, batch);
+                if (!normalized.some(item => item.translation)) {
+                    throw new Error('LLM returned no usable term translations');
+                }
+                return normalized;
+            } catch (error) {
+                logger.error('term translation batch failed', {
+                    batchSize: batch.length,
+                    error: error instanceof Error ? error.message : String(error),
+                });
+                return batch.map(term => ({ term, translation: '' }));
+            }
+        };
+
+        const translatedBatches: DocumentTermTranslateItem[][] = [];
+        for (let index = 0; index < batches.length; index += DOCUMENT_TERM_TRANSLATE_CONCURRENCY) {
+            const wave = batches.slice(index, index + DOCUMENT_TERM_TRANSLATE_CONCURRENCY);
+            translatedBatches.push(...(await Promise.all(wave.map(translateBatch))));
+        }
+
+        return translatedBatches.flat();
     }
 }

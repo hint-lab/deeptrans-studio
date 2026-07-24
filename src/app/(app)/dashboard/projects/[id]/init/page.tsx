@@ -149,6 +149,13 @@ export default function ProjectInitPage() {
     } | null>(null);
     const [translateCount, setTranslateCount] = useState<number | null>(null);
 
+    function resetTermApplyResult() {
+        setTermsApplied(false);
+        setApplyStatsInsert(null);
+        setApplyStatsTranslate(null);
+        setTranslateCount(null);
+    }
+
     async function startTerms() {
         if (!projectId) return false;
         setStarting(true);
@@ -184,41 +191,50 @@ export default function ProjectInitPage() {
     }
 
     // 单次调用：仅插入或插入+预翻译（二选一）
-    async function applyTermsOnce(flagAutoTranslate: boolean) {
+    async function applyTermsOnce(flagAutoTranslate: boolean, finalize: boolean) {
         const r = await fetch(`/api/projects/${projectId}/terms/apply`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ batchId, mode: 'upsert', autoTranslate: flagAutoTranslate }),
+            body: JSON.stringify({
+                batchId,
+                mode: 'upsert',
+                autoTranslate: flagAutoTranslate,
+                documentId: segmentDocumentId || undefined,
+                finalize,
+            }),
         });
         const j = await r.json();
         if (!r.ok) throw new Error(j?.error || 'apply terms failed');
         const inserted = Number(j?.inserted || 0);
         const updated = Number(j?.updated || 0);
         const skipped = Number(j?.skipped || 0);
-        return { inserted, updated, skipped };
+        const translated = Number(j?.translated || 0);
+        return { inserted, updated, skipped, translated };
     }
 
     // 二阶段应用：先插入，再（可选）预翻译
     async function applyTermsPipeline() {
         if (!projectId || !batchId) return false;
+        resetTermApplyResult();
         setApplyingTerms(true);
-        await updateDocumentStatusByIdAction(segmentDocumentId, 'TERMS_EXTRACTING');
         try {
             setTermFlow('applying');
-            const s1 = await applyTermsOnce(false);
+            const s1 = await applyTermsOnce(false, !autoApplyTerms);
             setApplyStatsInsert(s1);
             if (autoApplyTerms) {
                 setTermFlow('translating');
-                const s2 = await applyTermsOnce(true);
+                const s2 = await applyTermsOnce(true, true);
                 setApplyStatsTranslate(s2);
-                const delta = Math.max(0, Number(s2?.updated || 0) - Number(s1?.updated || 0));
-                setTranslateCount(delta);
+                setTranslateCount(s2.translated);
             }
             setTermsApplied(true);
             setTermFlow('done');
             toast.success('术语已写入项目词库');
             return true;
         } catch (e: any) {
+            setTermFlow('idle');
+            setTermApplying(false);
+            setShowTermApplyModal(false);
             toast.error('写入项目词库失败', { description: e?.message || 'apply terms failed' });
             return false;
         } finally {
@@ -485,6 +501,8 @@ export default function ProjectInitPage() {
                                         setPreviewHtml('');
                                         setSegItems([]);
                                         setSegError(null);
+                                        resetTermApplyResult();
+                                        setTermFlow('idle');
                                         updateStep('parse');
                                         restart();
                                         updateBatchId(newId);
@@ -640,6 +658,7 @@ export default function ProjectInitPage() {
                                         <Button
                                             onClick={() => {
                                                 // 弹出模态，允许短时间取消
+                                                resetTermApplyResult();
                                                 setShowTermApplyModal(true);
                                                 setCancelTermApplyRequested(false);
                                                 setTermFlow('extracting');
@@ -672,7 +691,19 @@ export default function ProjectInitPage() {
                                         </Button>
                                     )}
                                     {termPct >= 100 && (
-                                        <Button onClick={() => updateStep('done')}>
+                                        <Button
+                                            onClick={() => {
+                                                if (termsApplied) {
+                                                    updateStep('done');
+                                                    return;
+                                                }
+                                                setShowTermApplyModal(true);
+                                                setCancelTermApplyRequested(false);
+                                                setTermFlow('applying');
+                                                void applyTermsPipeline();
+                                            }}
+                                            disabled={applyingTerms}
+                                        >
                                             {t('next')}
                                         </Button>
                                     )}
@@ -803,7 +834,7 @@ export default function ProjectInitPage() {
                                     <div className="text-muted-foreground">
                                         {autoApplyTerms
                                             ? translateCount !== null
-                                                ? `${t('statsInserted', { n: translateCount })}`
+                                                ? `${t('statsTranslated', { n: translateCount })}`
                                                 : termFlow === 'translating'
                                                     ? t('statusTranslating')
                                                     : t('statusPending')
