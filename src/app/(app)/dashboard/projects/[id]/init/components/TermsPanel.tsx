@@ -98,7 +98,12 @@ export default function TermsPanel(props: TermsPanelProps) {
                             <CardDescription>{t('termsDesc')}</CardDescription>
                         </div>
                         {props.onSkip && (
-                            <Button size="sm" variant="secondary" onClick={props.onSkip}>
+                            <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={props.onSkip}
+                                disabled={props.starting || props.applying}
+                            >
                                 {t('skip')}
                             </Button>
                         )}

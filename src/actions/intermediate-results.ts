@@ -8,7 +8,7 @@ import {
 } from '@/db/documentItem';
 import { requireWritableDocumentItem } from '@/lib/guards';
 import { createLogger } from '@/lib/logger';
-import { sourceRevision } from '@/lib/source-revision';
+import { sourceRevision, withSourceRevisions } from '@/lib/source-revision';
 const logger = createLogger(
     {
         type: 'actions:intermediate-results',
@@ -39,10 +39,18 @@ export async function savePreTranslateResultsAction(
         ) {
             throw new Error('当前分段原文已变化，已拒绝写入过期翻译结果');
         }
-        const metadata = {
-            ...(((item as any)?.metadata as Record<string, unknown> | null) || {}),
-            preTranslateSourceRevision: sourceRevision((item as any)?.sourceText),
-        };
+        const hasOwn = (key: keyof typeof results) =>
+            Object.prototype.hasOwnProperty.call(results, key);
+        const writesPreTranslate = hasOwn('terms') || hasOwn('dict') || hasOwn('embedded');
+        const writesTarget = hasOwn('targetText');
+        const metadata =
+            writesPreTranslate || writesTarget
+                ? withSourceRevisions(
+                      (item as any)?.metadata as Record<string, unknown> | null,
+                      (item as any)?.sourceText,
+                      { preTranslate: writesPreTranslate, target: writesTarget }
+                  )
+                : undefined;
         return await updateDocumentItemByIdDB(id, {
             preTranslateTerms: results.terms as any,
             preTranslateDict: results.dict as any,

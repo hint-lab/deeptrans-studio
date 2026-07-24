@@ -16,7 +16,7 @@ import { createLogger } from '@/lib/logger';
 import type { TranslationStage } from '@/store/features/translationSlice';
 import { Check, ChevronRight, Loader2, Play, RotateCcw, SkipForward, Undo2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 
 const logger = createLogger({
@@ -61,6 +61,8 @@ const StageBadgeBar: React.FC<StageBadgeBarProps> = ({
     const { currentStage, setCurrentStage } = useTranslationState();
     const { activeDocumentItem, setActiveDocumentItem } = useActiveDocumentItem();
     const { updateDocumentItemStatus } = useExplorerTabs();
+    const activeDocumentItemRef = useRef(activeDocumentItem);
+    activeDocumentItemRef.current = activeDocumentItem;
 
     const steps: TranslationStage[] = TRANSLATION_STAGES_SEQUENCE;
     const redoText = t('redo');
@@ -93,8 +95,9 @@ const StageBadgeBar: React.FC<StageBadgeBarProps> = ({
         try {
             await updateDocItemStatusAction(itemId, status as TranslationStage);
             updateDocumentItemStatus(itemId, status);
-            if (activeDocumentItem.id === itemId) {
-                setActiveDocumentItem({ ...activeDocumentItem, status });
+            const currentItem = activeDocumentItemRef.current;
+            if (String(currentItem?.id || '') === String(itemId)) {
+                setActiveDocumentItem({ ...currentItem, status });
             }
         } catch (error) {
             logger.error('Status sync failed:', error);
@@ -161,59 +164,64 @@ const StageBadgeBar: React.FC<StageBadgeBarProps> = ({
             return;
         }
         const operationItemId = activeDocumentItem.id;
+        const setOperationStage = (nextStage: TranslationStage) => {
+            if (String(activeDocumentItemRef.current?.id || '') === String(operationItemId)) {
+                setCurrentStage(nextStage);
+            }
+        };
         setIsRunning(true);
         try {
             switch (stage) {
                 case 'NOT_STARTED':
-                    setCurrentStage('MT');
+                    setOperationStage('MT');
                     await syncStatusUpdate(operationItemId, 'MT');
                     toast.info(t('toasts.preTranslationStarted'), { description: t('toasts.autoProcessInfo'), duration: 4000 });
                     await runTranslate();
                     // 3. 【新增】任务完成后，自动推进到 MT_REVIEW
                     // 只有当 runTranslate 没有抛出错误时才会执行到这里
-                    setCurrentStage('MT_REVIEW');
+                    setOperationStage('MT_REVIEW');
                     await syncStatusUpdate(operationItemId, 'MT_REVIEW');
                     await saveRecord('MT_REVIEW', 'HUMAN', 'SUCCESS'); // 记录 MT 阶段完成（或进入 Review）
                     break;
 
                 case 'MT_REVIEW':
-                    setCurrentStage('QA');
-                    await syncStatusUpdate(activeDocumentItem.id, 'QA');
+                    setOperationStage('QA');
+                    await syncStatusUpdate(operationItemId, 'QA');
                     toast.info(t('toasts.qaStarted'), { description: t('toasts.autoProcessInfo'), duration: 4000 });
                     await runQA();
                     // 3. 【新增】任务完成后，自动推进到 QA_REVIEW
-                    setCurrentStage('QA_REVIEW');
-                    await syncStatusUpdate(activeDocumentItem.id, 'QA_REVIEW');
+                    setOperationStage('QA_REVIEW');
+                    await syncStatusUpdate(operationItemId, 'QA_REVIEW');
                     await saveRecord('QA_REVIEW', 'HUMAN', 'SUCCESS');
                     break;
                 case 'QA_REVIEW':
-                    setCurrentStage('POST_EDIT');
-                    await syncStatusUpdate(activeDocumentItem.id, 'POST_EDIT');
+                    setOperationStage('POST_EDIT');
+                    await syncStatusUpdate(operationItemId, 'POST_EDIT');
                     toast.info(t('toasts.postEditStarted'));
                     await runPostEdit();
                     break;
                 case 'POST_EDIT':
                     // 人工点击下一步 -> 进入复核
-                    setCurrentStage('POST_EDIT_REVIEW');
+                    setOperationStage('POST_EDIT_REVIEW');
                     await saveRecord('POST_EDIT_REVIEW', 'HUMAN', 'SUCCESS');
-                    await syncStatusUpdate(activeDocumentItem.id, 'POST_EDIT_REVIEW');
+                    await syncStatusUpdate(operationItemId, 'POST_EDIT_REVIEW');
                     break;
                 case 'POST_EDIT_REVIEW':
-                    setCurrentStage('SIGN_OFF');
+                    setOperationStage('SIGN_OFF');
                     await saveRecord('SIGN_OFF', 'HUMAN', 'SUCCESS');
-                    await syncStatusUpdate(activeDocumentItem.id, 'SIGN_OFF');
+                    await syncStatusUpdate(operationItemId, 'SIGN_OFF');
                     break;
 
                 case 'SIGN_OFF':
-                    setCurrentStage('COMPLETED');
+                    setOperationStage('COMPLETED');
                     await saveRecord('COMPLETED', 'HUMAN', 'SUCCESS');
-                    await syncStatusUpdate(activeDocumentItem.id, 'COMPLETED');
+                    await syncStatusUpdate(operationItemId, 'COMPLETED');
                     toast.success(t('toasts.projectCompleted'), { description: t('toasts.readyForDelivery') });
                     break;
 
                 default:
                     const nextIdx = Math.min(steps.length - 1, steps.indexOf(stage) + 1);
-                    setCurrentStage(steps[nextIdx] as TranslationStage);
+                    setOperationStage(steps[nextIdx] as TranslationStage);
                     await saveRecord(steps[nextIdx] as TranslationStage, 'HUMAN', 'SUCCESS');
                     break;
             }
@@ -224,7 +232,7 @@ const StageBadgeBar: React.FC<StageBadgeBarProps> = ({
                 try {
                     await syncStatusUpdate(operationItemId, 'NOT_STARTED');
                 } catch {}
-                setCurrentStage('NOT_STARTED');
+                setOperationStage('NOT_STARTED');
             }
             toast.error(t('toasts.operationFailed'), { description: String(error) });
             setIsRunning(false);
@@ -242,7 +250,7 @@ const StageBadgeBar: React.FC<StageBadgeBarProps> = ({
         if (activeDocumentItem.id && !isRunning) {
             setCurrentStage(activeDocumentItem.status as TranslationStage);
         }
-    }, [activeDocumentItem.id]);
+    }, [activeDocumentItem.id, activeDocumentItem.status, isRunning]);
 
     const renderVisualStepper = () => {
         const currentRealStepIdx = steps.indexOf(currentStage as TranslationStage);

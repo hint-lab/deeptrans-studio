@@ -3,6 +3,7 @@
 import { findDocumentItemByIdDB, updateDocumentItemByIdDB } from '@/db/documentItem';
 import { requireOwnedDocumentItem, requireWritableDocumentItem } from '@/lib/guards';
 import { createLogger } from '@/lib/logger';
+import { sourceRevision, withSourceRevisions } from '@/lib/source-revision';
 import type { TranslationStage } from '@prisma/client';
 const logger = createLogger(
     {
@@ -48,8 +49,13 @@ export async function updateOriginalTextAction(itemId: string, sourceText: strin
 }
 export async function updateTranslationAction(itemId: string, targetText: string) {
     try {
-        await requireWritableDocumentItem(itemId);
-        return await updateDocumentItemByIdDB(itemId, { targetText });
+        const item = await requireWritableDocumentItem(itemId);
+        const metadata = withSourceRevisions(
+            (item as any)?.metadata as Record<string, unknown> | null,
+            (item as any)?.sourceText,
+            { target: true }
+        );
+        return await updateDocumentItemByIdDB(itemId, { targetText, metadata } as any);
     } catch (error) {
         logger.error('更新译文失败:', error);
         throw new Error('更新译文失败');
@@ -78,11 +84,20 @@ export const getContentByIdAction = async (id: string) => {
 
         // 确保返回的数据包含预期的字段
         if (!documentItem) return null;
+        const metadata =
+            ((documentItem as any)?.metadata as Record<string, unknown> | null) || {};
+        const storedTargetRevision = String(metadata.targetSourceRevision || '');
+        const targetSourceMatches =
+            !storedTargetRevision ||
+            storedTargetRevision === sourceRevision((documentItem as any)?.sourceText);
         return {
             sourceText: documentItem.sourceText,
             // An embedded translation is a proposal until the user applies it.
             // Falling back to it here made the review panel claim it was applied.
-            targetText: documentItem.targetText ? String(documentItem.targetText) : '',
+            targetText:
+                targetSourceMatches && documentItem.targetText
+                    ? String(documentItem.targetText)
+                    : '',
             status: (documentItem as any)?.status || 'NOT_STARTED',
         };
     } catch (error) {

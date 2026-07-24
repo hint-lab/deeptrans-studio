@@ -239,6 +239,27 @@ export default function ProjectInitPage() {
             setApplyingTerms(false);
         }
     }
+
+    async function skipTerms() {
+        if (!segmentDocumentId) {
+            toast.error('无法完成初始化', { description: '未找到当前文档' });
+            return;
+        }
+        setStarting(true);
+        try {
+            await updateDocumentStatusByIdAction(segmentDocumentId, 'COMPLETED');
+            termPctRef.current = 100;
+            updateProgress(undefined, 100);
+            updateStep('done');
+            toast.success('已跳过术语写入，文档初始化已完成');
+        } catch (error: any) {
+            toast.error('跳过术语失败', {
+                description: error?.message || '文档状态更新失败，请重试',
+            });
+        } finally {
+            setStarting(false);
+        }
+    }
     async function loadTermPreview() {
         if (!projectId || !batchId) return;
         setTermPreviewLoading(true);
@@ -591,7 +612,7 @@ export default function ProjectInitPage() {
                                 onViewDictionary={() =>
                                     router.push(`/dashboard/dictionaries/${projectId}`)
                                 }
-                                onSkip={() => updateStep('done')}
+                                onSkip={() => void skipTerms()}
                             />
                         )}
 
