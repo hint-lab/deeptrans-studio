@@ -38,6 +38,7 @@ import { useActiveDocumentItem } from '@/hooks/useActiveDocumentItem';
 import { useRunningState } from '@/hooks/useRunning';
 import { useUserSettings } from '@/hooks/useUserSettings';
 import { createLogger } from '@/lib/logger';
+import { normalizeKeyboardKey } from '@/lib/keyboard-key';
 import { useSession } from 'next-auth/react';
 import { useLocale, useTranslations } from 'next-intl';
 import { useState as useReactState } from 'react';
@@ -1184,7 +1185,7 @@ export function ActionSection() {
         const onKeyDown = (e: KeyboardEvent) => {
             const isMeta = e.metaKey || e.ctrlKey;
             if (!isMeta || isRunning) return;
-            const key = e.key.toLowerCase();
+            const key = normalizeKeyboardKey(e.key);
             // ⌘B
             if (key === 'b') {
                 e.preventDefault();
@@ -1222,7 +1223,7 @@ export function ActionSection() {
                 return;
             }
             // ⌘[
-            if (e.key === '[') {
+            if (key === '[') {
                 e.preventDefault();
                 // 调用“前一步/回退阶段”
                 const id = (activeDocumentItem as any)?.id;
@@ -1243,7 +1244,7 @@ export function ActionSection() {
                 return;
             }
             // ⌘]
-            if (e.key === ']') {
+            if (key === ']') {
                 e.preventDefault();
                 // 调用“后一步/推进阶段”
                 const id = (activeDocumentItem as any)?.id;

@@ -7,6 +7,7 @@ import LocaleSwitcher from '@/components/locale-switcher';
 import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
+import { normalizeKeyboardKey } from '@/lib/keyboard-key';
 
 export function DocsHeader({ onSearchChange }: { onSearchChange?: (q: string) => void }) {
     const t = useTranslations('Docs');
@@ -45,7 +46,8 @@ export function DocsHeader({ onSearchChange }: { onSearchChange?: (q: string) =>
 
     useEffect(() => {
         const onKeyDown = (e: KeyboardEvent) => {
-            const isCmdK = (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k';
+            const key = normalizeKeyboardKey(e.key);
+            const isCmdK = (e.metaKey || e.ctrlKey) && key === 'k';
             if (isCmdK) {
                 e.preventDefault();
                 setPaletteQuery(prev => prev || q);
@@ -53,7 +55,7 @@ export function DocsHeader({ onSearchChange }: { onSearchChange?: (q: string) =>
                 setTimeout(() => paletteInputRef.current?.focus(), 0);
                 return;
             }
-            if (e.key === 'Escape') {
+            if (key === 'escape') {
                 setPaletteOpen(false);
             }
         };
