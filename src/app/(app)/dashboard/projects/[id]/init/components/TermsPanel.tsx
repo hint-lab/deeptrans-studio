@@ -73,7 +73,10 @@ export default function TermsPanel(props: TermsPanelProps) {
     const [settingsOpen, setSettingsOpen] = useState(false);
     const isFinalResult = termPct >= 100;
     const resultTerms: TermPreviewItem[] = isFinalResult ? terms : termPreview;
-    const visibleTerms = showFull ? resultTerms : resultTerms.slice(0, 20);
+    // Formal extraction is the reviewable source of truth, so it is always
+    // complete. Only the lightweight local preview may be collapsed.
+    const showAllTerms = isFinalResult || showFull;
+    const visibleTerms = showAllTerms ? resultTerms : resultTerms.slice(0, 20);
     const matchedSet = useMemo(
         () => new Set<string>((props.dict || []).map(entry => String(entry.term || ''))),
         [props.dict]
@@ -121,7 +124,7 @@ export default function TermsPanel(props: TermsPanelProps) {
                     <div className="flex items-center justify-between gap-3">
                         <div className="min-w-0">
                             <div className="text-xs font-medium text-muted-foreground">
-                                {t('termsPreviewResult')}
+                                {isFinalResult ? t('termsTitle') : t('termsPreviewResult')}
                             </div>
                             {!!resultTerms.length && (
                                 <div className="mt-1 text-[11px] text-muted-foreground">
@@ -131,7 +134,7 @@ export default function TermsPanel(props: TermsPanelProps) {
                                 </div>
                             )}
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className={isFinalResult ? 'hidden' : 'flex items-center gap-2'}>
                             <Label
                                 htmlFor="toggle-terms-full"
                                 className="whitespace-nowrap text-xs text-muted-foreground"
@@ -285,78 +288,93 @@ export default function TermsPanel(props: TermsPanelProps) {
 
                     <div className="space-y-3 rounded-lg border bg-white p-4 dark:bg-gray-900">
                         <div className="flex items-center justify-between gap-3">
-                            <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={onPreview}
-                                disabled={termPreviewLoading || starting}
-                            >
-                                {termPreviewLoading ? (
-                                    <>
-                                        <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                                        {t('extractingShort')}
-                                    </>
-                                ) : (
-                                    t('extractPreview')
-                                )}
-                            </Button>
-                            <div className="text-[11px] text-muted-foreground">{termPct}%</div>
+                            {!isFinalResult && (
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={onPreview}
+                                    disabled={termPreviewLoading || starting}
+                                >
+                                    {termPreviewLoading ? (
+                                        <>
+                                            <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                                            {t('extractingShort')}
+                                        </>
+                                    ) : (
+                                        t('extractPreview')
+                                    )}
+                                </Button>
+                            )}
+                            <div className="ml-auto text-[11px] text-muted-foreground">
+                                {termPct}%
+                            </div>
                         </div>
 
-                        {termPreviewError && (
+                        {!isFinalResult && termPreviewError && (
                             <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
                                 {termPreviewError}
                             </div>
                         )}
-                        {!termPreviewError && (
-                            <div className="divide-y rounded border">
+                        {(isFinalResult || !termPreviewError) && (
+                            <div className="grid overflow-hidden rounded-lg border bg-border xl:grid-cols-2 xl:gap-px">
                                 {visibleTerms.map((item, index) => {
                                     const isMatched = matchedSet.has(String(item.term || ''));
                                     const isChecked =
                                         isFinalResult && checkedSet.has(String(item.term || ''));
+                                    const statusLabel = isMatched
+                                        ? t('dictMatched')
+                                        : isChecked
+                                          ? t('dictCandidate')
+                                          : t('dictPending');
                                     return (
                                         <div
                                             key={`${item.term}-${index}`}
-                                            className="flex items-center justify-between gap-3 px-3 py-2 text-sm"
+                                            className={`flex min-w-0 items-start gap-2.5 bg-background px-3 py-2.5 text-sm xl:border-b-0 ${index === visibleTerms.length - 1 ? 'border-b-0' : 'border-b'}`}
                                         >
-                                            <div className="flex min-w-0 items-center gap-2">
-                                                <span
-                                                    className={`h-2 w-2 shrink-0 rounded-full ${isMatched ? 'bg-blue-500' : isChecked ? 'bg-amber-400' : 'bg-slate-300 dark:bg-slate-600'}`}
-                                                    aria-hidden="true"
-                                                />
-                                                <span className="truncate">{item.term}</span>
+                                            <span
+                                                className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${isMatched ? 'bg-blue-500' : isChecked ? 'bg-amber-400' : 'bg-slate-300 dark:bg-slate-600'}`}
+                                                aria-hidden="true"
+                                            />
+                                            <div className="min-w-0 flex-1">
+                                                <div className="break-words font-medium leading-5">
+                                                    {item.term}
+                                                </div>
+                                                <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] leading-4 text-muted-foreground">
+                                                    {typeof item.count === 'number' && (
+                                                        <span>
+                                                            {t('termFrequency', {
+                                                                count: item.count,
+                                                            })}
+                                                        </span>
+                                                    )}
+                                                    {formatScore(item.score) && (
+                                                        <span>
+                                                            {t('termScore', {
+                                                                score: formatScore(item.score),
+                                                            })}
+                                                        </span>
+                                                    )}
+                                                </div>
                                             </div>
-                                            <div className="flex shrink-0 items-center gap-3 text-[11px] text-muted-foreground">
-                                                {typeof item.count === 'number' && (
-                                                    <span>
-                                                        {t('termFrequency', { count: item.count })}
-                                                    </span>
-                                                )}
-                                                {formatScore(item.score) && (
-                                                    <span>
-                                                        {t('termScore', {
-                                                            score: formatScore(item.score),
-                                                        })}
-                                                    </span>
-                                                )}
-                                                <span>
-                                                    {isMatched
-                                                        ? t('dictMatched')
-                                                        : isChecked
-                                                          ? t('dictCandidate')
-                                                          : t('dictPending')}
-                                                </span>
-                                            </div>
+                                            <span className="shrink-0 rounded-full border bg-background px-2 py-0.5 text-[10px] leading-4 text-muted-foreground">
+                                                {statusLabel}
+                                            </span>
                                         </div>
                                     );
                                 })}
+                                {visibleTerms.length % 2 === 1 && (
+                                    <div
+                                        aria-hidden="true"
+                                        className="hidden bg-background xl:block"
+                                    />
+                                )}
                                 {!resultTerms.length && !termPreviewLoading && (
-                                    <div className="p-6 text-sm text-muted-foreground">
+                                    <div className="bg-background p-6 text-sm text-muted-foreground xl:col-span-2">
                                         {t('noPreview')}
                                     </div>
                                 )}
                                 {termPreviewLoading && !resultTerms.length && (
-                                    <div className="flex items-center justify-center gap-2 p-6 text-sm text-muted-foreground">
+                                    <div className="flex items-center justify-center gap-2 bg-background p-6 text-sm text-muted-foreground xl:col-span-2">
                                         <Loader2 className="h-4 w-4 animate-spin" />
                                         {t('extractingTerms')}
                                     </div>
@@ -378,7 +396,7 @@ export default function TermsPanel(props: TermsPanelProps) {
                                     <span className="h-2 w-2 rounded-full bg-slate-300 dark:bg-slate-600" />
                                     {t('dictPendingLegend')}
                                 </span>
-                                {!showFull && resultTerms.length > 20 && (
+                                {!showAllTerms && resultTerms.length > 20 && (
                                     <span>{t('showingFirstTerms', { count: 20 })}</span>
                                 )}
                             </div>
