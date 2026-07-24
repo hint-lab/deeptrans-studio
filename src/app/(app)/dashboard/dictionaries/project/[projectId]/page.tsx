@@ -26,7 +26,6 @@ export default function DictionaryDetailPage({
     const router = useRouter();
     const [dictionary, setDictionary] = useState<any | null>(null);
     const [loading, setLoading] = useState(true);
-    const [reloadToken, setReloadToken] = useState(0);
     const { projectId } = usePromise(params);
     const t = useTranslations('Dashboard.Dictionaries');
     useEffect(() => {
@@ -52,6 +51,7 @@ export default function DictionaryDetailPage({
                     updatedAt: new Date(d.updatedAt as any),
                     entryCount: (d as any)?._count?.entries ?? 0,
                     cover: '/images/dictionaries/default.svg',
+                    canWrite: d.canWrite === true,
                 });
             } finally {
                 setLoading(false);
@@ -91,8 +91,6 @@ export default function DictionaryDetailPage({
             <Separator className="mb-4" />
             <DictionaryEntriesManager
                 dictionary={dictionary}
-                onEntriesUpdated={() => setReloadToken(t => t + 1)}
-                reloadToken={reloadToken}
             />
         </div>
     );

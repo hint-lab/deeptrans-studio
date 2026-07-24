@@ -1,11 +1,11 @@
 'use client';
 
-import { fetchDictionariesAction } from '@/actions/dictionary';
+import { fetchDictionaryDashboardAction } from '@/actions/dictionary';
 import { createLogger } from '@/lib/logger';
 import { useSession } from 'next-auth/react';
 import { useTranslations } from 'next-intl';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from 'src/components/ui/button';
 import { Separator } from 'src/components/ui/separator';
@@ -15,111 +15,65 @@ import { AddPublicDictionaryDialog } from './components/add-public-dictionary-di
 import { CreateDictionaryDialog } from './components/create-dictionary-dialog';
 import type { Dictionary as UIDictionary } from './components/dictionary-artwork';
 import { DictionaryArtwork } from './components/dictionary-artwork';
+import { DictionaryImportGuide } from './components/dictionary-import-guide';
 import ImportDictionaryDialog from './components/import-dictionary-dialog';
-const logger = createLogger({
-    type: 'dashboard:dictionaries',
-}, {
-    json: false,// 开启json格式输出
-    pretty: false, // 关闭开发环境美化输出
-    colors: true, // 仅当json：false时启用颜色输出可用
-    includeCaller: false, // 日志不包含调用者
-});
+const logger = createLogger(
+    {
+        type: 'dashboard:dictionaries',
+    },
+    {
+        json: false, // 开启json格式输出
+        pretty: false, // 关闭开发环境美化输出
+        colors: true, // 仅当json：false时启用颜色输出可用
+        includeCaller: false, // 日志不包含调用者
+    }
+);
 export default function DictionariesPage() {
-    const { data: session, status, update } = useSession();
+    const { data: session, status } = useSession();
     const router = useRouter();
     const t = useTranslations('Dashboard.Dictionaries');
     const [publicDictionaries, setPublicDictionaries] = useState<UIDictionary[]>([]);
     const [projectDictionaries, setProjectDictionaries] = useState<UIDictionary[]>([]);
     const [privateDictionaries, setPrivateDictionaries] = useState<UIDictionary[]>([]);
-    const [selectedDictionary, setSelectedDictionary] = useState<UIDictionary | null>(null);
     const [activeTab, setActiveTab] = useState('private');
     const searchParams = useSearchParams();
     const [loading, setLoading] = useState(true);
-    const [reloadToken, setReloadToken] = useState(0);
-    // 汇总可供导入的词库（全部）
-    const allDictionariesLite = useMemo(() => {
-        const all = [...publicDictionaries, ...projectDictionaries, ...privateDictionaries];
-        // 去重
-        const map = new Map<string, { id: string; name: string }>();
-        all.forEach(d => map.set(d.id, { id: d.id, name: d.name }));
-        return Array.from(map.values());
-    }, [publicDictionaries, projectDictionaries, privateDictionaries]);
 
     // 加载词典数据
     const loadDictionaries = async () => {
         setLoading(true);
         try {
-            // 公共词库
-            try {
-                const pubRes = await fetchDictionariesAction('public');
-                if (pubRes.success && pubRes.data) {
-                    const publicDicts: UIDictionary[] = pubRes.data.map((d: any) => ({
-                        id: d.id,
-                        name: d.name,
-                        description: d.description ?? '',
-                        domain: d.domain ?? 'general',
-                        visibility: 'PUBLIC' as const,
-                        createdAt: new Date(d.createdAt as any),
-                        updatedAt: new Date(d.updatedAt as any),
-                        tenantId: (d as any).tenantId ?? null,
-                        projectId: (d as any).projectId ?? null,
-                        userId: d.userId ?? null,
-                        cover: getDictionaryCover(d.domain ?? 'general'),
-                    }));
-                    setPublicDictionaries(publicDicts);
-                } else {
-                    setPublicDictionaries([]);
-                }
-            } catch (e) {
-                logger.error(t('loadPublicFailed'), e);
-            }
-            // 项目词库
-            try {
-                const projectRes = await fetchDictionariesAction('project');
-                if (projectRes.success && projectRes.data) {
-                    const projDicts: UIDictionary[] = projectRes.data.map((d: any) => ({
-                        id: d.id,
-                        name: d.name,
-                        description: d.description ?? '',
-                        domain: d.domain ?? 'general',
-                        visibility: 'PROJECT' as const,
-                        createdAt: new Date(d.createdAt as any),
-                        updatedAt: new Date(d.updatedAt as any),
-                        tenantId: (d as any).tenantId ?? null,
-                        projectId: (d as any).projectId ?? null,
-                        userId: d.userId ?? null,
-                        cover: getDictionaryCover(d.domain ?? 'general'),
-                    }));
-                    setProjectDictionaries(projDicts);
-                } else {
-                    setProjectDictionaries([]);
-                }
-            } catch (e) {
-                logger.error(t('loadProjectFailed'), e);
-            }
+            const result = await fetchDictionaryDashboardAction();
+            if (!result.success || !result.data) throw new Error(result.error || 'load failed');
 
-            // 私有词库（需登录）
-            if (session?.user?.id) {
-                const privateResult = await fetchDictionariesAction('private');
-                if (privateResult.success && privateResult.data) {
-                    const privateDicts: UIDictionary[] = privateResult.data.map((dict: any) => ({
-                        id: dict.id,
-                        name: dict.name,
-                        description: dict.description ?? '',
-                        domain: dict.domain,
-                        visibility: 'PRIVATE' as const,
-                        createdAt: new Date(dict.createdAt as any),
-                        updatedAt: new Date(dict.updatedAt as any),
-                        tenantId: (dict as any).tenantId ?? null,
-                        projectId: (dict as any).projectId ?? null,
-                        userId: dict.userId ?? null,
-                        cover: getDictionaryCover(dict.domain),
-                    }));
-                    setPrivateDictionaries(privateDicts);
-                }
-            } else {
-                setPrivateDictionaries([]);
-            }
+            const mapDictionary = (
+                dictionary: any,
+                visibility: UIDictionary['visibility']
+            ): UIDictionary => ({
+                id: dictionary.id,
+                name: dictionary.name,
+                description: dictionary.description ?? '',
+                domain: dictionary.domain ?? 'general',
+                visibility,
+                cover: getDictionaryCover(dictionary.domain ?? 'general'),
+                canWrite: dictionary.canWrite,
+            });
+
+            setPublicDictionaries(
+                (result.data.publicDictionaries ?? []).map((dictionary: any) =>
+                    mapDictionary(dictionary, 'PUBLIC')
+                )
+            );
+            setProjectDictionaries(
+                result.data.projectDictionaries.map((dictionary: any) =>
+                    mapDictionary(dictionary, 'PROJECT')
+                )
+            );
+            setPrivateDictionaries(
+                (result.data.privateDictionaries ?? []).map((dictionary: any) =>
+                    mapDictionary(dictionary, 'PRIVATE')
+                )
+            );
         } catch (error) {
             logger.error(t('loadErrorDesc'), error);
             toast.error(t('loadError'), { description: t('loadErrorDesc') as string });
@@ -146,8 +100,9 @@ export default function DictionariesPage() {
     };
 
     useEffect(() => {
+        if (status === 'loading') return;
         void loadDictionaries();
-    }, [session?.user?.id]);
+    }, [status, session?.user?.id]);
 
     // 允许通过 URL 指定默认页签，如 /dashboard/dictionaries?tab=private
     useEffect(() => {
@@ -156,7 +111,7 @@ export default function DictionariesPage() {
             if (tab === 'public' || tab === 'project' || tab === 'private') {
                 setActiveTab(tab);
             }
-        } catch { }
+        } catch {}
     }, [searchParams]);
 
     // 处理新词典创建
@@ -170,22 +125,10 @@ export default function DictionariesPage() {
         }
     };
 
-    // 处理项目词典添加
-    const handleTeamDictionaryAdded = (newDictionary: UIDictionary) => {
-        setProjectDictionaries(prev => [newDictionary, ...prev]);
-        toast.success(t('projectAdded'), { description: t('projectAdded') as string });
-    };
-
     // 处理公共词典添加
     const handlePublicDictionaryAdded = (newDictionary: UIDictionary) => {
         setPublicDictionaries(prev => [newDictionary, ...prev]);
         toast.success(t('publicAdded'), { description: t('publicAdded') as string });
-    };
-
-    // 处理词典条目更新
-    const handleEntriesUpdated = () => {
-        // 重新加载词典数据以更新条目数量
-        void loadDictionaries();
     };
 
     // 处理词典删除
@@ -194,12 +137,6 @@ export default function DictionariesPage() {
         setPublicDictionaries(prev => prev.filter(dict => dict.id !== dictionaryId));
         setProjectDictionaries(prev => prev.filter(dict => dict.id !== dictionaryId));
         setPrivateDictionaries(prev => prev.filter(dict => dict.id !== dictionaryId));
-
-        // 如果删除的是当前选中的词典，清除选择
-        if (selectedDictionary?.id === dictionaryId) {
-            setSelectedDictionary(null);
-            setActiveTab('private');
-        }
 
         toast.success(t('deleteSuccess'), { description: t('deleteSuccess') as string });
     };
@@ -210,28 +147,15 @@ export default function DictionariesPage() {
         const updateDictionary = (dict: UIDictionary) =>
             dict.id === dictionaryId
                 ? {
-                    ...dict,
-                    ...updatedData,
-                    cover: getDictionaryCover(updatedData.domain ?? dict.domain),
-                }
+                      ...dict,
+                      ...updatedData,
+                      cover: getDictionaryCover(updatedData.domain ?? dict.domain),
+                  }
                 : dict;
 
         setPublicDictionaries(prev => prev.map(updateDictionary));
         setProjectDictionaries(prev => prev.map(updateDictionary));
         setPrivateDictionaries(prev => prev.map(updateDictionary));
-
-        // 如果编辑的是当前选中的词典，更新选择状态
-        if (selectedDictionary?.id === dictionaryId) {
-            setSelectedDictionary(prev =>
-                prev
-                    ? {
-                        ...prev,
-                        ...updatedData,
-                        cover: getDictionaryCover(updatedData.domain ?? prev.domain),
-                    }
-                    : null
-            );
-        }
 
         toast.success(t('editSuccess'), { description: t('editSuccess') as string });
     };
@@ -273,6 +197,8 @@ export default function DictionariesPage() {
                 </h1>
                 <p className="text-sm text-gray-600 dark:text-gray-400">{t('description')}</p>
             </div>
+
+            <DictionaryImportGuide />
 
             <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full space-y-6">
                 <div className="space-between flex items-center">
@@ -359,7 +285,6 @@ export default function DictionariesPage() {
                                 dictionaries={undefined}
                                 userId={session?.user?.id}
                                 onImported={() => {
-                                    setReloadToken(t => t + 1);
                                     void loadDictionaries();
                                     toast.success(t('importComplete'), {
                                         description: t('projectImported') as string,
@@ -371,6 +296,7 @@ export default function DictionariesPage() {
                                     handleDictionaryCreated(d as unknown as UIDictionary)
                                 }
                                 userId={session?.user?.id}
+                                visibility="PRIVATE"
                             />
                         </div>
                     </div>
@@ -440,7 +366,6 @@ export default function DictionariesPage() {
                                 dictionaries={undefined}
                                 userId={session?.user?.id}
                                 onImported={() => {
-                                    setReloadToken(t => t + 1);
                                     void loadDictionaries();
                                     toast.success(t('importComplete'), {
                                         description: t('projectImported') as string,
@@ -453,6 +378,7 @@ export default function DictionariesPage() {
                                     handleDictionaryCreated(d as unknown as UIDictionary)
                                 }
                                 userId={session?.user?.id}
+                                visibility="PROJECT"
                             />
                         </div>
                     </div>
@@ -480,9 +406,11 @@ export default function DictionariesPage() {
                                     width={200}
                                     height={280}
                                     onClick={() => handleDictionarySelect(dictionary)}
-                                    onDelete={handleDictionaryDeleted}
+                                    onDelete={
+                                        dictionary.canWrite ? handleDictionaryDeleted : undefined
+                                    }
                                     onEdit={handleDictionaryEdited}
-                                    showDeleteButton={true}
+                                    showDeleteButton={dictionary.canWrite === true}
                                     showEditButton={false}
                                 />
                             ))}

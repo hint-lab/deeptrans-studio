@@ -24,6 +24,7 @@ import {
 import { prisma } from '@/lib/db';
 import {
     type AuthContext,
+    canWriteDictionary,
     ownedWhere,
     requireAccessibleDictionary,
     requireOwnedProject,
@@ -33,6 +34,7 @@ import {
 } from '@/lib/guards';
 import { createLogger } from '@/lib/logger';
 import { queryDictionaryEntriesExactWithOwner } from '@/server/dictionary';
+import type { Dictionary, Prisma } from '@prisma/client';
 import { XMLParser } from 'fast-xml-parser';
 import { revalidatePath } from 'next/cache';
 import * as XLSX from 'xlsx';
@@ -54,6 +56,9 @@ export async function createDictionaryAction(data: {
 }) {
     try {
         const authCtx = await requireUser();
+        if (data.visibility === 'PROJECT' && !authCtx.tenantId) {
+            return { success: false, error: '当前账号未加入租户，无法创建项目词库' };
+        }
         const dictionary = await createDictionaryDB({
             name: data.name,
             description: data.description,
@@ -150,6 +155,62 @@ export async function fetchDictionariesAction(visibility: 'public' | 'private' |
     }
 }
 
+// 词库管理页一次取回全部可见范围，避免客户端串行发起三次鉴权请求。
+export async function fetchDictionaryDashboardAction() {
+    try {
+        const authCtx = await requireUser();
+        const [publicDictionaries, projectDictionaries, privateDictionaries] = await Promise.all([
+            findDictionariesGivenVisibilityDB('PUBLIC'),
+            prisma.dictionary.findMany({
+                where: {
+                    visibility: 'PROJECT',
+                    OR: [
+                        ...(authCtx.tenantId ? [{ tenantId: authCtx.tenantId }] : []),
+                        { projectBindings: { some: { project: ownedWhere(authCtx) } } },
+                    ],
+                },
+                orderBy: { createdAt: 'desc' },
+                include: {
+                    _count: { select: { entries: true } },
+                    projectBindings: {
+                        select: { project: { select: { userId: true } } },
+                    },
+                },
+            }),
+            findDictionariesGivenVisibilityDB('PRIVATE', 'desc', authCtx.userId),
+        ]);
+
+        type ProjectDictionaryWithBindings = Dictionary & {
+            _count: { entries: number };
+            projectBindings: Array<{ project: { userId: string | null } }>;
+        };
+        const projectDictionariesWithAccess = (
+            projectDictionaries as ProjectDictionaryWithBindings[]
+        ).map(dictionary => {
+            const { projectBindings, ...data } = dictionary;
+            return {
+                ...data,
+                canWrite:
+                    (dictionary.userId === authCtx.userId &&
+                        dictionary.tenantId === (authCtx.tenantId ?? null)) ||
+                    projectBindings.some(binding => binding.project.userId === authCtx.userId),
+            };
+        });
+
+        return {
+            success: true,
+            data: {
+                publicDictionaries,
+                projectDictionaries: projectDictionariesWithAccess,
+                privateDictionaries,
+            },
+        };
+    } catch (error) {
+        logger.error('获取词库管理页数据失败:', error);
+        return { success: false, error: '获取词库失败' };
+    }
+}
+
 // 获取词典详情
 export async function fetchDictionaryByIdAction(id: string) {
     try {
@@ -165,8 +226,10 @@ export async function fetchDictionaryByIdAction(id: string) {
 // 仅获取词典元信息（更快，避免一次性返回大量 entries）
 export async function fetchDictionaryMetaByIdAction(dictionaryId: string) {
     try {
-        const dictionary = await requireAccessibleDictionary(dictionaryId);
-        return { success: true, data: dictionary };
+        const authCtx = await requireUser();
+        const dictionary = await requireAccessibleDictionary(dictionaryId, authCtx);
+        const canWrite = await canWriteDictionary(dictionaryId, authCtx);
+        return { success: true, data: { ...dictionary, canWrite } };
     } catch (error) {
         logger.error('获取词典元信息失败:', error);
         return { success: false, error: '获取词典元信息失败' };
@@ -175,9 +238,14 @@ export async function fetchDictionaryMetaByIdAction(dictionaryId: string) {
 // 仅获取词典元信息（更快，避免一次性返回大量 entries）
 export async function fetchDictionaryMetaByProjectIdAction(projectId: string) {
     try {
-        await requireOwnedProject(projectId);
+        const authCtx = await requireUser();
+        await requireOwnedProject(projectId, authCtx);
         const dictionary = await findDictionaryByProjectIdDB(projectId);
-        return { success: true, data: dictionary };
+        const canWrite = dictionary ? await canWriteDictionary(dictionary.id, authCtx) : false;
+        return {
+            success: true,
+            data: dictionary ? { ...dictionary, canWrite } : null,
+        };
     } catch (error) {
         logger.error('获取词典元信息失败:', error);
         return { success: false, error: '获取词典元信息失败' };
@@ -563,9 +631,16 @@ function parseExcelToEntries(
     if (rows.length === 0) return [];
     const headers = Object.keys(rows[0] ?? {});
     const detected = mapHeaders(headers);
-    const sourceKey = mapping?.sourceKey || detected.sourceKey;
-    const targetKey = mapping?.targetKey || detected.targetKey;
-    const notesKey = mapping?.notesKey || detected.notesKey;
+    const resolveHeader = (preferred?: string, fallback?: string) => {
+        if (!preferred) return fallback;
+        const normalizedPreferred = preferred.trim().toLowerCase();
+        return (
+            headers.find(header => header.trim().toLowerCase() === normalizedPreferred) || fallback
+        );
+    };
+    const sourceKey = resolveHeader(mapping?.sourceKey, detected.sourceKey);
+    const targetKey = resolveHeader(mapping?.targetKey, detected.targetKey);
+    const notesKey = resolveHeader(mapping?.notesKey, detected.notesKey);
     const entries: ParsedEntry[] = [];
     for (const r of rows) {
         const source = (sourceKey ? String(r[sourceKey] ?? '') : '').trim();
@@ -575,26 +650,6 @@ function parseExcelToEntries(
         entries.push({ sourceText: source, targetText: target, notes: notes || undefined });
     }
     return entries;
-}
-
-function parseCSVToEntries(text: string): ParsedEntry[] {
-    const lines = text.split(/\r?\n/).filter(Boolean);
-    if (!lines.length) return [];
-    const first = lines[0] || '';
-    const headers = first.split(/,|\t/);
-    const detected = mapHeaders(headers);
-    const srcIdx = headers.findIndex(h => h === detected.sourceKey);
-    const tgtIdx = headers.findIndex(h => h === detected.targetKey);
-    const noteIdx = headers.findIndex(h => h === detected.notesKey);
-    const out: ParsedEntry[] = [];
-    for (const line of lines.slice(1)) {
-        const cols = line.split(/,|\t/);
-        const s = srcIdx >= 0 ? (cols[srcIdx] || '').trim() : '';
-        const t = tgtIdx >= 0 ? (cols[tgtIdx] || '').trim() : '';
-        const n = noteIdx >= 0 ? (cols[noteIdx] || '').trim() : '';
-        if (s && t) out.push({ sourceText: s, targetText: t, notes: n || undefined });
-    }
-    return out;
 }
 
 function parseTBXToEntries(
@@ -709,6 +764,32 @@ async function importEntries(
     return { inserted, updated, skipped };
 }
 
+async function parseDictionaryImportFile(input: {
+    file: File;
+    sourceLang?: string;
+    targetLang?: string;
+    sourceKey?: string;
+    targetKey?: string;
+    notesKey?: string;
+}): Promise<ParsedEntry[]> {
+    const { file, sourceLang, targetLang, sourceKey, targetKey, notesKey } = input;
+    const name = (file as any).name || 'upload';
+    const ext = name.slice(name.lastIndexOf('.') + 1).toLowerCase();
+    const buf = Buffer.from(await file.arrayBuffer());
+    let entries: ParsedEntry[] = [];
+    if (ext === 'xlsx' || ext === 'xls' || ext === 'csv') {
+        entries = parseExcelToEntries(buf, { sourceKey, targetKey, notesKey });
+    } else if (ext === 'tbx' || ext === 'xml') {
+        entries = parseTBXToEntries(buf.toString('utf-8'), sourceLang, targetLang);
+    } else {
+        throw new Error('不支持的文件类型，仅支持 .xlsx/.xls/.csv/.tbx/.xml');
+    }
+    if (entries.length === 0) {
+        throw new Error('没有识别到有效词条，请确认 source 和 target 两列均已填写');
+    }
+    return entries;
+}
+
 export async function importDictionaryAction(input: {
     dictionaryId: string;
     mode?: 'upsert' | 'append' | 'overwrite';
@@ -719,33 +800,104 @@ export async function importDictionaryAction(input: {
     targetKey?: string;
     notesKey?: string;
 }) {
-    const authCtx = await requireUser();
-    await requireWritableDictionary(input.dictionaryId, authCtx);
-    const {
-        dictionaryId,
-        mode = 'upsert',
-        file,
-        sourceLang,
-        targetLang,
-        sourceKey,
-        targetKey,
-        notesKey,
-    } = input;
-    const name = (file as any).name || 'upload';
-    const ext = name.slice(name.lastIndexOf('.') + 1).toLowerCase();
-    const buf = Buffer.from(await file.arrayBuffer());
-    let entries: ParsedEntry[] = [];
-    if (ext === 'xlsx' || ext === 'xls' || ext === 'csv') {
-        if (ext === 'csv') entries = parseCSVToEntries(buf.toString('utf-8'));
-        else entries = parseExcelToEntries(buf, { sourceKey, targetKey, notesKey });
-    } else if (ext === 'tbx' || ext === 'xml') {
-        entries = parseTBXToEntries(buf.toString('utf-8'), sourceLang, targetLang);
-    } else {
-        return { success: false, error: '不支持的文件类型，仅支持 .xlsx/.xls/.csv/.tbx' };
+    try {
+        const authCtx = await requireUser();
+        await requireWritableDictionary(input.dictionaryId, authCtx);
+        const entries = await parseDictionaryImportFile(input);
+        const { inserted, updated, skipped } = await importEntries(
+            input.dictionaryId,
+            entries,
+            input.mode ?? 'upsert',
+            authCtx.userId
+        );
+        revalidatePath('/dashboard/dictionaries');
+        return { success: true, data: { inserted, updated, skipped, total: entries.length } };
+    } catch (error) {
+        logger.error('导入词库失败:', error);
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : '导入词库失败',
+        };
     }
-    const { inserted, updated, skipped } = await importEntries(dictionaryId, entries, mode, authCtx.userId);
-    revalidatePath('/dashboard/dictionaries');
-    return { success: true, data: { inserted, updated, skipped, total: entries.length } };
+}
+
+export async function createDictionaryFromImportAction(input: {
+    name: string;
+    description?: string;
+    domain: string;
+    visibility: 'PRIVATE' | 'PROJECT';
+    file: File;
+    sourceLang?: string;
+    targetLang?: string;
+    sourceKey?: string;
+    targetKey?: string;
+    notesKey?: string;
+}) {
+    const authCtx = await requireUser();
+    if (input.visibility === 'PROJECT' && !authCtx.tenantId) {
+        return { success: false, error: '当前账号未加入租户，无法创建项目词库' };
+    }
+
+    let entries: ParsedEntry[];
+    try {
+        entries = await parseDictionaryImportFile(input);
+    } catch (error) {
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : '解析词库失败',
+        };
+    }
+
+    let dictionary: { id: string };
+    try {
+        dictionary = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+            const created = await tx.dictionary.create({
+                data: {
+                    name: input.name,
+                    description: input.description,
+                    domain: input.domain,
+                    visibility: input.visibility,
+                    userId: authCtx.userId,
+                    tenantId: authCtx.tenantId || undefined,
+                },
+            });
+            const inserted = await tx.dictionaryEntry.createMany({
+                data: entries.map(entry => ({
+                    dictionaryId: created.id,
+                    sourceText: entry.sourceText,
+                    targetText: entry.targetText,
+                    notes: entry.notes ?? null,
+                    origin: 'apply:copied',
+                    enabled: true,
+                    createdById: authCtx.userId,
+                    updatedById: authCtx.userId,
+                })),
+            });
+            if (inserted.count !== entries.length) {
+                throw new Error(`仅写入 ${inserted.count}/${entries.length} 条词条`);
+            }
+            return created;
+        });
+    } catch (error) {
+        logger.error('创建并导入词库失败，事务已回滚:', error);
+        return { success: false, error: '导入词库失败，请检查文件后重试' };
+    }
+
+    try {
+        revalidatePath('/dashboard/dictionaries');
+    } catch (error) {
+        logger.warn('词库已导入，但页面缓存刷新失败:', error);
+    }
+    return {
+        success: true,
+        data: {
+            dictionaryId: dictionary.id,
+            inserted: entries.length,
+            updated: 0,
+            skipped: 0,
+            total: entries.length,
+        },
+    };
 }
 
 // 统一的词典查询（按可见范围：PUBLIC / PROJECT(projectId) / PRIVATE(userId)）

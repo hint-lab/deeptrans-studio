@@ -5,7 +5,7 @@ import {
     deleteDictionaryAction,
     deleteDictionaryEntryAction,
     fetchDictionaryEntriesPagedAction,
-    updateDictionaryEntryAction
+    updateDictionaryEntryAction,
 } from '@/actions/dictionary';
 import { createLogger } from '@/lib/logger';
 import type { Dictionary, DictionaryEntry } from '@prisma/client';
@@ -21,28 +21,27 @@ import { ScrollArea } from 'src/components/ui/scroll-area';
 import { Switch } from 'src/components/ui/switch';
 import { Textarea } from 'src/components/ui/textarea';
 import { ImportDictionaryEntriesDialog } from './import-dictionary-entries-dialog';
-const logger = createLogger({
-    type: 'dictionaries:dictionary-entries-manager',
-}, {
-    json: false,// 开启json格式输出
-    pretty: false, // 关闭开发环境美化输出
-    colors: true, // 仅当json：false时启用颜色输出可用
-    includeCaller: false, // 日志不包含调用者
-});
+const logger = createLogger(
+    {
+        type: 'dictionaries:dictionary-entries-manager',
+    },
+    {
+        json: false, // 开启json格式输出
+        pretty: false, // 关闭开发环境美化输出
+        colors: true, // 仅当json：false时启用颜色输出可用
+        includeCaller: false, // 日志不包含调用者
+    }
+);
 interface DictionaryEntriesManagerProps {
-    dictionary: Dictionary;
-    onEntriesUpdated: () => void;
+    dictionary: Dictionary & { canWrite?: boolean };
     onDictionaryDeleted?: (dictionaryId: string) => void;
     onDictionaryEdited?: (dictionaryId: string, updatedData: Partial<Dictionary>) => void;
-    reloadToken?: number;
 }
 
 export function DictionaryEntriesManager({
     dictionary,
-    onEntriesUpdated,
     onDictionaryDeleted,
     onDictionaryEdited,
-    reloadToken,
 }: DictionaryEntriesManagerProps) {
     const [entries, setEntries] = useState<DictionaryEntry[]>([]);
     const [page, setPage] = useState(1);
@@ -53,6 +52,7 @@ export function DictionaryEntriesManager({
     const [editingEntry, setEditingEntry] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const t = useTranslations('Dashboard.Dictionaries');
+    const canWrite = dictionary.visibility !== 'PUBLIC' && dictionary.canWrite === true;
     const [editForm, setEditForm] = useState({
         sourceText: '',
         targetText: '',
@@ -100,26 +100,17 @@ export function DictionaryEntriesManager({
         }
     };
 
-    // 搜索条目
-    const handleSearch = async () => {
-        // 搜索重置到第 1 页
-        await loadEntries({ page: 1 });
-    };
-
     useEffect(() => {
-        void loadEntries({ page: 1, pageSize });
-    }, [dictionary.id, reloadToken]);
-
-    useEffect(() => {
+        const delay = searchTerm || originFilter ? 300 : 0;
         const timer = setTimeout(() => {
-            void handleSearch();
-        }, 300);
+            void loadEntries({ page: 1, pageSize });
+        }, delay);
 
         return () => clearTimeout(timer);
-    }, [searchTerm, originFilter]);
+    }, [dictionary.id, searchTerm, originFilter]);
 
     const handleAddEntry = () => {
-        if (dictionary.visibility === 'PUBLIC') return; // 公共词库不允许新增/编辑
+        if (!canWrite) return;
         const newEntry: DictionaryEntry = {
             id: `temp-${Date.now()}`,
             sourceText: '',
@@ -142,7 +133,7 @@ export function DictionaryEntriesManager({
     };
 
     const handleEditEntry = (entry: DictionaryEntry) => {
-        if (dictionary.visibility === 'PUBLIC') return; // 公共词库不可编辑
+        if (!canWrite) return;
         setEditingEntry(entry.id);
         setEditForm({
             sourceText: entry.sourceText,
@@ -152,7 +143,7 @@ export function DictionaryEntriesManager({
     };
 
     const handleSaveEntry = async (entryId: string) => {
-        if (dictionary.visibility === 'PUBLIC') return;
+        if (!canWrite) return;
         if (!editForm.sourceText.trim() || !editForm.targetText.trim()) {
             toast.error('源语言和目标语言不能为空');
             return;
@@ -171,7 +162,6 @@ export function DictionaryEntriesManager({
 
                 if (result.success && result.data) {
                     toast.success('词条创建成功！');
-                    onEntriesUpdated();
                     await loadEntries();
                 } else {
                     toast.error(result.error ?? '创建词条失败');
@@ -186,7 +176,6 @@ export function DictionaryEntriesManager({
 
                 if (result.success && result.data) {
                     toast.success('词条更新成功！');
-                    onEntriesUpdated();
                     await loadEntries();
                 } else {
                     toast.error(result.error ?? '更新词条失败');
@@ -212,7 +201,7 @@ export function DictionaryEntriesManager({
     };
 
     const handleDeleteEntry = async (entryId: string) => {
-        if (dictionary.visibility === 'PUBLIC') return; // 公共词库可删除？按需求仅允许删除词库整体或通过选择删除，保守先禁止
+        if (!canWrite) return;
         if (entryId.startsWith('temp-')) {
             setEntries(entries.filter(entry => entry.id !== entryId));
             return;
@@ -222,7 +211,6 @@ export function DictionaryEntriesManager({
             const result = await deleteDictionaryEntryAction(entryId);
             if (result.success) {
                 toast.success('词条删除成功！');
-                onEntriesUpdated();
                 await loadEntries();
             } else {
                 toast.error(result.error ?? '删除词条失败');
@@ -238,7 +226,7 @@ export function DictionaryEntriesManager({
     };
 
     const handleToggleEnabled = async (entry: DictionaryEntry, value: boolean) => {
-        if (dictionary.visibility === 'PUBLIC') return;
+        if (!canWrite) return;
         try {
             setLoading(true);
             const result = await updateDictionaryEntryAction(entry.id, { enabled: value });
@@ -269,27 +257,22 @@ export function DictionaryEntriesManager({
                         </CardTitle>
                     </div>
                     <div className="flex space-x-2">
-                        <ImportDictionaryEntriesDialog
-                            dictionaryId={dictionary.id}
-                            onCompleted={async () => {
-                                onEntriesUpdated();
-                                await loadEntries();
-                            }}
-                        />
+                        {canWrite && (
+                            <ImportDictionaryEntriesDialog
+                                dictionaryId={dictionary.id}
+                                onCompleted={() => loadEntries()}
+                            />
+                        )}
                         <Button
                             onClick={handleAddEntry}
                             size="sm"
-                            disabled={loading || dictionary.visibility === 'PUBLIC'}
-                            title={
-                                dictionary.visibility === 'PUBLIC'
-                                    ? '公共词库不支持编辑'
-                                    : undefined
-                            }
+                            disabled={loading || !canWrite}
+                            title={!canWrite ? t('readOnlyDictionary') : undefined}
                         >
                             <Plus className="mr-2 h-4 w-4" />
                             {t('addEntry')}
                         </Button>
-                        {onDictionaryDeleted && (
+                        {onDictionaryDeleted && canWrite && (
                             <Button
                                 variant="destructive"
                                 size="sm"
@@ -376,7 +359,9 @@ export function DictionaryEntriesManager({
                                     <div className="space-y-3">
                                         <div className="grid grid-cols-2 gap-3">
                                             <div>
-                                                <Label htmlFor={`source-${entry.id}`}>{t('sourceLanguage')}</Label>
+                                                <Label htmlFor={`source-${entry.id}`}>
+                                                    {t('sourceLanguage')}
+                                                </Label>
                                                 <Input
                                                     id={`source-${entry.id}`}
                                                     value={editForm.sourceText}
@@ -409,7 +394,9 @@ export function DictionaryEntriesManager({
                                             </div>
                                         </div>
                                         <div>
-                                            <Label htmlFor={`notes-${entry.id}`}>{t('notes')}</Label>
+                                            <Label htmlFor={`notes-${entry.id}`}>
+                                                {t('notes')}
+                                            </Label>
                                             <Textarea
                                                 id={`notes-${entry.id}`}
                                                 value={editForm.notes}
@@ -489,8 +476,7 @@ export function DictionaryEntriesManager({
                                                         handleToggleEnabled(entry, !!checked)
                                                     }
                                                     disabled={
-                                                        loading ||
-                                                        dictionary.visibility === 'PUBLIC'
+                                                        loading || !canWrite
                                                     }
                                                 />
                                             </div>
@@ -500,12 +486,11 @@ export function DictionaryEntriesManager({
                                                     size="sm"
                                                     onClick={() => handleEditEntry(entry)}
                                                     disabled={
-                                                        loading ||
-                                                        dictionary.visibility === 'PUBLIC'
+                                                        loading || !canWrite
                                                     }
                                                     title={
-                                                        dictionary.visibility === 'PUBLIC'
-                                                            ? '公共词库不支持编辑'
+                                                        !canWrite
+                                                            ? t('readOnlyDictionary')
                                                             : undefined
                                                     }
                                                 >
@@ -517,12 +502,11 @@ export function DictionaryEntriesManager({
                                                     onClick={() => handleDeleteEntry(entry.id)}
                                                     className="text-red-500 hover:text-red-700"
                                                     disabled={
-                                                        loading ||
-                                                        dictionary.visibility === 'PUBLIC'
+                                                        loading || !canWrite
                                                     }
                                                     title={
-                                                        dictionary.visibility === 'PUBLIC'
-                                                            ? '公共词库不支持删除条目'
+                                                        !canWrite
+                                                            ? t('cannotDeleteReadOnlyEntry')
                                                             : undefined
                                                     }
                                                 >
@@ -583,7 +567,8 @@ export function DictionaryEntriesManager({
                             {t('previousPage')}
                         </Button>
                         <span>
-                            {page} / {Math.max(1, Math.ceil(total / Math.max(1, pageSize)))} {t('pages')}
+                            {page} / {Math.max(1, Math.ceil(total / Math.max(1, pageSize)))}{' '}
+                            {t('pages')}
                         </span>
                         <Button
                             variant="outline"

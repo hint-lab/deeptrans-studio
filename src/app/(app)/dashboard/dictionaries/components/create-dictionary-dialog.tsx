@@ -1,7 +1,7 @@
 'use client';
 
 import { createDictionaryAction } from '@/actions/dictionary';
-import { DOMAINS } from '@/constants/domains';
+import { getDomainOptions } from '@/constants/domains';
 import { PlusCircledIcon } from '@radix-ui/react-icons';
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
@@ -25,7 +25,6 @@ import {
     SelectTrigger,
     SelectValue,
 } from 'src/components/ui/select';
-import { Switch } from 'src/components/ui/switch';
 import { Textarea } from 'src/components/ui/textarea';
 type ClientDictionary = {
     id: string;
@@ -38,15 +37,18 @@ type ClientDictionary = {
     tenantId: string | null;
     projectId: string | null;
     userId: string | null;
+    canWrite: boolean;
 };
 interface CreateDictionaryDialogProps {
     onDictionaryCreated: (dictionary: ClientDictionary) => void;
     userId?: string;
+    visibility?: 'PRIVATE' | 'PROJECT';
 }
 
 export function CreateDictionaryDialog({
     onDictionaryCreated,
     userId,
+    visibility = 'PRIVATE',
 }: CreateDictionaryDialogProps) {
     const [open, setOpen] = useState(false);
     const [loading, setLoading] = useState(false);
@@ -54,9 +56,9 @@ export function CreateDictionaryDialog({
         name: '',
         description: '',
         domain: '',
-        visibility: 'PRIVATE',
     });
     const t = useTranslations('Dashboard.Dictionaries');
+    const tDomains = useTranslations('Common.domains');
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
@@ -66,7 +68,7 @@ export function CreateDictionaryDialog({
                 name: formData.name,
                 description: formData.description,
                 domain: formData.domain,
-                visibility: 'PRIVATE',
+                visibility,
             });
 
             if (result.success && result.data) {
@@ -81,9 +83,10 @@ export function CreateDictionaryDialog({
                     tenantId: (result.data as any).tenantId ?? null,
                     projectId: (result.data as any).projectId ?? null,
                     userId: result.data.userId ?? null,
+                    canWrite: true,
                 };
                 onDictionaryCreated(newDictionary);
-                setFormData({ name: '', description: '', domain: '', visibility: 'PRIVATE' });
+                setFormData({ name: '', description: '', domain: '' });
                 setOpen(false);
 
                 toast.success('词典创建成功！');
@@ -97,7 +100,7 @@ export function CreateDictionaryDialog({
         }
     };
 
-    const handleInputChange = (field: string, value: string | boolean) => {
+    const handleInputChange = (field: string, value: string) => {
         setFormData(prev => ({ ...prev, [field]: value }));
     };
 
@@ -117,7 +120,9 @@ export function CreateDictionaryDialog({
                     <DialogTitle>{t('createNewDictionary')}</DialogTitle>
                     <DialogDescription>
                         {canCreatePrivate
-                            ? '创建一个新的词典，用于存储专业术语和翻译对照。'
+                            ? visibility === 'PROJECT'
+                                ? t('createProjectDescription')
+                                : t('createPrivateDescription')
                             : '请先登录以创建词典。'}
                     </DialogDescription>
                 </DialogHeader>
@@ -173,32 +178,13 @@ export function CreateDictionaryDialog({
                                         <SelectValue placeholder="选择领域" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        {DOMAINS.map(option => (
+                                        {getDomainOptions(key => tDomains(key)).map(option => (
                                             <SelectItem key={option.value} value={option.value}>
-                                                {option.labelKey}
+                                                {option.label}
                                             </SelectItem>
                                         ))}
                                     </SelectContent>
                                 </Select>
-                            </div>
-                            <div className="grid grid-cols-4 items-center gap-4">
-                                <Label htmlFor="isPublic" className="text-right">
-                                    公开
-                                </Label>
-                                <div className="col-span-3 flex items-center space-x-2">
-                                    <Switch
-                                        id="isPublic"
-                                        checked={formData.visibility === 'PUBLIC'}
-                                        onCheckedChange={checked =>
-                                            handleInputChange(
-                                                'visibility',
-                                                checked ? 'PUBLIC' : 'PRIVATE'
-                                            )
-                                        }
-                                        disabled={loading}
-                                    />
-                                    <Label htmlFor="isPublic">设为公开词库</Label>
-                                </div>
                             </div>
                         </div>
                         <DialogFooter>

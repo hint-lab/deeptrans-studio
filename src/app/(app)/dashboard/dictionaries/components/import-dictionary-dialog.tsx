@@ -1,6 +1,6 @@
 'use client';
 
-import { createDictionaryAction, importDictionaryAction } from '@/actions/dictionary';
+import { createDictionaryFromImportAction } from '@/actions/dictionary';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -25,8 +25,9 @@ import {
     User,
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
+import { DictionaryTemplateDownloadButton } from './dictionary-import-guide';
 type DictLite = { id: string; name: string };
 
 export function ImportDictionaryDialog({
@@ -60,98 +61,127 @@ export function ImportDictionaryDialog({
 
     const isProject = modeContext === 'project';
 
-    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const f = e.target.files?.[0] || null;
         setFile(f);
         setPreview([]);
         setParsedEntries([]);
-        if (!f || !enablePreview) return;
-
-        try {
-            const ext = f.name.toLowerCase().split('.').pop();
-            if (ext === 'xlsx' || ext === 'xls' || ext === 'csv') {
-                const XLSX = await import('xlsx');
-                const buf = await f.arrayBuffer();
-                const wb = XLSX.read(buf, { type: 'array' });
-                const firstSheetName = wb.SheetNames?.[0] ?? '';
-                const ws = firstSheetName ? wb.Sheets[firstSheetName] : undefined;
-                const rows: any[] = ws ? XLSX.utils.sheet_to_json(ws, { defval: '' }) : [];
-
-                // 生成更友好的预览
-                const previewRows = rows.slice(0, 10).map((r, idx) => {
-                    const keys = Object.keys(r).slice(0, 5); // 只显示前5列
-                    const preview = keys.map(k => `${k}: ${String(r[k]).slice(0, 30)}`).join(' | ');
-                    return `行${idx + 1}: ${preview}`;
-                });
-                setPreview(previewRows);
-
-                // 预解析数据
-                const norm = (k: string) =>
-                    String(k || '')
-                        .trim()
-                        .toLowerCase();
-                const entries = rows
-                    .map(r => {
-                        const keys = Object.keys(r);
-                        const kv: any = {};
-                        for (const k of keys) kv[norm(k)] = r[k];
-                        return {
-                            sourceText: String(
-                                kv[norm(sourceKey)] ?? kv['源'] ?? kv['source'] ?? ''
-                            ),
-                            targetText: String(
-                                kv[norm(targetKey)] ?? kv['译'] ?? kv['target'] ?? ''
-                            ),
-                            notes: String(kv[norm(notesKey)] ?? kv['备注'] ?? kv['notes'] ?? ''),
-                        };
-                    })
-                    .filter(e => e.sourceText && e.targetText);
-                setParsedEntries(entries);
-            } else if (ext === 'tbx' || ext === 'xml') {
-                const text = await f.text();
-                const lines = text.split(/\r?\n/).slice(0, 10);
-                setPreview(lines.map((line, idx) => `行${idx + 1}: ${line.slice(0, 100)}`));
-                setParsedEntries([]);
-            } else {
-                setPreview([`❌ 不支持的文件类型: ${ext}`]);
-                setParsedEntries([]);
-            }
-        } catch (e) {
-            setPreview([`❌ 预览失败: ${String(e)}`]);
-        }
     };
+
+    useEffect(() => {
+        if (!file || !enablePreview) return;
+        let active = true;
+        setPreview([]);
+        setParsedEntries([]);
+
+        const parsePreview = async () => {
+            try {
+                const ext = file.name.toLowerCase().split('.').pop();
+                if (ext === 'xlsx' || ext === 'xls' || ext === 'csv') {
+                    const XLSX = await import('xlsx');
+                    const buf = await file.arrayBuffer();
+                    const wb = XLSX.read(buf, { type: 'array' });
+                    const firstSheetName = wb.SheetNames?.[0] ?? '';
+                    const ws = firstSheetName ? wb.Sheets[firstSheetName] : undefined;
+                    const rows: any[] = ws ? XLSX.utils.sheet_to_json(ws, { defval: '' }) : [];
+
+                    const previewRows = rows.slice(0, 10).map((r, idx) => {
+                        const keys = Object.keys(r).slice(0, 5);
+                        const rowPreview = keys
+                            .map(k => `${k}: ${String(r[k]).slice(0, 30)}`)
+                            .join(' | ');
+                        return `行${idx + 1}: ${rowPreview}`;
+                    });
+
+                    const norm = (key: string) =>
+                        String(key || '')
+                            .trim()
+                            .toLowerCase();
+                    const entries = rows
+                        .map(row => {
+                            const normalizedRow: Record<string, unknown> = {};
+                            for (const key of Object.keys(row)) {
+                                normalizedRow[norm(key)] = row[key];
+                            }
+                            return {
+                                sourceText: String(
+                                    normalizedRow[norm(sourceKey)] ??
+                                        normalizedRow['源'] ??
+                                        normalizedRow.source ??
+                                        ''
+                                ).trim(),
+                                targetText: String(
+                                    normalizedRow[norm(targetKey)] ??
+                                        normalizedRow['译'] ??
+                                        normalizedRow.target ??
+                                        ''
+                                ).trim(),
+                                notes: String(
+                                    normalizedRow[norm(notesKey)] ??
+                                        normalizedRow['备注'] ??
+                                        normalizedRow.notes ??
+                                        ''
+                                ).trim(),
+                            };
+                        })
+                        .filter(entry => entry.sourceText && entry.targetText);
+
+                    if (active) {
+                        setPreview(previewRows);
+                        setParsedEntries(entries);
+                    }
+                } else if (ext === 'tbx' || ext === 'xml') {
+                    const text = await file.text();
+                    const lines = text.split(/\r?\n/).slice(0, 10);
+                    if (active) {
+                        setPreview(lines.map((line, idx) => `行${idx + 1}: ${line.slice(0, 100)}`));
+                        setParsedEntries([]);
+                    }
+                } else if (active) {
+                    setPreview([`❌ 不支持的文件类型: ${ext}`]);
+                    setParsedEntries([]);
+                }
+            } catch (error) {
+                if (active) {
+                    setPreview([`❌ 预览失败: ${String(error)}`]);
+                    setParsedEntries([]);
+                }
+            }
+        };
+
+        void parsePreview();
+        return () => {
+            active = false;
+        };
+    }, [file, sourceKey, targetKey, notesKey]);
 
     const handleImport = async () => {
         if (!file) {
             toast('请选择文件（支持 .xlsx / .tbx）');
             return;
         }
+        if (isExcel && parsedEntries.length === 0) {
+            toast.error(t('Guide.noValidEntries'));
+            return;
+        }
         try {
             setLoading(true);
 
-            // 1) 根据模式创建词库：project -> 项目词库；private -> 私有词库
             const baseName =
                 file.name.replace(/\.[^.]+$/, '') || (isProject ? 'project-dict' : 'private-dict');
-            const createRes = await createDictionaryAction({
+            const importRes = await createDictionaryFromImportAction({
                 name: baseName,
                 description: isProject ? '项目共享词库' : '私有项目词库',
                 domain: 'general',
                 visibility: isProject ? 'PROJECT' : 'PRIVATE',
-            });
-            if (!createRes?.success || !createRes?.data?.id) throw new Error('创建词库失败');
-            const dictionaryId = createRes.data.id as string;
-
-            // 2) 导入文件内容到该词库
-            const mapping = { sourceKey, targetKey, notesKey } as any;
-            const importRes = await importDictionaryAction({
-                dictionaryId,
                 file,
-                mode: 'upsert',
                 sourceLang: 'auto',
                 targetLang: 'auto',
-                ...mapping,
+                sourceKey,
+                targetKey,
+                notesKey,
             });
-            if (!importRes?.success) throw new Error((importRes as any)?.error || '导入失败');
+            if (!importRes?.success) throw new Error(importRes?.error || '导入失败');
             toast(
                 `${isProject ? '项目词库导入成功' : '私有词库导入成功'}：“${baseName}”，导入 ${importRes?.data?.total ?? 0} 条`
             );
@@ -186,7 +216,7 @@ export function ImportDictionaryDialog({
                             ) : (
                                 <User className="h-5 w-5 text-purple-600" />
                             )}
-                            导入智能词库{t('importAIEnhancedDictionary')}
+                            {t('importAIEnhancedDictionary')}
                         </DialogTitle>
                         <DialogDescription>
                             {isProject
@@ -217,6 +247,20 @@ export function ImportDictionaryDialog({
                                 </CardTitle>
                             </CardHeader>
                             <CardContent className="space-y-4">
+                                <div className="flex flex-col gap-3 rounded-lg border border-emerald-200 bg-emerald-50/70 p-3 dark:border-emerald-900 dark:bg-emerald-950/30 sm:flex-row sm:items-center sm:justify-between">
+                                    <div>
+                                        <p className="text-sm font-medium">
+                                            {t('Guide.dialogTitle')}
+                                        </p>
+                                        <p className="mt-0.5 text-xs text-muted-foreground">
+                                            {t('Guide.dialogDescription')}
+                                        </p>
+                                    </div>
+                                    <DictionaryTemplateDownloadButton
+                                        compact
+                                        className="shrink-0"
+                                    />
+                                </div>
                                 <div>
                                     <Label className="text-sm font-medium">选择文件</Label>
                                     <div className="relative">
@@ -366,7 +410,9 @@ export function ImportDictionaryDialog({
                             </Button>
                             <Button
                                 onClick={handleImport}
-                                disabled={loading || !file}
+                                disabled={
+                                    loading || !file || (!!isExcel && parsedEntries.length === 0)
+                                }
                                 className="min-w-[120px] bg-blue-600 hover:bg-blue-700"
                             >
                                 {loading ? (

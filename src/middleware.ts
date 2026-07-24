@@ -106,10 +106,10 @@ export async function middleware(request: NextRequest) {
 export const config = {
     // 运行在所有路径上，除了：
     // _next/static, _next/image (Next.js 内部)
-    // 静态文件 (favicon.ico, .png, .svg, etc.)
+    // 静态文件 (favicon.ico, .png, .svg, .xlsx, etc.)
     // /api/public (公共API)
     // /api/auth (NextAuth 认证API)
     matcher: [
-        '/((?!_next/static|_next/image|favicon\\.ico|.*\\.png|.*\\.ico|.*\\.svg|.*\\.jpg|api/public|api/auth).*)',
+        '/((?!_next/static|_next/image|favicon\\.ico|.*\\.png|.*\\.ico|.*\\.svg|.*\\.jpg|.*\\.xlsx|api/public|api/auth).*)',
     ],
 };

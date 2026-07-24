@@ -203,23 +203,42 @@ export async function requireWritableDictionary(dictionaryId: string, ctx?: Auth
     if (!dictionaryId) throw new GuardError(400, '缺少 dictionaryId');
 
     const dictionary = await prisma.dictionary.findFirst({
-        where: {
-            id: dictionaryId,
-            OR: [
-                { visibility: 'PRIVATE', userId: authCtx.userId },
-                {
-                    visibility: 'PROJECT',
-                    projectBindings: {
-                        some: {
-                            project: {
-                                userId: authCtx.userId,
-                            },
-                        },
-                    },
-                },
-            ],
-        },
+        where: writableDictionaryWhere(dictionaryId, authCtx),
     });
     if (!dictionary) throw new GuardError(404, '词典不存在或无权写入');
     return dictionary;
+}
+
+function writableDictionaryWhere(dictionaryId: string, ctx: AuthContext) {
+    return {
+        id: dictionaryId,
+        OR: [
+            { visibility: 'PRIVATE' as const, userId: ctx.userId },
+            {
+                visibility: 'PROJECT' as const,
+                userId: ctx.userId,
+                tenantId: ctx.tenantId ?? null,
+            },
+            {
+                visibility: 'PROJECT' as const,
+                projectBindings: {
+                    some: {
+                        project: {
+                            userId: ctx.userId,
+                        },
+                    },
+                },
+            },
+        ],
+    };
+}
+
+export async function canWriteDictionary(dictionaryId: string, ctx?: AuthContext) {
+    const authCtx = ctx ?? (await requireUser());
+    if (!dictionaryId) return false;
+    const match = await prisma.dictionary.findFirst({
+        where: writableDictionaryWhere(dictionaryId, authCtx),
+        select: { id: true },
+    });
+    return Boolean(match);
 }

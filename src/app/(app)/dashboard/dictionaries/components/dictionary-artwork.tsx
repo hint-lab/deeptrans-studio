@@ -48,6 +48,7 @@ interface Dictionary {
     isPublic?: boolean;
     cover?: string; // 添加封面图片
     entryCount?: number;
+    canWrite?: boolean;
     // 其他可选属性
 }
 const logger = createLogger({

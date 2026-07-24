@@ -33,6 +33,8 @@ const documentAId = `${prefix}-document-a`;
 const itemAId = `${prefix}-item-a`;
 const privateDictionaryAId = `${prefix}-dict-a`;
 const projectDictionaryAId = `${prefix}-dict-project-a`;
+const standaloneProjectDictionaryAId = `${prefix}-dict-project-standalone-a`;
+const mismatchedProjectDictionaryAId = `${prefix}-dict-project-mismatched-a`;
 const publicDictionaryId = `${prefix}-dict-public`;
 const memoryAId = `${prefix}-memory-a`;
 
@@ -116,6 +118,22 @@ async function seed() {
         domain: 'security',
         visibility: 'PROJECT',
         tenantId: tenantAId,
+      },
+      {
+        id: standaloneProjectDictionaryAId,
+        name: `${prefix} Standalone Project Dictionary A`,
+        domain: 'security',
+        visibility: 'PROJECT',
+        userId: userAId,
+        tenantId: tenantAId,
+      },
+      {
+        id: mismatchedProjectDictionaryAId,
+        name: `${prefix} Mismatched Project Dictionary A`,
+        domain: 'security',
+        visibility: 'PROJECT',
+        userId: userAId,
+        tenantId: tenantBId,
       },
       {
         id: publicDictionaryId,
@@ -258,6 +276,27 @@ const checks: Check[] = [
     run: () =>
       expectDenied('same tenant cannot write project dictionary', () =>
         requireWritableDictionary(projectDictionaryAId, ctxA2)
+      ),
+  },
+  {
+    label: 'creator with exact tenant can write standalone project dictionary',
+    run: () =>
+      expectAllowed('creator with exact tenant can write standalone project dictionary', () =>
+        requireWritableDictionary(standaloneProjectDictionaryAId, ctxA)
+      ),
+  },
+  {
+    label: 'same tenant noncreator cannot write standalone project dictionary',
+    run: () =>
+      expectDenied('same tenant noncreator cannot write standalone project dictionary', () =>
+        requireWritableDictionary(standaloneProjectDictionaryAId, ctxA2)
+      ),
+  },
+  {
+    label: 'creator with mismatched tenant cannot write standalone project dictionary',
+    run: () =>
+      expectDenied('creator with mismatched tenant cannot write standalone project dictionary', () =>
+        requireWritableDictionary(mismatchedProjectDictionaryAId, ctxA)
       ),
   },
   {

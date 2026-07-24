@@ -22,6 +22,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from 'src/components/ui/select';
+import { DictionaryTemplateDownloadButton } from './dictionary-import-guide';
 interface ImportDictionaryEntriesDialogProps {
     dictionaryId: string;
     onCompleted?: () => Promise<void> | void;
@@ -81,6 +82,15 @@ export function ImportDictionaryEntriesDialog({
                     <DialogTitle>{t('importEntries')}（Excel/TBX）</DialogTitle>
                 </DialogHeader>
                 <div className="space-y-4 py-2">
+                    <div className="flex flex-col gap-3 rounded-lg border border-emerald-200 bg-emerald-50/70 p-3 dark:border-emerald-900 dark:bg-emerald-950/30 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                            <p className="text-sm font-medium">{t('Guide.dialogTitle')}</p>
+                            <p className="mt-0.5 text-xs text-muted-foreground">
+                                {t('Guide.dialogDescription')}
+                            </p>
+                        </div>
+                        <DictionaryTemplateDownloadButton compact className="shrink-0" />
+                    </div>
                     <div className="space-y-2">
                         <Label>{t('selectFile')}</Label>
                         <Input
@@ -93,7 +103,7 @@ export function ImportDictionaryEntriesDialog({
                             }
                         />
                         <p className="text-xs text-muted-foreground">
-                            支持 .xlsx/.xls/.csv/.tbx，建议表头包含 source/target/notes
+                            支持 .xlsx/.xls/.csv/.tbx；source 和 target 必填，notes 可选。
                         </p>
                     </div>
                     <div className="grid grid-cols-3 gap-3">

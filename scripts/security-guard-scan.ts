@@ -125,7 +125,7 @@ for (const [action, requiredMarkers] of Object.entries(criticalActions)) {
     });
 }
 
-const unguardedActionFiles = listFiles('src/actions', rel => /\.ts$/.test(rel)).filter(file => {
+const unguardedActionFiles = listFiles('src/actions', rel => rel.endsWith('.ts')).filter(file => {
     const text = read(file);
     return /^export async function/m.test(text) && !includesAny(text, guardMarkers);
 });
@@ -142,7 +142,7 @@ const publicAuthActionExports = new Set([
 ]);
 const exportedActionPattern = /^export\s+(?:async\s+function\s+(\w+)|const\s+(\w+)\s*=\s*async)/gm;
 const unguardedActionExports: string[] = [];
-for (const file of listFiles('src/actions', rel => /\.ts$/.test(rel))) {
+for (const file of listFiles('src/actions', rel => rel.endsWith('.ts'))) {
     const text = read(file);
     const exports: Array<{ name: string; start: number }> = [];
     let match: RegExpExecArray | null;
@@ -166,7 +166,7 @@ checks.push({
     detail: unguardedActionExports.join(', '),
 });
 
-const unguardedApiRoutes = listFiles('src/app/api', rel => /route\.ts$/.test(rel)).filter(file => {
+const unguardedApiRoutes = listFiles('src/app/api', rel => rel.endsWith('route.ts')).filter(file => {
     if (file.startsWith('src/app/api/auth/')) return false;
     const text = read(file);
     return /^export async function/m.test(text) && !includesAny(text, guardMarkers);
@@ -179,7 +179,7 @@ checks.push({
 
 const exportedApiMethodPattern = /^export\s+async\s+function\s+(GET|POST|PUT|PATCH|DELETE)\b/gm;
 const unguardedApiMethods: string[] = [];
-for (const file of listFiles('src/app/api', rel => /route\.ts$/.test(rel))) {
+for (const file of listFiles('src/app/api', rel => rel.endsWith('route.ts'))) {
     if (file.startsWith('src/app/api/auth/')) continue;
     const text = read(file);
     const exports: Array<{ name: string; start: number }> = [];
@@ -453,6 +453,10 @@ checks.push({
 });
 
 const guardsText = read('src/lib/guards.ts');
+const writableDictionaryGuard = guardsText.slice(
+    guardsText.indexOf('function writableDictionaryWhere'),
+    guardsText.indexOf('export async function canWriteDictionary')
+);
 checks.push({
     ok:
         guardsText.includes('export async function requireWritableProject') &&
@@ -462,7 +466,13 @@ checks.push({
         guardsText.includes('export async function requireWritableDocumentItem') &&
         guardsText.includes('findWritableDocumentItemForOwner') &&
         guardsText.includes('export async function requireWritableDictionary') &&
-        guardsText.includes('project: {\n                                userId: authCtx.userId'),
+        guardsText.includes('where: writableDictionaryWhere(dictionaryId, authCtx)') &&
+        writableDictionaryGuard.includes("visibility: 'PRIVATE' as const, userId: ctx.userId") &&
+        writableDictionaryGuard.includes("visibility: 'PROJECT' as const") &&
+        writableDictionaryGuard.includes('userId: ctx.userId') &&
+        writableDictionaryGuard.includes('tenantId: ctx.tenantId ?? null') &&
+        writableDictionaryGuard.includes('projectBindings:') &&
+        writableDictionaryGuard.includes('project: {\n                            userId: ctx.userId'),
     label: 'writable guards are user-owner scoped',
 });
 
