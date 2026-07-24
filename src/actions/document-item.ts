@@ -4,14 +4,17 @@ import { findDocumentItemByIdDB, updateDocumentItemByIdDB } from '@/db/documentI
 import { requireOwnedDocumentItem, requireWritableDocumentItem } from '@/lib/guards';
 import { createLogger } from '@/lib/logger';
 import type { TranslationStage } from '@prisma/client';
-const logger = createLogger({
-    type: 'actions:document-item',
-}, {
-    json: false,// 开启json格式输出
-    pretty: false, // 关闭开发环境美化输出
-    colors: true, // 仅当json：false时启用颜色输出可用
-    includeCaller: false, // 日志不包含调用者
-});
+const logger = createLogger(
+    {
+        type: 'actions:document-item',
+    },
+    {
+        json: false, // 开启json格式输出
+        pretty: false, // 关闭开发环境美化输出
+        colors: true, // 仅当json：false时启用颜色输出可用
+        includeCaller: false, // 日志不包含调用者
+    }
+);
 export type ContentIDType = {
     id: string;
     name: string;
@@ -75,15 +78,11 @@ export const getContentByIdAction = async (id: string) => {
 
         // 确保返回的数据包含预期的字段
         if (!documentItem) return null;
-        const target = (() => {
-            const t = documentItem.targetText ? String(documentItem.targetText).trim() : '';
-            if (t) return t;
-            const embedded = (documentItem as any)?.preTranslateEmbedded;
-            return embedded ? String(embedded) : '';
-        })();
         return {
             sourceText: documentItem.sourceText,
-            targetText: target,
+            // An embedded translation is a proposal until the user applies it.
+            // Falling back to it here made the review panel claim it was applied.
+            targetText: documentItem.targetText ? String(documentItem.targetText) : '',
             status: (documentItem as any)?.status || 'NOT_STARTED',
         };
     } catch (error) {

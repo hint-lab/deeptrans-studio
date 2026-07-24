@@ -8,6 +8,8 @@ import {
     setTargetText,
     setSourceLanguage,
     setTargetLanguage,
+    clearTranslationContent,
+    setTranslationContent,
 } from '@/store/features/translationSlice';
 
 export const useTranslationState = () => {
@@ -22,6 +24,9 @@ export const useTranslationState = () => {
 
 export const useTranslationContent = () => {
     const dispatch = useAppDispatch();
+    const contentItemId = useAppSelector(
+        state => (state.translation as { contentItemId: string })?.contentItemId ?? ''
+    );
     const sourceText = useAppSelector(
         state => (state.translation as { sourceText: string })?.sourceText ?? ''
     );
@@ -30,7 +35,18 @@ export const useTranslationContent = () => {
     );
     const setSourceTranslationText = (sourceText: string) => dispatch(setSourceText(sourceText));
     const setTargetTranslationText = (targetText: string) => dispatch(setTargetText(targetText));
-    return { sourceText, targetText, setSourceTranslationText, setTargetTranslationText };
+    const clearContent = () => dispatch(clearTranslationContent());
+    const setContent = (content: { itemId: string; sourceText: string; targetText?: string }) =>
+        dispatch(setTranslationContent(content));
+    return {
+        contentItemId,
+        sourceText,
+        targetText,
+        clearTranslationContent: clearContent,
+        setTranslationContent: setContent,
+        setSourceTranslationText,
+        setTargetTranslationText,
+    };
 };
 
 export const useTranslationLanguage = () => {

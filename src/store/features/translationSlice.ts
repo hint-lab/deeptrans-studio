@@ -16,6 +16,7 @@ interface TranslationState {
     currentStage: TranslationStage;
     sourceLanguage: string;
     targetLanguage: string;
+    contentItemId: string;
     sourceText: string;
     targetText: string;
 }
@@ -24,6 +25,7 @@ const initialState: TranslationState = {
     currentStage: 'NOT_STARTED',
     sourceLanguage: 'auto',
     targetLanguage: 'auto',
+    contentItemId: '',
     sourceText: '',
     targetText: '',
 };
@@ -44,6 +46,19 @@ export const translationSlice = createSlice({
         setTargetLanguage: (state, action: PayloadAction<string>) => {
             state.targetLanguage = action.payload;
         },
+        clearTranslationContent: state => {
+            state.contentItemId = '';
+            state.sourceText = '';
+            state.targetText = '';
+        },
+        setTranslationContent: (
+            state,
+            action: PayloadAction<{ itemId: string; sourceText: string; targetText?: string }>
+        ) => {
+            state.contentItemId = action.payload.itemId;
+            state.sourceText = action.payload.sourceText;
+            state.targetText = action.payload.targetText || '';
+        },
         setSourceText: (state, action: PayloadAction<string>) => {
             state.sourceText = action.payload;
         },
@@ -57,6 +72,8 @@ export const {
     setTranslationStage,
     setSourceLanguage,
     setTargetLanguage,
+    clearTranslationContent,
+    setTranslationContent,
     setSourceText,
     setTargetText,
 } = translationSlice.actions;

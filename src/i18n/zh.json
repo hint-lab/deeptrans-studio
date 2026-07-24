@@ -1111,6 +1111,7 @@
         "parallelEditor": {
             "toasts": {
                 "preTranslationStarted": "预翻译流程已启动",
+                "contentLoading": "当前分段仍在加载，请稍后重试",
                 "qaStarted": "智能质检已启动",
                 "postEditStarted": "译后编辑流程已启动",
                 "autoProcessInfo": "系统将自动完成处理并跳转至复核阶段，请稍候...",

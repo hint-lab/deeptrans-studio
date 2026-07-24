@@ -23,6 +23,7 @@ export interface WorkflowState {
     preTranslateTerms?: any[];
     preTranslateDict?: any[];
     preTranslateEmbedded?: string;
+    preTranslateItemId?: string;
     preTermEnabled?: Record<string, boolean>;
     preDictEnabled?: Record<string, boolean>;
     // qa data
@@ -50,6 +51,7 @@ const initialState: WorkflowState = {
     preTranslateTerms: undefined,
     preTranslateDict: undefined,
     preTranslateEmbedded: undefined,
+    preTranslateItemId: undefined,
     preTermEnabled: undefined,
     preDictEnabled: undefined,
     qualityAssureBiTerm: undefined,
@@ -91,17 +93,28 @@ export const workFlowStepSlice = createSlice({
 
         setPreOutputs(
             state,
-            action: PayloadAction<{ terms?: any[]; dict?: any[]; translation?: string } | undefined>
+            action: PayloadAction<
+                { itemId?: string; terms?: any[]; dict?: any[]; translation?: string } | undefined
+            >
         ) {
             const partial = action.payload;
             if (!partial) {
                 state.preTranslateTerms = undefined;
                 state.preTranslateDict = undefined;
                 state.preTranslateEmbedded = undefined;
+                state.preTranslateItemId = undefined;
                 state.preTermEnabled = undefined;
                 state.preDictEnabled = undefined;
                 return;
             }
+            if (partial.itemId && partial.itemId !== state.preTranslateItemId) {
+                state.preTranslateTerms = undefined;
+                state.preTranslateDict = undefined;
+                state.preTranslateEmbedded = undefined;
+                state.preTermEnabled = undefined;
+                state.preDictEnabled = undefined;
+            }
+            if (partial.itemId) state.preTranslateItemId = partial.itemId;
             if (partial.terms !== undefined) state.preTranslateTerms = partial.terms;
             if (partial.dict !== undefined) state.preTranslateDict = partial.dict;
             if (partial.translation !== undefined) state.preTranslateEmbedded = partial.translation;
@@ -185,6 +198,7 @@ export const workFlowStepSlice = createSlice({
             state.preTranslateTerms = action.payload.preTranslateTerms;
             state.preTranslateDict = action.payload.preTranslateDict;
             state.preTranslateEmbedded = action.payload.preTranslateEmbedded;
+            state.preTranslateItemId = action.payload.preTranslateItemId;
             state.preTermEnabled = action.payload.preTermEnabled;
             state.preDictEnabled = action.payload.preDictEnabled;
             state.qualityAssureBiTerm = action.payload.qualityAssureBiTerm;

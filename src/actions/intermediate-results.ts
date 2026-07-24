@@ -1,16 +1,25 @@
 'use server';
 
-import { clearDocumentItemIntermediateResultsDB, fetchDocumentItemIntermediateResultsDB, findDocumentItemMetadataByIdDB, updateDocumentItemByIdDB } from '@/db/documentItem';
-import { requireOwnedDocumentItem, requireWritableDocumentItem } from '@/lib/guards';
+import {
+    clearDocumentItemIntermediateResultsDB,
+    fetchDocumentItemIntermediateResultsDB,
+    findDocumentItemMetadataByIdDB,
+    updateDocumentItemByIdDB,
+} from '@/db/documentItem';
+import { requireWritableDocumentItem } from '@/lib/guards';
 import { createLogger } from '@/lib/logger';
-const logger = createLogger({
-    type: 'actions:intermediate-results',
-}, {
-    json: false,// 开启json格式输出
-    pretty: false, // 关闭开发环境美化输出
-    colors: true, // 仅当json：false时启用颜色输出可用
-    includeCaller: false, // 日志不包含调用者
-});
+import { sourceRevision } from '@/lib/source-revision';
+const logger = createLogger(
+    {
+        type: 'actions:intermediate-results',
+    },
+    {
+        json: false, // 开启json格式输出
+        pretty: false, // 关闭开发环境美化输出
+        colors: true, // 仅当json：false时启用颜色输出可用
+        includeCaller: false, // 日志不包含调用者
+    }
+);
 // 保存预翻译中间结果
 export async function savePreTranslateResultsAction(
     id: string,
@@ -19,15 +28,27 @@ export async function savePreTranslateResultsAction(
         dict?: any;
         embedded?: any;
         targetText?: any;
-    }
+    },
+    expectedSourceText?: string
 ) {
     try {
-        await requireOwnedDocumentItem(id);
+        const item = await requireWritableDocumentItem(id);
+        if (
+            expectedSourceText !== undefined &&
+            String((item as any)?.sourceText || '') !== String(expectedSourceText)
+        ) {
+            throw new Error('当前分段原文已变化，已拒绝写入过期翻译结果');
+        }
+        const metadata = {
+            ...(((item as any)?.metadata as Record<string, unknown> | null) || {}),
+            preTranslateSourceRevision: sourceRevision((item as any)?.sourceText),
+        };
         return await updateDocumentItemByIdDB(id, {
             preTranslateTerms: results.terms as any,
             preTranslateDict: results.dict as any,
             preTranslateEmbedded: results.embedded as any,
             targetText: results.targetText as any,
+            metadata,
         } as any);
     } catch (error) {
         logger.error('保存预翻译结果失败:', error);
@@ -91,6 +112,14 @@ export async function getDocumentItemIntermediateResultsAction(id: string) {
         await requireWritableDocumentItem(id);
         const item = await fetchDocumentItemIntermediateResultsDB(id);
         if (!item) return null;
+        const metadata = ((item as any)?.metadata as Record<string, unknown> | null) || {};
+        const storedRevision = String(metadata.preTranslateSourceRevision || '');
+        const hasPreTranslateResult = Boolean(
+            (item as any)?.preTranslateEmbedded ||
+                (Array.isArray((item as any)?.preTranslateTerms) &&
+                    (item as any).preTranslateTerms.length) ||
+                (Array.isArray((item as any)?.preTranslateDict) && (item as any).preTranslateDict.length)
+        );
 
         return {
             sourceText: item.sourceText,
@@ -98,6 +127,9 @@ export async function getDocumentItemIntermediateResultsAction(id: string) {
             preTranslateTerms: item.preTranslateTerms,
             preTranslateDict: item.preTranslateDict,
             preTranslateEmbedded: item.preTranslateEmbedded,
+            preTranslateSourceMatches:
+                !hasPreTranslateResult ||
+                (!!storedRevision && storedRevision === sourceRevision(item.sourceText)),
             qualityAssureBiTerm: item.qualityAssureBiTerm,
             qualityAssureSyntax: item.qualityAssureSyntax,
             postEditQuery: (item as any).postEditQuery,
@@ -111,7 +143,7 @@ export async function getDocumentItemIntermediateResultsAction(id: string) {
             createdAt: item.createdAt,
             updatedAt: item.updatedAt,
             document: item.document,
-            metadata: item.metadata,
+            metadata,
         };
     } catch (error) {
         logger.error('获取中间结果失败:', error);

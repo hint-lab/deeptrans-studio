@@ -3,7 +3,6 @@ import {
     embedAndTranslateAction,
     extractMonolingualTermsAction,
     lookupDictionaryAction,
-    runPreTranslateAction,
 } from '@/actions/pre-translate';
 import { useTargetEditor } from '@/hooks/useEditor';
 import { useTranslationContent, useTranslationState } from '@/hooks/useTranslation';
@@ -13,9 +12,7 @@ import { QualityMenu } from './components/quality-menu';
 import { RunMenu } from './components/run-menu';
 import { TranslateMenu } from './components/translate-menu';
 // 改为通过 API 路由调用，避免前端解析服务端依赖
-import {
-    runQualityAssureAction
-} from '@/actions/quality-assure';
+import { runQualityAssureAction } from '@/actions/quality-assure';
 // 改为通过 API 路由调用，避免前端解析服务端依赖
 import {
     savePreTranslateResultsAction,
@@ -24,9 +21,7 @@ import {
 import { useChatbarContent, useChatbarStream, useRightPanel } from '@/hooks/useRightPanel';
 import { useTranslationLanguage } from '@/hooks/useTranslation';
 
-import {
-    updateDocItemStatusAction
-} from '@/actions/document-item';
+import { updateDocItemStatusAction } from '@/actions/document-item';
 import { recordGoToNextTranslationProcessEventAction } from '@/actions/translation-process-event';
 import { useAgentWorkflowSteps } from '@/hooks/useAgentWorkflowSteps';
 import { useExplorerTabs } from '@/hooks/useExplorerTabs';
@@ -45,14 +40,17 @@ import { useState as useReactState } from 'react';
 import { KeyboardShortcutsDialog, type ShortcutItem } from '../keyboard-shortcuts-dialog';
 import { PreferencesDialog } from '../preferences-dialog';
 import BatchProgressDialog from './components/batch-progress-dialog';
-const logger = createLogger({
-    type: 'action:action-section',
-}, {
-    json: false,// 开启json格式输出
-    pretty: false, // 关闭开发环境美化输出
-    colors: true, // 仅当json：false时启用颜色输出可用
-    includeCaller: false, // 日志不包含调用者
-});
+const logger = createLogger(
+    {
+        type: 'action:action-section',
+    },
+    {
+        json: false, // 开启json格式输出
+        pretty: false, // 关闭开发环境美化输出
+        colors: true, // 仅当json：false时启用颜色输出可用
+        includeCaller: false, // 日志不包含调用者
+    }
+);
 
 export function ActionSection() {
     // 在组件顶层获取所有需要的状态
@@ -73,8 +71,12 @@ export function ActionSection() {
     const { handleStreamResponse } = useChatbarStream();
     const { sourceLanguage, targetLanguage } = useTranslationLanguage();
 
-    const { sourceText, targetText, setSourceTranslationText, setTargetTranslationText } =
-        useTranslationContent();
+    const {
+        contentItemId,
+        sourceText,
+        targetText,
+        setTargetTranslationText,
+    } = useTranslationContent();
     const targetEditor = useTargetEditor();
     const { explorerTabs, setExplorerTabs } = useExplorerTabs();
     const [batchProgress, setBatchProgress] = useState<number | undefined>(undefined);
@@ -97,6 +99,10 @@ export function ActionSection() {
         | 'complete_batch'
     >('idle');
     const { activeDocumentItem, setActiveDocumentItem } = useActiveDocumentItem();
+    const activeItemIdRef = useRef(String(activeDocumentItem?.id || ''));
+    const sourceTextRef = useRef(String(sourceText || ''));
+    activeItemIdRef.current = String(activeDocumentItem?.id || '');
+    sourceTextRef.current = String(sourceText || '');
     const { settings } = useUserSettings();
     const chosenProvider = settings.provider || 'openai';
 
@@ -151,7 +157,7 @@ export function ActionSection() {
                 }));
                 return changed ? { ...prev, documentTabs: nextTabs } : prev;
             });
-        } catch { }
+        } catch {}
     };
     const setPreRunning = useAgentWorkflowSteps((s: any) => s.setPreRunning);
     const setPreStep = useAgentWorkflowSteps((s: any) => s.setPreStep);
@@ -163,9 +169,13 @@ export function ActionSection() {
     const handlePreTranslationAction = async (provider: string = 'openai') => {
         try {
             // 检查前置条件
-            const id = (activeDocumentItem as any)?.id;
+            const id = String((activeDocumentItem as any)?.id || '');
             if (!id) {
                 toast.error('没有激活的文档项，无法进行预翻译');
+                return;
+            }
+            if (contentItemId !== id) {
+                toast.info('当前分段仍在加载，请加载完成后再启动预翻译');
                 return;
             }
             let currentItemStatus = activeDocumentItem?.status;
@@ -192,28 +202,32 @@ export function ActionSection() {
                 toast.error('原文内容为空，无法进行预翻译');
                 return;
             }
+            const isCurrentItem = () =>
+                activeItemIdRef.current === id && sourceTextRef.current === currentText;
             logAgent('翻译开始');
 
             setIsRunning(true);
             setCurrentOperation('translate_single');
 
             setCurrentStage('MT');
+            let terms: any[] = [];
+            let dict: any[] = [];
+            let embedded = '';
             // 预翻译三步：单语术语提取 → 词典查询 → 术语嵌入
             try {
                 setPreRunning(true);
                 setPreStep('mono-term-extract');
                 logAgent('预翻译 · 术语抽取');
-                const terms = await extractMonolingualTermsAction(currentText, {
+                terms = await extractMonolingualTermsAction(currentText, {
                     prompt: undefined,
                     locale: locale,
                 });
-                setPreOutputs({ terms });
+                if (isCurrentItem()) setPreOutputs({ itemId: id, terms });
 
                 setPreStep('dict-lookup');
                 logAgent('预翻译 · 词典查询');
                 // 使用抽取到的术语进行数据库词典多轮查询
                 // 优先用术语查询；若术语为空，回退用全文前缀切分成若干 token 进行兜底查询
-                let dict: any[] = [];
                 const termList = (terms || []).map((x: any) => x.term).filter(Boolean);
                 if (termList.length) {
                     // 将字符串数组转换为 TermCandidate 数组
@@ -230,66 +244,68 @@ export function ActionSection() {
                         tokens.map((x: any) => ({ term: x, score: 1.0 }))
                     );
                 }
-                setPreOutputs({ dict });
+                if (isCurrentItem()) setPreOutputs({ itemId: id, dict });
 
                 setPreStep('term-embed-trans');
                 logAgent('预翻译 · 术语嵌入');
-                const embedded = await embedAndTranslateAction(
+                embedded = await embedAndTranslateAction(
                     currentText,
                     sourceLanguage || 'auto',
                     targetLanguage || 'auto',
                     dict,
                     { locale: locale }
                 );
-                setPreOutputs({ translation: embedded });
+                if (isCurrentItem()) setPreOutputs({ itemId: id, translation: embedded });
             } finally {
                 setPreRunning(false);
                 setPreStep('idle');
             }
 
-            // 主翻译
-            logAgent(`开始翻译，源文本长度: ${currentText.length}字符`);
-            const preResult = await runPreTranslateAction(
-                currentText,
-                sourceLanguage || 'auto',
-                targetLanguage || 'auto',
-                { prompt: undefined }
-            );
-            const translatedText = preResult?.translation || '';
-            setPreOutputs({
-                terms: preResult.terms,
-                dict: preResult.dict,
-                translation: preResult.translation,
-            });
-            setTargetTranslationText(translatedText);
+            // 上面的三步已产出最终嵌入译文，不再重复执行整条模型链。
+            const translatedText = embedded || '';
 
-            // 保存预翻译结果到数据库
+            // 先持久化再更新界面，避免写入失败时误显示为“已应用”。
             try {
-                await savePreTranslateResultsAction((activeDocumentItem as any)?.id, {
-                    terms: preResult.terms,
-                    dict: preResult.dict,
-                    embedded: preResult.translation,
-                });
+                await savePreTranslateResultsAction(
+                    id,
+                    {
+                        terms,
+                        dict,
+                        embedded,
+                        targetText: translatedText,
+                    },
+                    currentText
+                );
                 logInfo('预翻译结果已保存到数据库');
             } catch (error) {
                 logError(`保存预翻译结果失败: ${error}`);
+                throw error;
+            }
+            if (isCurrentItem()) {
+                setPreOutputs({
+                    itemId: id,
+                    terms,
+                    dict,
+                    translation: embedded,
+                });
+                setTargetTranslationText(translatedText);
             }
 
             // 无论编辑器是否存在都写入状态并同步本地视图
             try {
-                await updateDocItemStatusAction((activeDocumentItem as any)?.id, 'MT');
-            } catch { }
-            syncLocalStatusById((activeDocumentItem as any)?.id, 'MT');
+                await updateDocItemStatusAction(id, 'MT');
+            } catch {}
+            syncLocalStatusById(id, 'MT');
 
             // 更新目标编辑器与提示
-            if (targetEditor?.editor) {
+            if (isCurrentItem() && targetEditor?.editor) {
                 targetEditor.editor.commands.setContent(translatedText);
                 toast.success('翻译完成：翻译已完成并更新到目标编辑器');
                 logAgent('翻译完成');
             }
-            setCurrentStage('MT_REVIEW');
-            await updateDocItemStatusAction((activeDocumentItem as any)?.id, 'MT_REVIEW');
-            syncLocalStatusById((activeDocumentItem as any)?.id, 'MT_REVIEW');
+            if (isCurrentItem()) setCurrentStage('MT_REVIEW');
+            await updateDocItemStatusAction(id, 'MT_REVIEW');
+            syncLocalStatusById(id, 'MT_REVIEW');
         } catch (error) {
             logger.error('翻译失败:', error);
             toast.error('翻译失败：请检查网络连接或稍后再试');
@@ -386,7 +402,7 @@ export function ActionSection() {
                                     logger.error(`更新分段 ${item.id} 状态失败:`, e);
                                 }
                             }
-                        } catch { }
+                        } catch {}
 
                         setIsRunning(false);
                         setCurrentStage('MT' as any);
@@ -407,10 +423,10 @@ export function ActionSection() {
                                 `/api/explorer-tabs?projectId=${encodeURIComponent((explorerTabs as any)?.projectId || '')}`
                             ).then(r => r.json());
                             setExplorerTabs(tabs);
-                        } catch { }
+                        } catch {}
                         setBatchJobId(undefined);
                     }
-                } catch { }
+                } catch {}
                 if (tries > 600) {
                     clearInterval(timer);
                     setBatchOpen(false);
@@ -672,7 +688,7 @@ export function ActionSection() {
                                     logger.error(`更新分段 ${item.id} 状态失败:`, e);
                                 }
                             }
-                        } catch { }
+                        } catch {}
 
                         setIsRunning(false);
                         setCurrentStage('QA_REVIEW' as any);
@@ -693,10 +709,10 @@ export function ActionSection() {
                                 `/api/explorer-tabs?projectId=${encodeURIComponent((explorerTabs as any)?.projectId || '')}`
                             ).then(r => r.json());
                             setExplorerTabs(tabs);
-                        } catch { }
+                        } catch {}
                         setBatchJobId(undefined);
                     }
-                } catch { }
+                } catch {}
                 if (tries > 600) {
                     // 最长 10 分钟
                     clearInterval(timer);
@@ -769,7 +785,7 @@ export function ActionSection() {
                         setCurrentStage('SIGN_OFF' as any);
                     }
                 }
-            } catch { }
+            } catch {}
 
             // 本地同步（只更新处理过的分段）
             setExplorerTabs((prev: any) => {
@@ -866,7 +882,7 @@ export function ActionSection() {
                                     )
                                 );
                                 if (p.percent >= 100) break;
-                            } catch { }
+                            } catch {}
                             await new Promise(res => setTimeout(res, 1000));
                         }
                         try {
@@ -875,7 +891,7 @@ export function ActionSection() {
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ batchId }),
                             });
-                        } catch { }
+                        } catch {}
                     }
                 } catch (error) {
                     logger.error('批量预译失败:', error);
@@ -921,11 +937,11 @@ export function ActionSection() {
                                     Math.round(
                                         ((preTranslateProgress + currentQaProgress) /
                                             totalToProcess) *
-                                        100
+                                            100
                                     )
                                 );
                                 if (p.percent >= 100) break;
-                            } catch { }
+                            } catch {}
                             await new Promise(res => setTimeout(res, 1000));
                         }
                         try {
@@ -934,7 +950,7 @@ export function ActionSection() {
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ batchId }),
                             });
-                        } catch { }
+                        } catch {}
                     }
                 } catch (error) {
                     logger.error('批量评估失败:', error);
@@ -1077,7 +1093,7 @@ export function ActionSection() {
                         );
                     }
                 }
-            } catch { }
+            } catch {}
 
             // 本地同步（仅当前页签）
             setExplorerTabs((prev: any) => {
@@ -1116,7 +1132,6 @@ export function ActionSection() {
         }
     };
 
-
     const handleBatchPostEdit = async () => {
         try {
             const tabs = explorerTabs?.documentTabs ?? [];
@@ -1127,7 +1142,9 @@ export function ActionSection() {
 
             const total = needPostEditItems.length;
             if (!total) {
-                toast.error('没有需要进入译后编辑的分段：所有分段都已进入译后编辑或未处于质检复核阶段');
+                toast.error(
+                    '没有需要进入译后编辑的分段：所有分段都已进入译后编辑或未处于质检复核阶段'
+                );
                 return;
             }
 
@@ -1160,14 +1177,14 @@ export function ActionSection() {
                 if (currentId && needPostEditItems.some((it: any) => it.id === currentId)) {
                     setCurrentStage('POST_EDIT' as any);
                 }
-            } catch { }
+            } catch {}
 
             try {
                 const tabsRes = await fetch(
                     `/api/explorer-tabs?projectId=${encodeURIComponent((explorerTabs as any)?.projectId || '')}`
                 ).then(r => r.json());
                 setExplorerTabs(tabsRes);
-            } catch { }
+            } catch {}
 
             setBatchOpen(false);
             toast.success(`批量译后编辑完成：共处理 ${total} 个分段`);
@@ -1178,7 +1195,6 @@ export function ActionSection() {
             setCurrentOperation('idle');
         }
     };
-
 
     // 全局快捷键：⌘B 批量预译；⌘E 批量评估；⌘⇧S 批量签发
     useEffect(() => {
@@ -1239,7 +1255,7 @@ export function ActionSection() {
                         .then(() => {
                             if (m.prev) setCurrentStage(m.prev as any);
                         })
-                        .catch(() => { });
+                        .catch(() => {});
                 }
                 return;
             }
@@ -1260,7 +1276,7 @@ export function ActionSection() {
                         .then(() => {
                             if (m.next) setCurrentStage(m.next as any);
                         })
-                        .catch(() => { });
+                        .catch(() => {});
                 }
                 return;
             }
@@ -1314,9 +1330,11 @@ export function ActionSection() {
                     progressPercent={batchProgress}
                 />
                 <PostEditMenu
-                    isTranslating={isRunning &&
+                    isTranslating={
+                        isRunning &&
                         (currentOperation === 'post_edit_single' ||
-                            currentOperation === 'post_edit_batch')}
+                            currentOperation === 'post_edit_batch')
+                    }
                     // 修复：只允许 QA_REVIEW 状态的分段进入译后编辑
                     canEnter={(explorerTabs?.documentTabs ?? [])
                         .flatMap(t => t.items ?? [])
@@ -1413,7 +1431,7 @@ export function ActionSection() {
                                 await cancelJobAction(id);
                             }
                         }
-                    } catch { }
+                    } catch {}
                 }}
                 title={progressTitle || '批量处理中'}
             />

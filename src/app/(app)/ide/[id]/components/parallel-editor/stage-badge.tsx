@@ -29,6 +29,7 @@ const logger = createLogger({
 });
 
 export type StageBadgeBarProps = {
+    contentReady: boolean;
     runTranslate: () => Promise<void>;
     undoTranslate: () => Promise<void>;
     runQA: () => Promise<void>;
@@ -43,6 +44,7 @@ export type StageBadgeBarProps = {
 
 const StageBadgeBar: React.FC<StageBadgeBarProps> = ({
     className,
+    contentReady,
     runTranslate,
     undoTranslate,
     runQA,
@@ -84,7 +86,7 @@ const StageBadgeBar: React.FC<StageBadgeBarProps> = ({
     };
 
     const shouldDisableButtons = (): boolean => {
-        return isRunning || !activeDocumentItem.id;
+        return isRunning || !activeDocumentItem.id || !contentReady;
     };
 
     const syncStatusUpdate = async (itemId: string, status: string) => {
@@ -154,18 +156,23 @@ const StageBadgeBar: React.FC<StageBadgeBarProps> = ({
     }
 
     const onAccept = async (stage: TranslationStage) => {
+        if (!contentReady) {
+            toast.info(t('toasts.contentLoading'));
+            return;
+        }
+        const operationItemId = activeDocumentItem.id;
         setIsRunning(true);
         try {
             switch (stage) {
                 case 'NOT_STARTED':
                     setCurrentStage('MT');
-                    await syncStatusUpdate(activeDocumentItem.id, 'MT');
+                    await syncStatusUpdate(operationItemId, 'MT');
                     toast.info(t('toasts.preTranslationStarted'), { description: t('toasts.autoProcessInfo'), duration: 4000 });
                     await runTranslate();
                     // 3. 【新增】任务完成后，自动推进到 MT_REVIEW
                     // 只有当 runTranslate 没有抛出错误时才会执行到这里
                     setCurrentStage('MT_REVIEW');
-                    await syncStatusUpdate(activeDocumentItem.id, 'MT_REVIEW');
+                    await syncStatusUpdate(operationItemId, 'MT_REVIEW');
                     await saveRecord('MT_REVIEW', 'HUMAN', 'SUCCESS'); // 记录 MT 阶段完成（或进入 Review）
                     break;
 
@@ -213,6 +220,12 @@ const StageBadgeBar: React.FC<StageBadgeBarProps> = ({
             setIsRunning(false);
         } catch (error) {
             logger.error('Operation failed:', error);
+            if (stage === 'NOT_STARTED') {
+                try {
+                    await syncStatusUpdate(operationItemId, 'NOT_STARTED');
+                } catch {}
+                setCurrentStage('NOT_STARTED');
+            }
             toast.error(t('toasts.operationFailed'), { description: String(error) });
             setIsRunning(false);
         }

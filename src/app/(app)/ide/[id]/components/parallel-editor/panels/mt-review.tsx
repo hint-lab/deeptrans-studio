@@ -6,10 +6,8 @@ import {
     findProjectDictionaryAction,
     updateDictionaryEntryAction,
 } from '@/actions/dictionary';
-import {
-    baselineTranslateAction,
-    embedAndTranslateAction
-} from '@/actions/pre-translate';
+import { baselineTranslateAction, embedAndTranslateAction } from '@/actions/pre-translate';
+import { savePreTranslateResultsAction } from '@/actions/intermediate-results';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
@@ -22,44 +20,71 @@ import { cn } from '@/lib/utils';
 import { Check, Loader2, X } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { AddTermBadge, TermBadge } from '../components/TermBadge';
 
 export default function PreTranslatePanel() {
     const t = useTranslations('IDE.mtReview');
     const tCommon = useTranslations('Common');
-    const terms = useAgentWorkflowSteps(s => s.preTranslateTerms);
-    const dict = useAgentWorkflowSteps(s => s.preTranslateDict);
-    const embedded = useAgentWorkflowSteps(s => s.preTranslateEmbedded);
+    const storedTerms = useAgentWorkflowSteps(s => s.preTranslateTerms);
+    const storedDict = useAgentWorkflowSteps(s => s.preTranslateDict);
+    const storedEmbedded = useAgentWorkflowSteps(s => s.preTranslateEmbedded);
+    const outputItemId = useAgentWorkflowSteps(s => s.preTranslateItemId);
     const setPreOutputs = useAgentWorkflowSteps(s => s.setPreOutputs);
-    const enabledMap = useAgentWorkflowSteps(s => s.preTermEnabled) || {};
-    const dictEnabledMap = useAgentWorkflowSteps(s => s.preDictEnabled) || {};
+    const storedEnabledMap = useAgentWorkflowSteps(s => s.preTermEnabled) || {};
+    const storedDictEnabledMap = useAgentWorkflowSteps(s => s.preDictEnabled) || {};
     const setTermEnabled = useAgentWorkflowSteps(s => s.setPreTermEnabled);
     const setRowEnabled = useAgentWorkflowSteps(s => s.setPreDictEnabled);
 
     const { activeDocumentItem } = useActiveDocumentItem();
+    const activeItemId = String(activeDocumentItem?.id || '');
+    const isCurrentOutput = !!activeItemId && outputItemId === activeItemId;
+    const terms = isCurrentOutput ? storedTerms : undefined;
+    const dict = isCurrentOutput ? storedDict : undefined;
+    const embedded = isCurrentOutput ? storedEmbedded : undefined;
+    const enabledMap = isCurrentOutput ? storedEnabledMap : {};
+    const dictEnabledMap = isCurrentOutput ? storedDictEnabledMap : {};
     const params = useParams<{ id: string }>();
     const projectId = String(params?.id || '');
     // 不再优先读 DB，仅在初始为空时可按需恢复（本次先移除 DB 读取）
     const [addingTerm, setAddingTerm] = useState(false);
     const [newTerm, setNewTerm] = useState('');
 
-    const { sourceText, targetText, setTargetTranslationText } = useTranslationContent();
+    const { contentItemId, sourceText, targetText, setTargetTranslationText } =
+        useTranslationContent();
     const { sourceLanguage, targetLanguage } = useTranslationLanguage();
     const [baseline, setBaseline] = useState<string | null>(null);
     const [loadingBaseline, setLoadingBaseline] = useState(false);
     const [showDiff, setShowDiff] = useState(false);
     const [loadingEmbedded, setLoadingEmbedded] = useState(false);
     const [appliedKind, setAppliedKind] = useState<'baseline' | 'embedded' | null>(null);
+    const baselineRequestRef = useRef(0);
+    const embeddedRequestRef = useRef(0);
+    const activeItemIdRef = useRef(activeItemId);
+    const sourceTextRef = useRef(sourceText);
+    activeItemIdRef.current = activeItemId;
+    sourceTextRef.current = sourceText;
 
     // 词典编辑状态
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editValue, setEditValue] = useState<string>('');
 
     const applyToTarget = async (text: string) => {
+        const itemId = activeItemId;
+        const inputText = String(sourceText || '');
         try {
+            if (!itemId || contentItemId !== itemId || !inputText) {
+                toast.error(t('applyFailed'));
+                return;
+            }
             const content = String(text || '');
+            await savePreTranslateResultsAction(itemId, { targetText: content }, inputText);
+            if (
+                activeItemIdRef.current !== itemId ||
+                sourceTextRef.current !== inputText
+            )
+                return;
             setTargetTranslationText(content);
             toast.success(t('applied'));
         } catch {
@@ -68,30 +93,42 @@ export default function PreTranslatePanel() {
     };
 
     const genBaseline = async () => {
+        const requestId = ++baselineRequestRef.current;
+        const itemId = activeItemId;
+        const inputText = String(sourceText || '');
         try {
-            if (!sourceText) {
+            if (!itemId || contentItemId !== itemId || !inputText) {
                 toast.error(t('noSourceForBaseline'));
                 return;
             }
             setLoadingBaseline(true);
             const baselineResult = await baselineTranslateAction(
-                sourceText,
+                inputText,
                 sourceLanguage || 'auto',
                 targetLanguage || 'auto',
                 { prompt: undefined }
             );
+            if (
+                requestId !== baselineRequestRef.current ||
+                activeItemIdRef.current !== itemId ||
+                sourceTextRef.current !== inputText
+            )
+                return;
             const baselineText = baselineResult || '';
             setBaseline(baselineText);
         } catch (e: any) {
             toast.error(String(e?.message || t('baselineGenerationFailed')));
         } finally {
-            setLoadingBaseline(false);
+            if (requestId === baselineRequestRef.current) setLoadingBaseline(false);
         }
     };
 
     const genEmbedded = async () => {
+        const requestId = ++embeddedRequestRef.current;
+        const itemId = activeItemId;
+        const inputText = String(sourceText || '');
         try {
-            if (!sourceText) {
+            if (!itemId || contentItemId !== itemId || !inputText) {
                 toast.error(t('noSourceForEmbedding'));
                 return;
             }
@@ -113,27 +150,50 @@ export default function PreTranslatePanel() {
                 }))
                 .filter(x => x.term);
             const embeddedText = await embedAndTranslateAction(
-                sourceText,
+                inputText,
                 sourceLanguage || 'auto',
                 targetLanguage || 'auto',
                 filtered
             );
-            setPreOutputs({ terms, dict, translation: embeddedText });
+            if (
+                requestId !== embeddedRequestRef.current ||
+                activeItemIdRef.current !== itemId ||
+                sourceTextRef.current !== inputText
+            )
+                return;
+            setPreOutputs({ itemId, terms, dict, translation: embeddedText });
             if (baseline) setShowDiff(true);
         } catch (e: any) {
             toast.error(String(e?.message || t('embeddingGenerationFailed')));
         } finally {
-            setLoadingEmbedded(false);
+            if (requestId === embeddedRequestRef.current) setLoadingEmbedded(false);
         }
     };
 
-    // 当原文变化且尚无基线时，自动生成一次基线
+    // Segment changes invalidate both local and shared comparison results.
     useEffect(() => {
-        if (sourceText && !loadingBaseline && (baseline === null || baseline === '')) {
+        baselineRequestRef.current += 1;
+        embeddedRequestRef.current += 1;
+        setBaseline(null);
+        setShowDiff(false);
+        setAppliedKind(null);
+        setLoadingBaseline(false);
+        setLoadingEmbedded(false);
+    }, [activeItemId]);
+
+    // Generate a baseline for the current item only. A late response for a
+    // previous item/source is discarded by the request checks above.
+    useEffect(() => {
+        if (
+            contentItemId === activeItemId &&
+            sourceText &&
+            !loadingBaseline &&
+            (baseline === null || baseline === '')
+        ) {
             genBaseline();
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [sourceText]);
+    }, [activeItemId, contentItemId, sourceText]);
 
     // 根据当前译文识别已应用的是基线还是嵌入
     useEffect(() => {
@@ -160,13 +220,16 @@ export default function PreTranslatePanel() {
                 onLayout={(sizes: number[]) => {
                     try {
                         document.cookie = `react-resizable-panels:mt-review-layout=${JSON.stringify(sizes)}`;
-                    } catch { }
+                    } catch {}
                 }}
             >
                 <ResizablePanel
                     defaultSize={20}
                     minSize={10}
-                    className={cn('flex flex-col h-full rounded bg-white p-2 dark:bg-slate-900', panelCls)}
+                    className={cn(
+                        'flex h-full flex-col rounded bg-white p-2 dark:bg-slate-900',
+                        panelCls
+                    )}
                 >
                     <div className="flex items-center justify-between">
                         <div className="mb-1 text-[11px] font-semibold text-foreground">
@@ -205,7 +268,7 @@ export default function PreTranslatePanel() {
                                     try {
                                         await navigator.clipboard.writeText(text);
                                         toast.success(t('copied', { text }));
-                                    } catch { }
+                                    } catch {}
                                 };
 
                                 const dictArr = Array.isArray(dict) ? (dict as any[]) : [];
@@ -248,6 +311,7 @@ export default function PreTranslatePanel() {
                                                                 source: t('temporaryEntry'),
                                                             };
                                                             setPreOutputs({
+                                                                itemId: activeItemId,
                                                                 terms,
                                                                 dict: [...dictArr, tempRow] as any,
                                                                 translation: embedded,
@@ -269,6 +333,7 @@ export default function PreTranslatePanel() {
                                                             );
                                                             if (filtered.length !== dictArr.length)
                                                                 setPreOutputs({
+                                                                    itemId: activeItemId,
                                                                     terms,
                                                                     dict: filtered as any,
                                                                     translation: embedded,
@@ -303,6 +368,7 @@ export default function PreTranslatePanel() {
                                                         return;
                                                     }
                                                     setPreOutputs({
+                                                        itemId: activeItemId,
                                                         terms: [
                                                             ...(terms || []),
                                                             { term: v, score: 1 },
@@ -389,12 +455,12 @@ export default function PreTranslatePanel() {
                                                 };
                                                 const vis =
                                                     visMap[
-                                                    String(meta.visibility || '').toUpperCase()
+                                                        String(meta.visibility || '').toUpperCase()
                                                     ] || t('project');
                                                 const name = String(meta.name || '');
                                                 sourceLabel = `${vis} · ${name} · ${t('termList')}`;
                                             }
-                                        } catch { }
+                                        } catch {}
                                         // 本地替换临时项为持久项（避免直接修改只读对象）
                                         const dictArr = Array.isArray(dict) ? (dict as any[]) : [];
                                         const updated = dictArr.map(r => {
@@ -410,11 +476,14 @@ export default function PreTranslatePanel() {
                                             }
                                             return r;
                                         });
-                                        setPreOutputs({
-                                            terms,
-                                            dict: updated as any,
-                                            translation: embedded,
-                                        });
+                                        if (activeItemIdRef.current === activeItemId) {
+                                            setPreOutputs({
+                                                itemId: activeItemId,
+                                                terms,
+                                                dict: updated as any,
+                                                translation: embedded,
+                                            });
+                                        }
                                         toast.success(t('savedToProjectDict'));
                                         cancelEdit();
                                     } else {
@@ -434,11 +503,14 @@ export default function PreTranslatePanel() {
                                             }
                                             return r;
                                         });
-                                        setPreOutputs({
-                                            terms,
-                                            dict: updated as any,
-                                            translation: embedded,
-                                        });
+                                        if (activeItemIdRef.current === activeItemId) {
+                                            setPreOutputs({
+                                                itemId: activeItemId,
+                                                terms,
+                                                dict: updated as any,
+                                                translation: embedded,
+                                            });
+                                        }
                                         cancelEdit();
                                     }
                                 } catch (e: any) {
@@ -649,7 +721,10 @@ export default function PreTranslatePanel() {
                 <ResizablePanel
                     defaultSize={40}
                     minSize={20}
-                    className={cn('flex flex-col h-full flex-1 rounded bg-white p-2 dark:bg-slate-900', panelCls)}
+                    className={cn(
+                        'flex h-full flex-1 flex-col rounded bg-white p-2 dark:bg-slate-900',
+                        panelCls
+                    )}
                 >
                     <div className="flex items-center justify-between">
                         <div className="mb-1 text-[11px] font-semibold text-foreground">
@@ -710,8 +785,7 @@ export default function PreTranslatePanel() {
                                             tabIndex={0}
                                             onClick={() => {
                                                 if (baseline) {
-                                                    applyToTarget(String(baseline));
-                                                    setAppliedKind('baseline');
+                                                    void applyToTarget(String(baseline));
                                                 }
                                             }}
                                             onKeyDown={e => {
@@ -720,8 +794,7 @@ export default function PreTranslatePanel() {
                                                     baseline
                                                 ) {
                                                     e.preventDefault();
-                                                    applyToTarget(String(baseline));
-                                                    setAppliedKind('baseline');
+                                                    void applyToTarget(String(baseline));
                                                 }
                                             }}
                                         >
@@ -786,8 +859,7 @@ export default function PreTranslatePanel() {
                                             tabIndex={0}
                                             onClick={() => {
                                                 if (embedded) {
-                                                    applyToTarget(String(embedded));
-                                                    setAppliedKind('embedded');
+                                                    void applyToTarget(String(embedded));
                                                 }
                                             }}
                                             onKeyDown={e => {
@@ -796,8 +868,7 @@ export default function PreTranslatePanel() {
                                                     embedded
                                                 ) {
                                                     e.preventDefault();
-                                                    applyToTarget(String(embedded));
-                                                    setAppliedKind('embedded');
+                                                    void applyToTarget(String(embedded));
                                                 }
                                             }}
                                         >

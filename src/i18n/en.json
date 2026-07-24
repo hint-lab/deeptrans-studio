@@ -1109,6 +1109,7 @@
         "parallelEditor": {
             "toasts": {
                 "preTranslationStarted": "Pre-translation process started",
+                "contentLoading": "The current segment is still loading. Please try again shortly.",
                 "qaStarted": "Intelligent QA started",
                 "postEditStarted": "Post-editing process started",
                 "autoProcessInfo": "System is processing automatically and will jump to review stage, please wait...",
