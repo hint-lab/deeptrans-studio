@@ -3,7 +3,12 @@
 import { findDocumentItemByIdDB, updateDocumentItemByIdDB } from '@/db/documentItem';
 import { requireOwnedDocumentItem, requireWritableDocumentItem } from '@/lib/guards';
 import { createLogger } from '@/lib/logger';
+import { prisma } from '@/lib/db';
 import { sourceRevision, withSourceRevisions } from '@/lib/source-revision';
+import {
+    isSyntaxEvaluationTargetCompatible,
+    normalizeSyntaxQualityResult,
+} from '@/lib/syntax-quality';
 import type { TranslationStage } from '@prisma/client';
 const logger = createLogger(
     {
@@ -65,11 +70,31 @@ export async function updateTranslationAction(itemId: string, targetText: string
 // 更新文档项状态（Server Action）
 export async function updateDocItemStatusAction(itemId: string, status: TranslationStage | string) {
     try {
-        await requireWritableDocumentItem(itemId);
+        const item = await requireWritableDocumentItem(itemId);
         const s = status as TranslationStage;
-        const updated = await updateDocumentItemByIdDB(itemId, { status: s });
-
-        return updated;
+        if (s === 'POST_EDIT') {
+            const syntax = normalizeSyntaxQualityResult((item as any).qualityAssureSyntax);
+            const evaluation = syntax.evaluation;
+            if (syntax.status !== 'complete' || syntax.legacy || !evaluation) {
+                throw new Error('质检结果不完整，请重新质检后再进入译后编辑');
+            }
+            if (evaluation.sourceRevision !== sourceRevision((item as any).sourceText)) {
+                throw new Error('当前原文已变化，请重新质检后再进入译后编辑');
+            }
+            const currentTarget = String((item as any).targetText || '');
+            const proposal = String((item as any).qualityAssureSyntaxEmbedded || '');
+            if (!isSyntaxEvaluationTargetCompatible(evaluation, currentTarget, proposal)) {
+                throw new Error('当前译文已变化，请重新质检后再进入译后编辑');
+            }
+        }
+        const updated = await prisma.documentItem.updateMany({
+            where: { id: itemId, updatedAt: (item as any).updatedAt },
+            data: { status: s },
+        });
+        if (Number(updated?.count || 0) !== 1) {
+            throw new Error('当前分段已被其他操作更新，请重试');
+        }
+        return { ...(item as any), status: s };
     } catch (error) {
         logger.error('更新文档项状态失败:', error);
         throw new Error((error as any)?.message || '更新文档项状态失败');
@@ -84,8 +109,7 @@ export const getContentByIdAction = async (id: string) => {
 
         // 确保返回的数据包含预期的字段
         if (!documentItem) return null;
-        const metadata =
-            ((documentItem as any)?.metadata as Record<string, unknown> | null) || {};
+        const metadata = ((documentItem as any)?.metadata as Record<string, unknown> | null) || {};
         const storedTargetRevision = String(metadata.targetSourceRevision || '');
         const targetSourceMatches =
             !storedTargetRevision ||

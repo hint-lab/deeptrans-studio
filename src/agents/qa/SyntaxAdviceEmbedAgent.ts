@@ -1,11 +1,14 @@
 import { BaseAgent, type AgentRunContext } from '../base';
 import { createAgentI18n } from '../i18n';
+import type { SyntaxIssue } from '@/lib/syntax-quality';
+
+type EmbeddableSyntaxIssue = Partial<SyntaxIssue> & { type?: string; span?: string };
 
 export class SyntaxAdviceEmbedAgent extends BaseAgent<
     {
         source: string;
         target: string;
-        issues: Array<{ type?: string; span?: string; advice?: string }>;
+        issues: EmbeddableSyntaxIssue[];
         prompt?: string;
         locale?: string;
     },
@@ -26,7 +29,7 @@ export class SyntaxAdviceEmbedAgent extends BaseAgent<
         input: {
             source: string;
             target: string;
-            issues: Array<{ type?: string; span?: string; advice?: string }>;
+            issues: EmbeddableSyntaxIssue[];
             prompt?: string;
             locale?: string;
         },
@@ -44,8 +47,12 @@ export class SyntaxAdviceEmbedAgent extends BaseAgent<
         const list = Array.isArray(input.issues) ? input.issues : [];
         const formatted = list
             .map(
-                (a, i) =>
-                    `#${i + 1} [${a.type || 'ISSUE'}] ${a.span ? `片段: ${a.span} | ` : ''}${a.advice || ''}`
+                (issue, i) =>
+                    `#${i + 1} [${issue.category || issue.type || 'ISSUE'} / ${issue.severity || 'unrated'}]\n` +
+                    `源文证据: ${issue.sourceSpan || '(无)'}\n` +
+                    `当前译文证据: ${issue.targetSpan || issue.span || '(无)'}\n` +
+                    `问题: ${issue.message || '(无)'}\n` +
+                    `最小修改建议: ${issue.advice || '(无)'}`
             )
             .join('\n');
 

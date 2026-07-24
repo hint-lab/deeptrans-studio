@@ -27,6 +27,7 @@ export interface WorkflowState {
     preTermEnabled?: Record<string, boolean>;
     preDictEnabled?: Record<string, boolean>;
     // qa data
+    qualityAssureItemId?: string;
     qualityAssureBiTerm?: any;
     qualityAssureSyntax?: any;
     qualityAssureSyntaxTranslation?: string;
@@ -55,6 +56,7 @@ const initialState: WorkflowState = {
     preTermEnabled: undefined,
     preDictEnabled: undefined,
     qualityAssureBiTerm: undefined,
+    qualityAssureItemId: undefined,
     qualityAssureSyntax: undefined,
     qualityAssureSyntaxTranslation: undefined,
     qualityAssureSyntaxEmbedded: undefined,
@@ -150,15 +152,27 @@ export const workFlowStepSlice = createSlice({
 
         setQAOutputs(
             state,
-            action: PayloadAction<{ biTerm?: any; syntax?: any; discourse?: any } | undefined>
+            action: PayloadAction<
+                { itemId?: string; biTerm?: any; syntax?: any; discourse?: any } | undefined
+            >
         ) {
             const partial = action.payload;
             if (!partial) {
+                state.qualityAssureItemId = undefined;
                 state.qualityAssureBiTerm = undefined;
                 state.qualityAssureSyntax = undefined;
+                state.qualityAssureSyntaxEmbedded = undefined;
+                state.qaDislikedPairs = undefined;
                 state.posteditDiscourse = undefined;
                 return;
             }
+            if (partial.itemId && partial.itemId !== state.qualityAssureItemId) {
+                state.qualityAssureBiTerm = undefined;
+                state.qualityAssureSyntax = undefined;
+                state.qualityAssureSyntaxEmbedded = undefined;
+                state.qaDislikedPairs = undefined;
+            }
+            if (partial.itemId) state.qualityAssureItemId = partial.itemId;
             if ('biTerm' in partial) state.qualityAssureBiTerm = partial.biTerm;
             if ('syntax' in partial) state.qualityAssureSyntax = partial.syntax;
             if ('discourse' in partial) state.posteditDiscourse = partial.discourse;
@@ -202,6 +216,7 @@ export const workFlowStepSlice = createSlice({
             state.preTermEnabled = action.payload.preTermEnabled;
             state.preDictEnabled = action.payload.preDictEnabled;
             state.qualityAssureBiTerm = action.payload.qualityAssureBiTerm;
+            state.qualityAssureItemId = action.payload.qualityAssureItemId;
             state.qualityAssureSyntax = action.payload.qualityAssureSyntax;
             state.qualityAssureSyntaxTranslation = action.payload.qualityAssureSyntaxTranslation;
             state.qualityAssureSyntaxEmbedded = action.payload.qualityAssureSyntaxEmbedded;

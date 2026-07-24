@@ -19,14 +19,17 @@ import { useTranslations } from 'next-intl';
 import React, { useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 
-const logger = createLogger({
-    type: 'ide:stage-badge',
-}, {
-    json: false,
-    pretty: false,
-    colors: true,
-    includeCaller: false,
-});
+const logger = createLogger(
+    {
+        type: 'ide:stage-badge',
+    },
+    {
+        json: false,
+        pretty: false,
+        colors: true,
+        includeCaller: false,
+    }
+);
 
 export type StageBadgeBarProps = {
     contentReady: boolean;
@@ -72,13 +75,19 @@ const StageBadgeBar: React.FC<StageBadgeBarProps> = ({
     // 按钮文案逻辑
     const getAcceptButtonText = (stage: TranslationStage) => {
         switch (stage) {
-            case 'NOT_STARTED': return t('actions.startPreTranslation');
-            case 'MT_REVIEW': return t('actions.submitToQA');
-            case 'QA_REVIEW': return t('actions.submitToPostEdit'); // "提交至译后编辑"
+            case 'NOT_STARTED':
+                return t('actions.startPreTranslation');
+            case 'MT_REVIEW':
+                return t('actions.submitToQA');
+            case 'QA_REVIEW':
+                return t('actions.submitToPostEdit'); // "提交至译后编辑"
             // 注意：这里 PE 和 PE Review 现在是分开的，所以文案要准确
-            case 'POST_EDIT_REVIEW': return t('actions.approveSignOff');
-            case 'SIGN_OFF': return t('actions.completeProject');
-            default: return t('actions.approve');
+            case 'POST_EDIT_REVIEW':
+                return t('actions.approveSignOff');
+            case 'SIGN_OFF':
+                return t('actions.completeProject');
+            default:
+                return t('actions.approve');
         }
     };
 
@@ -127,15 +136,15 @@ const StageBadgeBar: React.FC<StageBadgeBarProps> = ({
         try {
             switch (stage) {
                 case 'MT_REVIEW':
-                    void undoTranslate();
+                    await undoTranslate();
                     await syncStatusUpdate(activeDocumentItem.id, 'MT');
                     break;
                 case 'QA_REVIEW':
-                    void undoQA();
+                    await undoQA();
                     await syncStatusUpdate(activeDocumentItem.id, 'QA');
                     break;
                 case 'POST_EDIT_REVIEW':
-                    void undoPostEdit();
+                    await undoPostEdit();
                     await syncStatusUpdate(activeDocumentItem.id, 'POST_EDIT');
                     break;
                 case 'SIGN_OFF':
@@ -175,7 +184,10 @@ const StageBadgeBar: React.FC<StageBadgeBarProps> = ({
                 case 'NOT_STARTED':
                     setOperationStage('MT');
                     await syncStatusUpdate(operationItemId, 'MT');
-                    toast.info(t('toasts.preTranslationStarted'), { description: t('toasts.autoProcessInfo'), duration: 4000 });
+                    toast.info(t('toasts.preTranslationStarted'), {
+                        description: t('toasts.autoProcessInfo'),
+                        duration: 4000,
+                    });
                     await runTranslate();
                     // 3. 【新增】任务完成后，自动推进到 MT_REVIEW
                     // 只有当 runTranslate 没有抛出错误时才会执行到这里
@@ -187,12 +199,15 @@ const StageBadgeBar: React.FC<StageBadgeBarProps> = ({
                 case 'MT_REVIEW':
                     setOperationStage('QA');
                     await syncStatusUpdate(operationItemId, 'QA');
-                    toast.info(t('toasts.qaStarted'), { description: t('toasts.autoProcessInfo'), duration: 4000 });
+                    toast.info(t('toasts.qaStarted'), {
+                        description: t('toasts.autoProcessInfo'),
+                        duration: 4000,
+                    });
                     await runQA();
                     // 3. 【新增】任务完成后，自动推进到 QA_REVIEW
                     setOperationStage('QA_REVIEW');
                     await syncStatusUpdate(operationItemId, 'QA_REVIEW');
-                    await saveRecord('QA_REVIEW', 'HUMAN', 'SUCCESS');
+                    await saveRecord('QA_REVIEW', 'HUMAN', 'STARTED');
                     break;
                 case 'QA_REVIEW':
                     setOperationStage('POST_EDIT');
@@ -216,7 +231,9 @@ const StageBadgeBar: React.FC<StageBadgeBarProps> = ({
                     setOperationStage('COMPLETED');
                     await saveRecord('COMPLETED', 'HUMAN', 'SUCCESS');
                     await syncStatusUpdate(operationItemId, 'COMPLETED');
-                    toast.success(t('toasts.projectCompleted'), { description: t('toasts.readyForDelivery') });
+                    toast.success(t('toasts.projectCompleted'), {
+                        description: t('toasts.readyForDelivery'),
+                    });
                     break;
 
                 default:
@@ -228,11 +245,19 @@ const StageBadgeBar: React.FC<StageBadgeBarProps> = ({
             setIsRunning(false);
         } catch (error) {
             logger.error('Operation failed:', error);
-            if (stage === 'NOT_STARTED') {
+            const rollbackStage =
+                stage === 'NOT_STARTED'
+                    ? 'NOT_STARTED'
+                    : stage === 'MT_REVIEW'
+                      ? 'MT_REVIEW'
+                      : stage === 'QA_REVIEW'
+                        ? 'QA_REVIEW'
+                        : undefined;
+            if (rollbackStage) {
                 try {
-                    await syncStatusUpdate(operationItemId, 'NOT_STARTED');
+                    await syncStatusUpdate(operationItemId, rollbackStage);
                 } catch {}
-                setOperationStage('NOT_STARTED');
+                setOperationStage(rollbackStage);
             }
             toast.error(t('toasts.operationFailed'), { description: String(error) });
             setIsRunning(false);
@@ -289,8 +314,8 @@ const StageBadgeBar: React.FC<StageBadgeBarProps> = ({
 
     return (
         <div className={`h-10 w-full bg-background pl-2 pr-1 text-xs ${className ?? ''}`}>
-            <div className="flex w-full items-center justify-between gap-2 h-full">
-                <div className="flex min-w-0 items-center overflow-x-auto no-scrollbar">
+            <div className="flex h-full w-full items-center justify-between gap-2">
+                <div className="no-scrollbar flex min-w-0 items-center overflow-x-auto">
                     {renderVisualStepper()}
 
                     {currentStage === 'ERROR' && (
@@ -301,29 +326,58 @@ const StageBadgeBar: React.FC<StageBadgeBarProps> = ({
                 </div>
 
                 {/* 右侧：操作按钮 */}
-                <div className="ml-auto flex items-center gap-2 shrink-0">
+                <div className="ml-auto flex shrink-0 items-center gap-2">
                     {(currentStage.includes('REVIEW') || currentStage === 'POST_EDIT') && (
-                        <Button variant="outline" size="sm" className="h-7 gap-1 rounded-sm border-dashed" onClick={() => onRedo(currentStage)} disabled={shouldDisableButtons()}>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 gap-1 rounded-sm border-dashed"
+                            onClick={() => onRedo(currentStage)}
+                            disabled={shouldDisableButtons()}
+                        >
                             <RotateCcw className="h-3 w-3" />
                             <span className="hidden sm:inline">{redoText}</span>
                         </Button>
                     )}
 
                     {currentStage !== 'NOT_STARTED' && currentStage !== 'COMPLETED' && (
-                        <Button variant="ghost" size="sm" className="h-7 gap-1 rounded-sm text-muted-foreground hover:text-foreground" onClick={() => onReject(currentStage)} disabled={shouldDisableButtons()}>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 gap-1 rounded-sm text-muted-foreground hover:text-foreground"
+                            onClick={() => onReject(currentStage)}
+                            disabled={shouldDisableButtons()}
+                        >
                             <Undo2 className="h-3 w-3" />
                             <span className="hidden sm:inline">{rejectText}</span>
                         </Button>
                     )}
 
                     {!shouldHideAcceptButton(currentStage) && currentStage !== 'COMPLETED' && (
-                        <Button variant="default" size="sm" className="h-7 gap-1 rounded-sm px-4 shadow-sm" onClick={() => onAccept(currentStage)} disabled={shouldDisableButtons()}>
-                            {currentStage === 'NOT_STARTED' ? <Play className="h-3 w-3 fill-current" /> : <Check className="h-3 w-3" />}
+                        <Button
+                            variant="default"
+                            size="sm"
+                            className="h-7 gap-1 rounded-sm px-4 shadow-sm"
+                            onClick={() => onAccept(currentStage)}
+                            disabled={shouldDisableButtons()}
+                        >
+                            {currentStage === 'NOT_STARTED' ? (
+                                <Play className="h-3 w-3 fill-current" />
+                            ) : (
+                                <Check className="h-3 w-3" />
+                            )}
                             <span className="font-medium">{getAcceptButtonText(currentStage)}</span>
                         </Button>
                     )}
                     {currentStage !== 'COMPLETED' && currentStage !== 'NOT_STARTED' && (
-                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 rounded-full hover:bg-secondary" onClick={() => onDone(currentStage)} disabled={shouldDisableButtons()} title={signOffText}>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 w-7 rounded-full p-0 hover:bg-secondary"
+                            onClick={() => onDone(currentStage)}
+                            disabled={shouldDisableButtons()}
+                            title={signOffText}
+                        >
                             <SkipForward className="h-4 w-4 text-muted-foreground" />
                         </Button>
                     )}

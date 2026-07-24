@@ -54,12 +54,7 @@ const logger = createLogger(
 
 export function ActionSection() {
     // 在组件顶层获取所有需要的状态
-    const {
-        preTranslateEmbedded,
-        qualityAssureBiTerm,
-        qualityAssureSyntax,
-        qualityAssureSyntaxEmbedded,
-    } = useAgentWorkflowSteps();
+    const { preTranslateEmbedded, setQASyntaxEmbedded } = useAgentWorkflowSteps();
     const { logSystem, logAgent, logInfo, logWarning, logError } = useLogger();
     const { currentStage, setCurrentStage } = useTranslationState();
     const { isRunning, setIsRunning } = useRunningState();
@@ -71,12 +66,8 @@ export function ActionSection() {
     const { handleStreamResponse } = useChatbarStream();
     const { sourceLanguage, targetLanguage } = useTranslationLanguage();
 
-    const {
-        contentItemId,
-        sourceText,
-        targetText,
-        setTargetTranslationText,
-    } = useTranslationContent();
+    const { contentItemId, sourceText, targetText, setTargetTranslationText } =
+        useTranslationContent();
     const targetEditor = useTargetEditor();
     const { explorerTabs, setExplorerTabs } = useExplorerTabs();
     const [batchProgress, setBatchProgress] = useState<number | undefined>(undefined);
@@ -99,10 +90,14 @@ export function ActionSection() {
         | 'complete_batch'
     >('idle');
     const { activeDocumentItem, setActiveDocumentItem } = useActiveDocumentItem();
+    const activeDocumentItemRef = useRef(activeDocumentItem);
     const activeItemIdRef = useRef(String(activeDocumentItem?.id || ''));
     const sourceTextRef = useRef(String(sourceText || ''));
+    const qaTargetTextRef = useRef(String(targetText || preTranslateEmbedded || ''));
+    activeDocumentItemRef.current = activeDocumentItem;
     activeItemIdRef.current = String(activeDocumentItem?.id || '');
     sourceTextRef.current = String(sourceText || '');
+    qaTargetTextRef.current = String(targetText || preTranslateEmbedded || '');
     const { settings } = useUserSettings();
     const chosenProvider = settings.provider || 'openai';
 
@@ -137,8 +132,6 @@ export function ActionSection() {
     const syncLocalStatusById = (id: string, status: string) => {
         try {
             if (!id) return;
-            // 批处理进行中，不改动 active，避免跳动
-            if (isRunning) return;
             // 仅在状态发生变化时更新列表，减少无效重渲染
             setExplorerTabs((prev: any) => {
                 if (!prev || !prev.documentTabs) return prev;
@@ -157,6 +150,10 @@ export function ActionSection() {
                 }));
                 return changed ? { ...prev, documentTabs: nextTabs } : prev;
             });
+            if (activeItemIdRef.current === String(id)) {
+                const currentItem = activeDocumentItemRef.current;
+                setActiveDocumentItem({ ...currentItem, status });
+            }
         } catch {}
     };
     const setPreRunning = useAgentWorkflowSteps((s: any) => s.setPreRunning);
@@ -446,11 +443,17 @@ export function ActionSection() {
     };
 
     const evaluateCurrentTranslation = async (provider: string = 'openai') => {
+        let operationItemId = '';
         try {
             // 检查前置条件
-            const id = (activeDocumentItem as any)?.id;
+            const id = String((activeDocumentItem as any)?.id || '');
             if (!id) {
                 toast.error('没有激活的文档项，无法进行质检');
+                return;
+            }
+            operationItemId = id;
+            if (contentItemId !== id) {
+                toast.info('当前分段仍在加载，请加载完成后再启动质检');
                 return;
             }
             let currentItemStatus = activeDocumentItem?.status;
@@ -474,7 +477,11 @@ export function ActionSection() {
             // 检查文本内容
             const currentSourceText = sourceText;
             const preTranslation = preTranslateEmbedded as string | undefined;
-            const currentTargetText = preTranslation || targetText;
+            const currentTargetText = targetText || preTranslation || '';
+            const isCurrentItem = () =>
+                activeItemIdRef.current === id &&
+                sourceTextRef.current === currentSourceText &&
+                qaTargetTextRef.current === currentTargetText;
 
             if (!currentSourceText.trim()) {
                 toast.error('原文内容为空，无法进行质检');
@@ -493,14 +500,14 @@ export function ActionSection() {
                 `开始翻译质检，原文长度: ${currentSourceText.length}字符，译文长度: ${currentTargetText.length}字符`
             );
 
-            // 质检两步：双语术语评估 → 句法特征评估
+            // 质检只产生待复核的结构关系和风险；译文修改由用户勾选后触发。
+            let result: Awaited<ReturnType<typeof runQualityAssureAction>>;
             try {
                 setQARunning(true);
                 setCurrentStage('QA' as any);
-                setQAStep('bi-term-evaluate');
+                setQAStep('bi-term-eval');
 
-                // 使用新的 runQualityAssureAction 统一执行质检流程
-                const result = await runQualityAssureAction(
+                result = await runQualityAssureAction(
                     currentSourceText || '',
                     currentTargetText || '',
                     {
@@ -510,34 +517,39 @@ export function ActionSection() {
                         locale: locale,
                     }
                 );
-
-                // 更新 useAgentWorkflowSteps 状态
-                setQAOutputs({
-                    biTerm: result?.biTerm,
-                    syntax: result?.syntax,
-                });
-
-                setQAStep('syntax-evaluate');
+                if (!isCurrentItem()) {
+                    throw new Error('当前分段已切换，已丢弃过期质检结果');
+                }
+                setQAStep('syntax-eval');
             } finally {
                 setQARunning(false);
                 setQAStep('idle');
             }
 
-            // 保存质检结果到数据库
-            try {
-                const qaState = useAgentWorkflowSteps();
-                await saveQualityAssureResultsAction(id, {
-                    biTerm: qaState.qualityAssureBiTerm,
-                    syntax: qaState.qualityAssureSyntax,
-                    syntaxEmbedded: qaState.qualityAssureSyntaxEmbedded,
+            await saveQualityAssureResultsAction(
+                id,
+                {
+                    biTerm: result.biTerm,
+                    syntax: result.syntax,
+                    syntaxEmbedded: null,
+                },
+                {
+                    sourceText: currentSourceText,
+                    targetText: currentTargetText,
+                }
+            );
+            if (isCurrentItem()) {
+                setQAOutputs({
+                    itemId: id,
+                    biTerm: result.biTerm,
+                    syntax: result.syntax,
                 });
-                logInfo('质检结果已保存到数据库');
-            } catch (error) {
-                logError(`保存质检结果失败: ${error}`);
-                // 继续执行，不中断流程
+                setQASyntaxEmbedded(undefined);
             }
+            logInfo('质检结果已保存到数据库');
 
-            // 更新状态：从 MT_REVIEW 到 QA_REVIEW
+            // 更新状态：从 MT_REVIEW 到 QA_REVIEW。状态写入是业务门禁，
+            // 时间线事件失败只记录告警，不能把已经成功的质检标成失败。
             try {
                 // 1. 更新数据库状态
                 await updateDocItemStatusAction(id, 'QA_REVIEW');
@@ -546,21 +558,23 @@ export function ActionSection() {
                 syncLocalStatusById(id, 'QA_REVIEW');
 
                 // 3. 更新当前组件状态
-                setCurrentStage('QA_REVIEW' as any);
+                if (isCurrentItem()) setCurrentStage('QA_REVIEW' as any);
 
-                // 4. 记录质检完成事件
+                logInfo(`分段 ${id} 质检完成，状态更新为 QA_REVIEW`);
+            } catch (error) {
+                logError(`状态更新失败: ${error}`);
+                throw error;
+            }
+            try {
                 await recordGoToNextTranslationProcessEventAction(id, 'QA', 'AGENT', 'SUCCESS');
                 await recordGoToNextTranslationProcessEventAction(
                     id,
                     'QA_REVIEW',
                     'HUMAN',
-                    'SUCCESS'
+                    'STARTED'
                 );
-
-                logInfo(`分段 ${id} 质检完成，状态更新为 QA_REVIEW`);
-            } catch (error) {
-                logError(`状态更新失败: ${error}`);
-                // 继续执行，不中断流程
+            } catch (eventError) {
+                logWarning(`质检已完成，但时间线事件记录失败: ${eventError}`);
             }
 
             // 更新目标编辑器与提示
@@ -572,6 +586,14 @@ export function ActionSection() {
             }
         } catch (error: any) {
             logger.error('质检失败:', error);
+            const persistedStage = String(
+                (explorerTabs?.documentTabs || [])
+                    .flatMap((tab: any) => tab.items || [])
+                    .find((item: any) => String(item.id) === operationItemId)?.status || 'MT_REVIEW'
+            );
+            if (activeItemIdRef.current === operationItemId) {
+                setCurrentStage(persistedStage as any);
+            }
 
             // 提供更详细的错误信息
             let errorMessage = '质检失败：请检查网络连接或稍后再试';
@@ -588,9 +610,13 @@ export function ActionSection() {
 
             // 记录失败事件
             try {
-                const id = (activeDocumentItem as any)?.id;
-                if (id) {
-                    await recordGoToNextTranslationProcessEventAction(id, 'QA', 'AGENT', 'FAILED');
+                if (operationItemId) {
+                    await recordGoToNextTranslationProcessEventAction(
+                        operationItemId,
+                        'QA',
+                        'AGENT',
+                        'FAILED'
+                    );
                 }
             } catch (e) {
                 // 忽略事件记录失败
@@ -662,16 +688,26 @@ export function ActionSection() {
                     setBatchProgress(p.percent);
                     if (p.percent >= 100) {
                         clearInterval(timer);
+                        let persistedCount = 0;
+                        let persistFailed = false;
                         try {
-                            await fetch('/api/batch-quality-assure/persist', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ batchId }),
-                            });
-                            // 批量更新状态到 QA_REVIEW
-                            for (const item of needEvaluateItems) {
+                            const persistResponse = await fetch(
+                                '/api/batch-quality-assure/persist',
+                                {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ batchId }),
+                                }
+                            );
+                            if (!persistResponse.ok) throw new Error('批量质检结果保存失败');
+                            const persisted = await persistResponse.json();
+                            const updatedIds = new Set<string>(persisted?.updatedIds || []);
+                            persistedCount = updatedIds.size;
+                            // 只为已成功落库的分段记录状态事件。
+                            for (const item of needEvaluateItems.filter(candidate =>
+                                updatedIds.has(candidate.id)
+                            )) {
                                 try {
-                                    await updateDocItemStatusAction(item.id, 'QA_REVIEW');
                                     await recordGoToNextTranslationProcessEventAction(
                                         item.id,
                                         'QA',
@@ -682,25 +718,33 @@ export function ActionSection() {
                                         item.id,
                                         'QA_REVIEW',
                                         'HUMAN',
-                                        'SUCCESS'
+                                        'STARTED'
                                     );
                                 } catch (e) {
                                     logger.error(`更新分段 ${item.id} 状态失败:`, e);
                                 }
                             }
-                        } catch {}
+                        } catch (error) {
+                            persistFailed = true;
+                            logger.error('批量质检结果保存失败:', error);
+                            toast.error('批量质检结果保存失败，请稍后重试');
+                        }
 
                         setIsRunning(false);
-                        setCurrentStage('QA_REVIEW' as any);
+                        if (persistedCount > 0) setCurrentStage('QA_REVIEW' as any);
                         setBatchOpen(false);
                         setCurrentOperation('idle');
 
-                        if ((p.failed || 0) > 0) {
+                        if (persistFailed) {
+                            // 已在上方给出可操作的保存失败提示。
+                        } else if ((p.failed || 0) > 0 || persistedCount < p.done) {
                             toast.warning(
-                                `批量质检完成，但有失败项：成功 ${p.done}，失败 ${p.failed}`
+                                `批量质检完成，但有失败项：已保存 ${persistedCount}，处理失败 ${p.failed || 0}`
                             );
                         } else {
-                            toast.success(`批量质检完成：成功处理 ${p.done} 个预翻译复核分段`);
+                            toast.success(
+                                `批量质检完成：成功保存 ${persistedCount} 个预翻译复核分段`
+                            );
                         }
 
                         // 刷新左侧 explorerTabs
@@ -819,7 +863,7 @@ export function ActionSection() {
         }
     };
 
-    // 一步到完成：从当前分段所在页签，依次预译→评估→译后→完成
+    // 自动推进；遇到 QA 人工复核边界时必须停下。
     const runToCompletionFromCurrent = async () => {
         try {
             const tabs = explorerTabs?.documentTabs ?? [];
@@ -843,6 +887,7 @@ export function ActionSection() {
             const itemIds = itemsToProcess.map(i => i.id);
             const totalToProcess = itemsToProcess.length;
             const completedCount = items.length - totalToProcess;
+            let workflowItems = itemsToProcess;
 
             setIsRunning(true);
             setCurrentOperation('translate_batch');
@@ -886,20 +931,51 @@ export function ActionSection() {
                             await new Promise(res => setTimeout(res, 1000));
                         }
                         try {
-                            await fetch('/api/batch-pre-translate/persist', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ batchId }),
-                            });
-                        } catch {}
+                            const persistResponse = await fetch(
+                                '/api/batch-pre-translate/persist',
+                                {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ batchId }),
+                                }
+                            );
+                            if (!persistResponse.ok) {
+                                const payload = await persistResponse.json().catch(() => ({}));
+                                throw new Error(payload?.error || '批量预译结果保存失败');
+                            }
+
+                            // QA candidates must come from the persisted state. The original
+                            // snapshot still says NOT_STARTED and would otherwise skip every
+                            // segment that was just pretranslated.
+                            const refreshedResponse = await fetch(
+                                `/api/explorer-tabs?projectId=${encodeURIComponent((explorerTabs as any)?.projectId || '')}`
+                            );
+                            if (!refreshedResponse.ok) {
+                                throw new Error('无法刷新预译后的分段状态');
+                            }
+                            const refreshed = await refreshedResponse.json();
+                            setExplorerTabs(refreshed);
+                            const refreshedById = new Map(
+                                (refreshed?.documentTabs || [])
+                                    .flatMap((tab: any) => tab.items || [])
+                                    .map((item: any) => [String(item.id), item])
+                            );
+                            workflowItems = itemIds
+                                .map(id => refreshedById.get(String(id)))
+                                .filter(Boolean) as any[];
+                        } catch (error) {
+                            logger.error('保存或刷新批量预译结果失败:', error);
+                            throw error;
+                        }
                     }
                 } catch (error) {
                     logger.error('批量预译失败:', error);
+                    throw error;
                 }
             }
 
             // 2) 批量评估 - 只处理需要评估的分段（MT状态）
-            const needQaItems = itemsToProcess.filter(
+            const needQaItems = workflowItems.filter(
                 (it: any) => it.status === 'MT' || it.status === 'MT_REVIEW'
             );
 
@@ -945,16 +1021,56 @@ export function ActionSection() {
                             await new Promise(res => setTimeout(res, 1000));
                         }
                         try {
-                            await fetch('/api/batch-quality-assure/persist', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ batchId }),
-                            });
-                        } catch {}
+                            const persistResponse = await fetch(
+                                '/api/batch-quality-assure/persist',
+                                {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ batchId }),
+                                }
+                            );
+                            const payload = await persistResponse.json().catch(() => ({}));
+                            if (!persistResponse.ok) {
+                                throw new Error(payload?.error || '批量质检结果保存失败');
+                            }
+                            if (payload?.complete === false) {
+                                throw new Error('部分质检结果暂未保存，请重试保存');
+                            }
+                            if (Array.isArray(payload?.failedIds) && payload.failedIds.length) {
+                                toast.warning(
+                                    `有 ${payload.failedIds.length} 个分段未完成质检，请单独重试`
+                                );
+                            }
+                        } catch (error) {
+                            logger.error('保存批量质检结果失败:', error);
+                            throw error;
+                        }
                     }
                 } catch (error) {
                     logger.error('批量评估失败:', error);
+                    throw error;
                 }
+            }
+
+            const requiresHumanQaReview = workflowItems.some((item: any) =>
+                ['NOT_STARTED', 'MT', 'MT_REVIEW', 'QA', 'QA_REVIEW'].includes(
+                    String(item.status || 'NOT_STARTED')
+                )
+            );
+            if (requiresHumanQaReview) {
+                setBatchOpen(false);
+                try {
+                    const refreshed = await fetch(
+                        `/api/explorer-tabs?projectId=${encodeURIComponent((explorerTabs as any)?.projectId || '')}`
+                    ).then(response => response.json());
+                    setExplorerTabs(refreshed);
+                    const refreshedActive = (refreshed?.documentTabs || [])
+                        .flatMap((tab: any) => tab.items || [])
+                        .find((item: any) => item.id === aid);
+                    if (refreshedActive?.status) setCurrentStage(refreshedActive.status as any);
+                } catch {}
+                toast.info('自动流程已停在质检复核，请确认风险并按需生成修订译文');
+                return;
             }
 
             // 3) 标记译后→签发→完成（当前页签）- 只处理需要推进的分段
@@ -1419,7 +1535,7 @@ export function ActionSection() {
                         const id = batchJobId;
                         setBatchJobId(undefined);
                         if (id) {
-                            if (id.startsWith('qa:')) {
+                            if (id.startsWith('qa.')) {
                                 await fetch('/api/batch-quality-assure/cancel', {
                                     method: 'POST',
                                     headers: { 'Content-Type': 'application/json' },

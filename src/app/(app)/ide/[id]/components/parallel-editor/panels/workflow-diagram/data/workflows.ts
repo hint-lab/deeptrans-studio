@@ -125,7 +125,7 @@ export function useWorkflowData() {
                 source: 'es',
                 target: 'e1',
                 targetHandle: 'input',
-                label: t('modalConjunctions'),
+                label: t('relationCoverage'),
                 markerEnd: { type: MarkerType.ArrowClosed },
             },
             {
@@ -133,7 +133,7 @@ export function useWorkflowData() {
                 source: 'e1',
                 target: 'e2',
                 targetHandle: 'input',
-                label: t('syntax'),
+                label: t('riskClassification'),
                 markerEnd: { type: MarkerType.ArrowClosed },
             },
             {
@@ -141,7 +141,7 @@ export function useWorkflowData() {
                 source: 'e2',
                 target: 'e3',
                 targetHandle: 'input',
-                label: t('embed'),
+                label: t('humanSelection'),
                 markerEnd: { type: MarkerType.ArrowClosed },
             },
             {

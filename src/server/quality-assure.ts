@@ -1,6 +1,14 @@
 import { SyntaxAdviceEmbedAgent, SyntaxEvaluateAgent, SyntaxMarkerExtractAgent } from '@/agents';
 import type { AuthContext } from '@/lib/guards';
 import { createLogger } from '@/lib/logger';
+import {
+    buildSyntaxAlignmentResult,
+    normalizeSyntaxQualityResult,
+    type SyntaxIssue,
+    type SyntaxQualityResult,
+} from '@/lib/syntax-quality';
+import { sourceRevision } from '@/lib/source-revision';
+import { createSyntaxEvaluationId } from '@/lib/syntax-evaluation-id';
 
 const logger = createLogger(
     {
@@ -37,8 +45,12 @@ export async function evaluateSyntax(
         locale?: string;
     }
 ) {
-    const agent = new SyntaxEvaluateAgent(options?.targetLanguage, options?.domain, options?.locale);
-    return agent.execute(
+    const agent = new SyntaxEvaluateAgent(
+        options?.targetLanguage,
+        options?.domain,
+        options?.locale
+    );
+    const result = await agent.execute(
         {
             source,
             target,
@@ -51,21 +63,33 @@ export async function evaluateSyntax(
             locale: options?.locale,
         }
     );
+    if (result.status !== 'complete' || result.legacy) {
+        throw new Error(
+            result.status === 'failed'
+                ? 'SYNTAX_QA_INVALID_RESPONSE'
+                : 'SYNTAX_QA_INCOMPLETE_RESPONSE'
+        );
+    }
+    return result;
 }
 
 export async function embedSyntaxAdvice(
     source: string,
     target: string,
-    issues: Array<{ type?: string; span?: string; advice?: string }>,
-    options?: { prompt?: string }
+    issues: Array<Partial<SyntaxIssue> & { type?: string; span?: string }>,
+    options?: { prompt?: string; locale?: string }
 ) {
-    const agent = new SyntaxAdviceEmbedAgent();
-    return agent.execute({
-        source,
-        target,
-        issues,
-        prompt: options?.prompt,
-    });
+    const agent = new SyntaxAdviceEmbedAgent(options?.locale);
+    return agent.execute(
+        {
+            source,
+            target,
+            issues,
+            prompt: options?.prompt,
+            locale: options?.locale,
+        },
+        { locale: options?.locale }
+    );
 }
 
 export async function runQualityAssureForOwner(
@@ -82,31 +106,34 @@ export async function runQualityAssureForOwner(
 ): Promise<{
     biTerm: any;
     syntax: any;
-    syntaxEmbedded: string;
+    syntaxEmbedded: null;
 }> {
     if (!owner.userId) throw new Error('缺少内部用户身份');
 
     try {
-        const biTerm = await extractBilingualSyntaxMarkers(sourceText, targetText, {
-            prompt: options?.prompt,
-        });
-
-        const syntax = await evaluateSyntax(sourceText, targetText, {
+        const evaluated = await evaluateSyntax(sourceText, targetText, {
             targetLanguage: options?.targetLanguage,
             domain: options?.domain,
             prompt: options?.prompt,
             locale: options?.locale,
         });
-
-        const issues = syntax?.issues || [];
-        const syntaxEmbedded = await embedSyntaxAdvice(sourceText, targetText, issues, {
-            prompt: options?.prompt,
-        });
+        const syntax: SyntaxQualityResult = {
+            ...evaluated,
+            evaluation: {
+                id: createSyntaxEvaluationId(),
+                sourceRevision: sourceRevision(sourceText),
+                targetRevision: sourceRevision(targetText),
+                baseSource: sourceText,
+                baseTarget: targetText,
+                embeddedIssueIds: [],
+            },
+        };
+        const biTerm = buildSyntaxAlignmentResult(syntax);
 
         return {
             biTerm,
             syntax,
-            syntaxEmbedded,
+            syntaxEmbedded: null,
         };
     } catch (error) {
         logger.error('质检流程失败:', error);

@@ -821,8 +821,8 @@
     "Agents": {
         "roles": {
             "professional_assistant": "Professional Assistant",
-            "syntax_evaluator": "Syntax and Modal/Conjunction Usage Evaluation Assistant",
-            "syntax_analyzer": "Syntax Comparison and Analysis Assistant",
+            "syntax_evaluator": "Syntax and Normative-Relation Evaluation Assistant",
+            "syntax_analyzer": "Bilingual Structural-Relation Alignment Assistant",
             "term_extractor": "Term Extraction Assistant",
             "terminology_extractor": "Document-level Term Extraction Assistant",
             "terminology_translator": "Terminology Translation Assistant",
@@ -935,9 +935,13 @@
                 "task_instruction": "Task: Make minimal revisions to the \"current translation\" based on the above suggestions without changing the original meaning. Output only the final revised translation text."
             },
             "syntax_evaluate": {
-                "output_format": "Output format: { \"issues\": Array<{\"type\":string, \"span\"?:string, \"advice\"?:string}> }",
-                "type_options": "type can be: modality, conditional, logic, punctuation, number, parenthesis, case, register, other",
-                "focus": "Focus on: 1) Modal sentences (modality) - naturalness and appropriate tone; 2) Conditional sentences (conditional) - structure and conjunctions following conventions; 3) Logical connections (logic) and references - clarity; also consider punctuation/numbers/parentheses/case/register levels."
+                "output_format": "Return JSON only: {\"version\":2,\"relations\":[{\"id\":string,\"category\":string,\"sourceSpan\":string,\"targetSpan\":string,\"sourceFunction\"?:string,\"targetFunction\"?:string,\"status\":\"preserved|shifted|omitted|added|uncertain\",\"severity\"?:\"critical|major|minor\",\"confidence\":number,\"explanation\"?:string}],\"issues\":[{\"id\":string,\"relationId\"?:string,\"category\":string,\"severity\":\"critical|major|minor\",\"sourceSpan\":string,\"targetSpan\":string,\"message\":string,\"advice\":string}],\"dimensions\":[{\"category\":string,\"status\":\"pass|issue|not_applicable|uncertain\",\"note\"?:string}]}. Keep every array field even when empty. dimensions must contain exactly one valid-status row for each of the ten listed categories, including not_applicable rows.",
+                "type_options": "category must be one of: modality_deontic, condition_exception, negation_scope, actor_role, coordination_logic, attachment_boundary, temporal_sequence, quantifier_number, reference_coreference, grammar_register. dimensions must cover all ten categories.",
+                "relation_rules": "Compare source and target for normative force and permission/obligation, conditions and exceptions, negation and scope, actors and responsible roles, coordination and and-or logic, attachment and boundaries, temporal sequence and deadlines, quantities and quantifiers, clause references and coreference, and target-language grammar and legal register. Put every evidenced relation in relations; do not limit the analysis to conjunctions.",
+                "severity_rules": "Use critical only for evidence-backed reversals or omissions of an obligation, prohibition, negation, condition, exception, responsible actor, or similarly central legal effect; major for material scope or logic shifts; minor for local grammar or expression that does not change the core effect. Use uncertain when confidence is low and do not overstate risk.",
+                "review_boundary": "Report only evidence-backed structural or normative meaning problems between source and target. Do not label stylistic preferences as syntax errors, and do not alter facts, terms, numbers, or legal effect. advice must be the smallest sufficient change.",
+                "cue_hints": "These high-recall deterministic cues are prompts for coverage only, not findings by themselves: {cues}",
+                "focus": "Judge whether each relation is preserved before reporting risks. If there are no problems, return an empty issues array, mark checked dimensions pass, and mark irrelevant dimensions not_applicable."
             },
             "mono_term_extract": {
                 "output_format": "Output JSON array, each item {\"term\": string, \"score\"?: number}"
@@ -1326,7 +1330,72 @@
             "termEmbeddedTranslation": "Term Embedded Translation",
             "syntaxAdviceEmbedded": "Syntax Advice Embedded",
             "markedAsPoor": "Marked as poor",
-            "markAsPoor": "Mark as poor"
+            "markAsPoor": "Mark as poor",
+            "title": "Syntax & Normative-Relation QA",
+            "humanReviewNote": "Model findings require human confirmation and are not legal conclusions.",
+            "relationsTitle": "Structural Relation Alignment",
+            "issuesTitle": "Risks & Revision Advice",
+            "rewriteTitle": "QA-Revised Translation",
+            "relationCount": "Relations {count}",
+            "issueCount": "Issues {count}",
+            "selectedCount": "Selected {selected}/{total}",
+            "dimensionsLabel": "QA dimensions",
+            "legacyResult": "Legacy result",
+            "incompleteResult": "Incomplete result",
+            "incompleteWarning": "This QA run did not cover every required dimension. Run QA again before generating a revised translation.",
+            "reviewSections": "QA review sections",
+            "invalidResult": "The QA result could not be parsed. Run QA again.",
+            "noRelations": "No structural relations requiring alignment were identified",
+            "noIssuesComplete": "All dimensions were checked and no significant structural issue was found.",
+            "noIssuesUnknown": "No issue can be confirmed; rerun QA for legacy or incomplete results.",
+            "selectHighRisk": "Select critical/major",
+            "clearSelection": "Clear",
+            "selectIssue": "Select {category} issue",
+            "sourceEvidence": "Source:",
+            "targetEvidence": "Target:",
+            "regenerateSelected": "Generate from selected ({count})",
+            "selectAtLeastOne": "Select at least one QA issue first",
+            "rerunRequired": "This result is not bound to the current evaluation. Run QA again.",
+            "revisionGenerated": "A revised translation was generated from the selected issues",
+            "baseTranslation": "QA Baseline Translation",
+            "revisedTranslation": "QA-Revised Translation",
+            "restoreBase": "Restore baseline",
+            "applyToTarget": "Apply to translation",
+            "staleProposal": "Outdated",
+            "loadFailed": "Failed to load QA results",
+            "selectionSaveFailed": "Failed to save issue selection",
+            "resizePanels": "Resize QA panels",
+            "unrated": "Unrated",
+            "categories": {
+                "modality_deontic": "Normative Force & Modality",
+                "condition_exception": "Conditions & Exceptions",
+                "negation_scope": "Negation & Scope",
+                "actor_role": "Actors & Roles",
+                "coordination_logic": "Coordination & Alternatives",
+                "attachment_boundary": "Attachment & Boundaries",
+                "temporal_sequence": "Time & Deadlines",
+                "quantifier_number": "Quantifiers & Scope",
+                "reference_coreference": "Reference & Coreference",
+                "grammar_register": "Grammar & Legal Register"
+            },
+            "dimensionStatus": {
+                "pass": "Pass",
+                "issue": "Issue",
+                "not_applicable": "N/A",
+                "uncertain": "Review"
+            },
+            "relationStatus": {
+                "preserved": "Preserved",
+                "shifted": "Shifted",
+                "omitted": "Omitted",
+                "added": "Added",
+                "uncertain": "Human review"
+            },
+            "severity": {
+                "critical": "Critical",
+                "major": "Major",
+                "minor": "Minor"
+            }
         },
         "explorerPanel": {
             "files": "Files",
@@ -1455,9 +1524,9 @@
             "termExtraction": "Term Extraction",
             "dictionaryQuery": "Dictionary Query",
             "termEmbeddedTranslation": "Embedded Translation",
-            "syntaxEvaluation": "Syntax Evaluation",
-            "syntaxSuggestion": "Syntax Suggestion",
-            "syntaxEmbeddedTranslation": "Embedded Translation",
+            "syntaxEvaluation": "Structural Relation Alignment",
+            "syntaxSuggestion": "Structural Risk Detection",
+            "syntaxEmbeddedTranslation": "Selected-Issue Revision",
             "discourseQuery": "Discourse Query",
             "discourseEvaluation": "Discourse Evaluation",
             "discourseEmbeddedTranslation": "Embedded Translation",
@@ -1465,7 +1534,10 @@
             "query": "Query",
             "embed": "Embed",
             "complete": "Complete",
-            "modalConjunctions": "Modal/Conjunctions",
+            "modalConjunctions": "Structural Relations",
+            "relationCoverage": "Ten-Dimension Check",
+            "riskClassification": "Risk Classification",
+            "humanSelection": "Human Selection",
             "syntax": "Syntax",
             "evaluation": "Evaluation",
             "embeddedTranslation": "Embedded Translation"
@@ -1502,8 +1574,8 @@
             "ERROR": "Error",
             "RUNNING": "Running",
             "START": "Start",
-            "oneClickCompletion": "One-click Completion",
-            "oneClickCompletionDesc": "Start from the current segment and automatically complete all subsequent processes",
+            "oneClickCompletion": "Run to Human Review",
+            "oneClickCompletionDesc": "Run safe automated steps and stop at QA review",
             "groups": {
                 "preTranslation": "Pre-translation",
                 "qaProcess": "Quality Assurance",

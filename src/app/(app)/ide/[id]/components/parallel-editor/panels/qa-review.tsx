@@ -1,819 +1,867 @@
 'use client';
 
+import { getDocumentItemIntermediateResultsAction } from '@/actions/intermediate-results';
 import {
-    getDocumentItemIntermediateResultsAction,
-    savePreTranslateResultsAction,
-    saveQualityAssureResultsAction,
-} from '@/actions/intermediate-results';
-import { embedSyntaxAdviceAction } from '@/actions/quality-assure';
+    applySyntaxRevisionAction,
+    embedSelectedSyntaxIssuesAction,
+    updateSyntaxIssueSelectionAction,
+} from '@/actions/quality-assure';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import { useActiveDocumentItem } from '@/hooks/useActiveDocumentItem';
 import { useAgentWorkflowSteps } from '@/hooks/useAgentWorkflowSteps';
-import { useTranslationContent, useTranslationLanguage } from '@/hooks/useTranslation';
-import { createLogger } from '@/lib/logger';
+import { useTranslationContent } from '@/hooks/useTranslation';
+import {
+    isSyntaxEvaluationTargetCompatible,
+    normalizeSyntaxQualityResult,
+    type SyntaxIssue,
+    type SyntaxIssueSeverity,
+    type SyntaxRelationStatus,
+} from '@/lib/syntax-quality';
 import { wordDiff } from '@/lib/text-diff';
 import { cn } from '@/lib/utils';
-import { Check, Loader2, ThumbsDown } from 'lucide-react';
-import { useTranslations } from 'next-intl';
-import { useEffect, useState } from 'react';
+import { AlertTriangle, ArrowRight, CheckCircle2, Loader2, ShieldCheck } from 'lucide-react';
+import { useLocale, useTranslations } from 'next-intl';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
-const logger = createLogger({
-    type: 'parallel-editor:qa-review',
-}, {
-    json: false,// 开启json格式输出
-    pretty: false, // 关闭开发环境美化输出
-    colors: true, // 仅当json：false时启用颜色输出可用
-    includeCaller: false, // 日志不包含调用者
-});
-export default function QAPanel({ projectId }: { projectId?: string }) {
-    const t = useTranslations('IDE.qaPanel');
-    const tCommon = useTranslations('Common');
-    const { sourceText, targetText, setTargetTranslationText } = useTranslationContent();
-    const { sourceLanguage, targetLanguage } = useTranslationLanguage();
 
-    // 基线翻译+ 句法嵌入翻译结果
-    const [baseline, setBaseline] = useState<string | null>(null);
-    const qaEmbeddedText = useAgentWorkflowSteps(s => s.qualityAssureSyntaxEmbedded) as
+const severityOrder: Record<SyntaxIssueSeverity, number> = {
+    critical: 3,
+    major: 2,
+    minor: 1,
+};
+
+const qaPanelTabs = ['relations', 'issues', 'rewrite'] as const;
+type QaPanelTab = (typeof qaPanelTabs)[number];
+
+function sameIds(left: string[], right: string[]) {
+    if (left.length !== right.length) return false;
+    const rightSet = new Set(right);
+    return left.every(id => rightSet.has(id));
+}
+
+function severityClass(severity?: SyntaxIssueSeverity) {
+    if (severity === 'critical') {
+        return 'border-red-300 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300';
+    }
+    if (severity === 'major') {
+        return 'border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300';
+    }
+    if (severity === 'minor') {
+        return 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-300';
+    }
+    return 'border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300';
+}
+
+function relationClass(status: SyntaxRelationStatus) {
+    if (status === 'preserved') {
+        return 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300';
+    }
+    if (status === 'shifted' || status === 'omitted' || status === 'added') {
+        return 'border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300';
+    }
+    return 'border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300';
+}
+
+export default function QAPanel(_props: { projectId?: string }) {
+    const t = useTranslations('IDE.qaPanel');
+    const locale = useLocale();
+    const { sourceText, targetText, setTargetTranslationText } = useTranslationContent();
+    const { activeDocumentItem } = useActiveDocumentItem();
+    const activeItemId = String((activeDocumentItem as any)?.id || '');
+    const activeItemIdRef = useRef(activeItemId);
+    activeItemIdRef.current = activeItemId;
+
+    const qaItemId = useAgentWorkflowSteps(state => state.qualityAssureItemId) as
         | string
         | undefined;
-    const setQaSyntaxEmbedded = useAgentWorkflowSteps(s => s.setQASyntaxEmbedded) as (
-        v: string | undefined
+    const qaBiTerm = useAgentWorkflowSteps(state => state.qualityAssureBiTerm);
+    const qaSyntax = useAgentWorkflowSteps(state => state.qualityAssureSyntax);
+    const storedEmbedded = useAgentWorkflowSteps(state => state.qualityAssureSyntaxEmbedded) as
+        | string
+        | undefined;
+    const setQAOutputs = useAgentWorkflowSteps(state => state.setQAOutputs);
+    const setQaSyntaxEmbedded = useAgentWorkflowSteps(state => state.setQASyntaxEmbedded) as (
+        value: string | undefined
     ) => void;
 
+    const [baseline, setBaseline] = useState('');
     const [showDiff, setShowDiff] = useState(false);
     const [loadingEmbedded, setLoadingEmbedded] = useState(false);
-    const [appliedKind, setAppliedKind] = useState<'baseline' | 'embedded' | null>(null);
+    const [savingSelection, setSavingSelection] = useState(false);
+    const [isNarrow, setIsNarrow] = useState(false);
+    const [activePanel, setActivePanel] = useState<QaPanelTab>('relations');
+    const containerRef = useRef<HTMLDivElement>(null);
+    const loadRequestRef = useRef(0);
+    const selectionRequestRef = useRef(0);
 
-    const { activeDocumentItem } = useActiveDocumentItem();
+    const qaEmbeddedText = qaItemId === activeItemId ? storedEmbedded : undefined;
+    const hasRun = qaItemId === activeItemId && Boolean(qaSyntax || qaBiTerm);
 
-    const [dbResults, setDbResults] = useState<{
-        qualityAssureBiTerm?: any;
-        qualityAssureSyntax?: any;
-        qaDislikedPairs?: Record<string, boolean>;
-    } | null>(null);
+    const result = useMemo(() => {
+        const syntaxResult = normalizeSyntaxQualityResult(qaSyntax);
+        const alignmentResult = normalizeSyntaxQualityResult(qaBiTerm);
+        const relations = syntaxResult.relations.length
+            ? syntaxResult.relations
+            : alignmentResult.relations;
+        return {
+            ...syntaxResult,
+            relations,
+            summary: {
+                ...syntaxResult.summary,
+                relationCount: relations.length,
+            },
+        };
+    }, [qaBiTerm, qaSyntax]);
 
-    const qaBiTerm = useAgentWorkflowSteps(s => s.qualityAssureBiTerm);
-    const qaSyntax = useAgentWorkflowSteps(s => s.qualityAssureSyntax);
-    const setQAOutputs = useAgentWorkflowSteps(s => s.setQAOutputs);
-    const preTranslation = useAgentWorkflowSteps(s => s.preTranslateEmbedded);
+    const issues = useMemo(
+        () =>
+            [...result.issues].sort(
+                (left, right) =>
+                    (severityOrder[right.severity || 'minor'] || 0) -
+                    (severityOrder[left.severity || 'minor'] || 0)
+            ),
+        [result.issues]
+    );
+    const selectedIds = useMemo(
+        () => issues.filter(issue => result.selectedMap[issue.id] === true).map(issue => issue.id),
+        [issues, result.selectedMap]
+    );
+    const embeddedIssueIds = result.evaluation?.embeddedIssueIds || [];
+    const evaluationSourceStale = Boolean(
+        result.evaluation?.baseSource && result.evaluation.baseSource !== sourceText
+    );
+    const targetEdited = Boolean(
+        result.evaluation?.id &&
+        !isSyntaxEvaluationTargetCompatible(
+            result.evaluation,
+            targetText,
+            String(qaEmbeddedText || '')
+        )
+    );
+    const revisionContextStale = evaluationSourceStale || targetEdited;
+    const proposalStale =
+        Boolean(
+            qaEmbeddedText && (!result.evaluation?.id || !sameIds(selectedIds, embeddedIssueIds))
+        ) || revisionContextStale;
 
-    // 调试：监听QA状态变化
     useEffect(() => {
-        logger.log('QA面板: 状态变化', {
-            qaBiTerm: !!qaBiTerm,
-            qaSyntax: !!qaSyntax,
-            qaEmbeddedText: !!qaEmbeddedText,
+        const element = containerRef.current;
+        if (!element || typeof ResizeObserver === 'undefined') return;
+        const observer = new ResizeObserver(entries => {
+            const width = entries[0]?.contentRect.width || 0;
+            setIsNarrow(width > 0 && width < 900);
         });
-    }, [qaBiTerm, qaSyntax, qaEmbeddedText]);
+        observer.observe(element);
+        return () => observer.disconnect();
+    }, []);
 
-    // 当文档切换时，从数据库加载已保存的结果
     useEffect(() => {
-        const loadResults = async () => {
-            const docId = (activeDocumentItem as any)?.id;
-            if (!docId) {
-                setDbResults(null);
-                setQAOutputs(undefined);
-                setTargetTranslationText('');
+        const requestId = ++loadRequestRef.current;
+        selectionRequestRef.current += 1;
+        setBaseline('');
+        setSavingSelection(false);
+        setQaSyntaxEmbedded(undefined);
+        if (!activeItemId) {
+            setQAOutputs(undefined);
+            return;
+        }
+        setQAOutputs({ itemId: activeItemId, biTerm: undefined, syntax: undefined });
+
+        void (async () => {
+            try {
+                const stored = await getDocumentItemIntermediateResultsAction(activeItemId);
+                if (
+                    requestId !== loadRequestRef.current ||
+                    activeItemIdRef.current !== activeItemId
+                ) {
+                    return;
+                }
+                if (!stored) return;
+                setQAOutputs({
+                    itemId: activeItemId,
+                    biTerm: stored.qualityAssureBiTerm,
+                    syntax: stored.qualityAssureSyntax,
+                });
+                const normalized = normalizeSyntaxQualityResult(stored.qualityAssureSyntax);
+                setBaseline(
+                    normalized.evaluation?.baseTarget ||
+                        String(stored.targetText || stored.preTranslateEmbedded || '')
+                );
+                const embedded = stored.qualityAssureSyntaxEmbedded;
+                setQaSyntaxEmbedded(typeof embedded === 'string' ? embedded : undefined);
+            } catch {
+                if (
+                    requestId === loadRequestRef.current &&
+                    activeItemIdRef.current === activeItemId
+                ) {
+                    setQAOutputs({ itemId: activeItemId, biTerm: undefined, syntax: undefined });
+                    setQaSyntaxEmbedded(undefined);
+                    toast.error(t('loadFailed'));
+                }
+            }
+        })();
+
+        return () => {
+            loadRequestRef.current += 1;
+            selectionRequestRef.current += 1;
+        };
+        // Store action wrappers are intentionally excluded; they are recreated on every render.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeItemId]);
+
+    useEffect(() => {
+        if (!baseline && hasRun) {
+            setBaseline(result.evaluation?.baseTarget || String(targetText || ''));
+        }
+    }, [baseline, hasRun, result.evaluation?.baseTarget, targetText]);
+
+    const saveSelection = async (nextSelectedIds: string[]) => {
+        const evaluationId = result.evaluation?.id;
+        if (!activeItemId || !evaluationId || result.status !== 'complete' || savingSelection) {
+            if (!evaluationId) toast.error(t('rerunRequired'));
+            else if (result.status !== 'complete') toast.error(t('incompleteWarning'));
+            return;
+        }
+        const itemId = activeItemId;
+        const requestId = ++selectionRequestRef.current;
+        setSavingSelection(true);
+        try {
+            const nextSyntax = await updateSyntaxIssueSelectionAction(
+                itemId,
+                evaluationId,
+                nextSelectedIds
+            );
+            if (activeItemIdRef.current !== itemId || requestId !== selectionRequestRef.current) {
                 return;
             }
-
-            try {
-                const results = await getDocumentItemIntermediateResultsAction(docId);
-                if (results) {
-                    setDbResults(results);
-                    // 如果数据库有结果，优先使用数据库的结果
-                    if (results.qualityAssureBiTerm || results.qualityAssureSyntax) {
-                        setQAOutputs({
-                            biTerm: results.qualityAssureBiTerm,
-                            syntax: results.qualityAssureSyntax,
-                        });
-                        if ((results as any)?.qaDislikedPairs)
-                            setQADislikedPairs((results as any).qaDislikedPairs);
-                        if ((results as any).qualityAssureSyntaxEmbedded)
-                            setQaSyntaxEmbedded(
-                                String((results as any).qualityAssureSyntaxEmbedded || '')
-                            );
-                    } else {
-                        setQAOutputs(undefined);
-                    }
-                } else {
-                    setDbResults(null);
-                    setQAOutputs(undefined);
-                }
-            } catch (error) {
-                logger.error('Failed to load QA results:', error);
-                setDbResults(null);
-                setQAOutputs(undefined);
-            }
-        };
-
-        loadResults();
-    }, [(activeDocumentItem as any)?.id]);
-
-    const panelCls = 'border border-slate-200 dark:border-slate-800';
-    const [ignoredTerms, setIgnoredTerms] = useState<Record<string, boolean>>({});
-    const [notedTerms, setNotedTerms] = useState<Record<string, boolean>>({});
-    const dislikedPairs = useAgentWorkflowSteps(s => s.qaDislikedPairs) as
-        | Record<string, boolean>
-        | undefined;
-    const setQADislikedPairs = useAgentWorkflowSteps(s => s.setQADislikedPairs) as (
-        m: Record<string, boolean> | undefined
-    ) => void;
-    const toggleIgnore = (term: string) =>
-        setIgnoredTerms(prev => ({ ...prev, [term]: !prev[term] }));
-    const toggleNote = (term: string) => setNotedTerms(prev => ({ ...prev, [term]: !prev[term] }));
-
-    const applyToTarget = async (text: string) => {
-        try {
-            const content = String(text || '');
-            setTargetTranslationText(content);
-            const docId = (activeDocumentItem as any)?.id;
-            if (docId) {
-                try {
-                    await savePreTranslateResultsAction(docId, { targetText: content });
-                } catch { }
-            }
-            toast.success(t('applied'));
+            setQAOutputs({ itemId, syntax: nextSyntax });
         } catch {
-            toast.error(t('applyFailed'));
+            if (requestId === selectionRequestRef.current) {
+                toast.error(t('selectionSaveFailed'));
+            }
+        } finally {
+            if (requestId === selectionRequestRef.current) setSavingSelection(false);
         }
     };
 
-    const genSyntaxEmbedded = async () => {
+    const toggleIssue = (issue: SyntaxIssue) => {
+        const nextSelectedIds = result.selectedMap[issue.id]
+            ? selectedIds.filter(id => id !== issue.id)
+            : [...selectedIds, issue.id];
+        void saveSelection(nextSelectedIds);
+    };
+
+    const selectBySeverity = () => {
+        void saveSelection(
+            issues
+                .filter(issue => issue.severity === 'critical' || issue.severity === 'major')
+                .map(issue => issue.id)
+        );
+    };
+
+    const clearSelection = () => {
+        void saveSelection([]);
+    };
+
+    const generateRevision = async () => {
+        const evaluationId = result.evaluation?.id;
+        if (!activeItemId || !evaluationId) {
+            toast.error(t('rerunRequired'));
+            return;
+        }
+        if (result.status !== 'complete') {
+            toast.error(t('incompleteWarning'));
+            return;
+        }
+        if (!selectedIds.length) {
+            toast.error(t('selectAtLeastOne'));
+            return;
+        }
+        const itemId = activeItemId;
+        setLoadingEmbedded(true);
         try {
-            if (!sourceText) {
-                toast.error(t('noSource'));
-                return;
-            }
-            setLoadingEmbedded(true);
-            const syn = asJson(qaSyntax);
-            const allIssues: Array<{ type?: string; span?: string; advice?: string }> =
-                Array.isArray(syn?.issues) ? syn.issues : [];
-            const selectedMap: Record<string, boolean> = (syn?.selectedMap || {}) as Record<
-                string,
-                boolean
-            >;
-            const filteredIssues = allIssues.filter((it, idx) => {
-                const key = (() => {
-                    const t = String(it?.type || '')
-                        .trim()
-                        .toLowerCase();
-                    const s = String(it?.span || '')
-                        .trim()
-                        .toLowerCase();
-                    const a = String(it?.advice || '')
-                        .trim()
-                        .toLowerCase();
-                    return `${t}|${s}|${a}` || `idx:${idx}`;
-                })();
-                if (Object.keys(selectedMap || {}).length === 0) return true;
-                return selectedMap?.[key] === true;
-            });
-            const text = await embedSyntaxAdviceAction(
-                sourceText || '',
-                targetText || '',
-                filteredIssues
+            const generated = await embedSelectedSyntaxIssuesAction(
+                itemId,
+                evaluationId,
+                selectedIds,
+                locale
             );
-            setQaSyntaxEmbedded(text || '');
-            const docId = (activeDocumentItem as any)?.id;
-            if (docId) {
-                try {
-                    await saveQualityAssureResultsAction(docId, { syntaxEmbedded: text });
-                } catch { }
-            }
-        } catch (e: any) {
-            toast.error(String(e?.message || t('generateFailed')));
+            if (activeItemIdRef.current !== itemId) return;
+            setQAOutputs({ itemId, syntax: generated.syntax });
+            setQaSyntaxEmbedded(generated.text || '');
+            toast.success(t('revisionGenerated'));
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : t('generateFailed'));
         } finally {
             setLoadingEmbedded(false);
         }
     };
 
-    function extractJsonFromText(txt?: string) {
-        const s = String(txt || '').trim();
-        if (!s) return undefined;
-        // 处理 ```json ... ``` 或 ``` ... ``` 包裹的内容
-        const fence = s.match(/^```[a-zA-Z]*\n([\s\S]*?)\n```\s*$/);
-        const content: string = fence && typeof fence[1] === 'string' ? fence[1] : s;
+    const applyToTarget = async (version: 'base' | 'proposal') => {
+        const evaluationId = result.evaluation?.id;
+        if (!activeItemId || !evaluationId || revisionContextStale) {
+            toast.error(t('rerunRequired'));
+            return;
+        }
+        const itemId = activeItemId;
         try {
-            return JSON.parse(content);
-        } catch {
-            /* not pure json */
+            const applied = await applySyntaxRevisionAction(itemId, evaluationId, version);
+            if (activeItemIdRef.current !== itemId) return;
+            setTargetTranslationText(applied.text);
+            toast.success(t('applied'));
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : t('applyFailed'));
         }
-        return undefined;
-    }
+    };
 
-    function asJson(obj: any) {
-        try {
-            if (!obj) return undefined;
-            if (typeof obj === 'string') return extractJsonFromText(obj as string);
-            if (typeof obj === 'object') {
-                // 若为 { raw: "```json...```" } 结构，则优先解析 raw
-                const raw = (obj as any)?.raw;
-                if (typeof raw === 'string') {
-                    const parsed = extractJsonFromText(raw as string);
-                    if (parsed) return parsed;
-                }
-                return obj;
-            }
-            return undefined;
-        } catch {
-            return undefined;
-        }
-    }
-
-    function normalizePairs(input: any): Array<{ source: string; target: string; score?: number }> {
-        const out: Array<{ source: string; target: string; score?: number }> = [];
-        const push = (src: any, tgt: any, sc?: any) => {
-            const s = String(src ?? '').trim();
-            const t = String(tgt ?? '').trim();
-            if (s || t)
-                out.push({ source: s, target: t, score: typeof sc === 'number' ? sc : undefined });
-        };
-        const val = asJson(input) ?? input;
-        const candidates: any = Array.isArray(val)
-            ? val
-            : Array.isArray((val as any)?.pairs)
-                ? (val as any).pairs
-                : Array.isArray((val as any)?.data)
-                    ? (val as any).data
-                    : Array.isArray((val as any)?.items)
-                        ? (val as any).items
-                        : Array.isArray((val as any)?.syntaxPairs)
-                            ? (val as any).syntaxPairs
-                            : undefined;
-        if (Array.isArray(candidates)) {
-            for (const it of candidates) {
-                if (it && typeof it === 'object') {
-                    push(
-                        (it as any).source ??
-                        (it as any).src ??
-                        (it as any).term ??
-                        (it as any).sourceMarker,
-                        (it as any).target ??
-                        (it as any).tgt ??
-                        (it as any).translation ??
-                        (it as any).targetMarker,
-                        (it as any).score ?? (it as any).alignment
-                    );
-                } else if (typeof it === 'string') {
-                    // try split by arrow
-                    const m = it.split(/=>|→|->/);
-                    if (m.length >= 2) push(m[0], m.slice(1).join('=>'));
-                    else push(it, '');
-                }
-            }
-        }
-        return out;
-    }
-
-    function buildDislikedPrompt(
-        pairs: Array<{ source: string; target: string }>,
-        dislikedMap: Record<string, boolean>
-    ): string | undefined {
-        const dislikedList: Array<{ source: string; target: string }> = [];
-        pairs.forEach((p, i) => {
-            const key = `${p.source}::${p.target}::${i}`;
-            if (dislikedMap[key]) dislikedList.push({ source: p.source, target: p.target });
-        });
-        if (!dislikedList.length) return undefined;
-        const lines = dislikedList
-            .map(x => t('dislikedPairFormat', { source: x.source, target: x.target }))
-            .join('\n');
-        return t('dislikedPairWarning', { lines });
-    }
-
-    // 当原文变化且尚无基线时，自动生成一次基线翻译
-    useEffect(() => {
-        if (sourceText && (baseline === null || baseline === '')) {
-            const plain = String(preTranslation || '') || String(targetText || '');
-            setBaseline(plain);
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [sourceText]);
-
-    // 根据当前译文识别已应用的是基线还是嵌入；若都存在且当前未匹配，则默认选中嵌入
-    useEffect(() => {
-        const cur = String(targetText || '');
-        const base = String(baseline || '');
-        const emb = String(qaEmbeddedText || '');
-        if (emb && cur === emb) {
-            setAppliedKind('embedded');
-        } else if (base && cur === base) {
-            setAppliedKind('baseline');
-        } else if (emb) {
-            setAppliedKind('embedded');
-        } else if (base) {
-            setAppliedKind('baseline');
-        } else {
-            setAppliedKind(null);
-        }
-    }, [targetText, baseline, qaEmbeddedText]);
+    const baseText = baseline || result.evaluation?.baseTarget || '';
+    const proposalText = String(qaEmbeddedText || '');
+    const diff =
+        showDiff && baseText && proposalText ? wordDiff(baseText, proposalText) : undefined;
+    const baseApplied = Boolean(baseText && targetText === baseText);
+    const proposalApplied = Boolean(proposalText && !proposalStale && targetText === proposalText);
+    const panelClass =
+        'flex min-h-0 flex-col rounded-md border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-950';
 
     return (
-        <div className="flex size-full flex-col rounded border border-purple-200 bg-purple-50 p-2 dark:border-purple-800 dark:bg-purple-950/30">
-            <div className="flex items-center justify-between">
-                <div className="text-xs font-medium text-foreground/70">{t('headerSyntaxQA')}</div>
+        <div
+            ref={containerRef}
+            className="flex size-full min-h-0 flex-col rounded-md border border-purple-200 bg-purple-50/70 p-2.5 dark:border-purple-900 dark:bg-purple-950/20"
+        >
+            <div className="flex flex-wrap items-start justify-between gap-2 px-0.5">
+                <div>
+                    <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                        <ShieldCheck className="h-4 w-4 text-purple-600" />
+                        {t('title')}
+                    </div>
+                    <p className="mt-0.5 text-[11px] text-muted-foreground">
+                        {t('humanReviewNote')}
+                    </p>
+                </div>
+                {hasRun && (
+                    <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                        {result.legacy && <Badge variant="outline">{t('legacyResult')}</Badge>}
+                        {result.status === 'partial' && (
+                            <Badge
+                                variant="outline"
+                                className="border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300"
+                            >
+                                {t('incompleteResult')}
+                            </Badge>
+                        )}
+                        <Badge variant="outline">
+                            {t('relationCount', { count: result.summary.relationCount })}
+                        </Badge>
+                        <Badge variant="outline">
+                            {t('issueCount', { count: result.issues.length })}
+                        </Badge>
+                        <Badge variant="outline">
+                            {t('selectedCount', {
+                                selected: selectedIds.length,
+                                total: result.issues.length,
+                            })}
+                        </Badge>
+                    </div>
+                )}
             </div>
 
-            {/* 三栏布局（双语对齐 / 句法建议 / 术语嵌入译文） */}
+            {hasRun && (
+                <div className="mt-2 flex flex-wrap gap-1" aria-label={t('dimensionsLabel')}>
+                    {result.dimensions.map(dimension => (
+                        <span
+                            key={dimension.category}
+                            className={cn(
+                                'rounded-full border px-2 py-0.5 text-[10px]',
+                                dimension.status === 'issue'
+                                    ? 'border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300'
+                                    : dimension.status === 'pass'
+                                      ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300'
+                                      : 'border-slate-200 bg-white text-slate-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-400'
+                            )}
+                        >
+                            {t(`categories.${dimension.category}`)} ·{' '}
+                            {t(`dimensionStatus.${dimension.status}`)}
+                        </span>
+                    ))}
+                </div>
+            )}
+
+            {hasRun && result.status === 'partial' && (
+                <div
+                    role="status"
+                    className="mt-2 flex items-start gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-2 text-[11px] leading-relaxed text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200"
+                >
+                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    {t('incompleteWarning')}
+                </div>
+            )}
+
+            {isNarrow && (
+                <div
+                    role="tablist"
+                    aria-label={t('reviewSections')}
+                    className="mt-2 grid grid-cols-3 gap-1 rounded-lg border border-purple-200 bg-white/80 p-1 dark:border-purple-900 dark:bg-slate-950/80"
+                >
+                    {qaPanelTabs.map(tab => {
+                        const label =
+                            tab === 'relations'
+                                ? t('relationsTitle')
+                                : tab === 'issues'
+                                  ? t('issuesTitle')
+                                  : t('rewriteTitle');
+                        const tabIndex = qaPanelTabs.indexOf(tab);
+                        return (
+                            <button
+                                key={tab}
+                                id={`qa-review-tab-${tab}`}
+                                type="button"
+                                role="tab"
+                                aria-selected={activePanel === tab}
+                                aria-controls={`qa-review-panel-${tab}`}
+                                tabIndex={activePanel === tab ? 0 : -1}
+                                title={label}
+                                className={cn(
+                                    'min-h-9 min-w-0 rounded-md px-2 py-1.5 text-[11px] font-medium leading-tight transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-offset-1',
+                                    activePanel === tab
+                                        ? 'bg-purple-600 text-white shadow-sm'
+                                        : 'text-muted-foreground hover:bg-purple-50 hover:text-foreground dark:hover:bg-purple-950/40'
+                                )}
+                                onClick={() => setActivePanel(tab)}
+                                onKeyDown={event => {
+                                    let nextIndex = tabIndex;
+                                    if (event.key === 'ArrowRight') nextIndex = tabIndex + 1;
+                                    else if (event.key === 'ArrowLeft') nextIndex = tabIndex - 1;
+                                    else if (event.key === 'Home') nextIndex = 0;
+                                    else if (event.key === 'End') {
+                                        nextIndex = qaPanelTabs.length - 1;
+                                    } else {
+                                        return;
+                                    }
+                                    event.preventDefault();
+                                    const nextTab =
+                                        qaPanelTabs[
+                                            (nextIndex + qaPanelTabs.length) % qaPanelTabs.length
+                                        ] ?? qaPanelTabs[0];
+                                    setActivePanel(nextTab);
+                                    document.getElementById(`qa-review-tab-${nextTab}`)?.focus();
+                                }}
+                            >
+                                <span className="block truncate">{label}</span>
+                            </button>
+                        );
+                    })}
+                </div>
+            )}
+
             <ResizablePanelGroup
                 direction="horizontal"
-                className="mt-2 h-full items-stretch"
-                onLayout={(sizes: number[]) => {
-                    try {
-                        document.cookie = `react-resizable-panels:qa-review-layout=${JSON.stringify(sizes)}`;
-                    } catch { }
-                }}
+                autoSaveId="qa-review-v2-wide"
+                className={cn('min-h-0 flex-1 items-stretch', isNarrow ? 'mt-1.5' : 'mt-2')}
             >
-                {/* 双语句法评估 */}
                 <ResizablePanel
-                    defaultSize={33}
+                    id="qa-review-panel-relations"
+                    defaultSize={32}
                     minSize={20}
-                    className={cn('flex flex-col h-full rounded bg-white p-2 dark:bg-slate-900', panelCls)}
+                    className={cn(panelClass, isNarrow && activePanel !== 'relations' && 'hidden')}
+                    role={isNarrow ? 'tabpanel' : undefined}
+                    aria-labelledby={isNarrow ? 'qa-review-tab-relations' : undefined}
                 >
-                    <div className="mb-1 text-[11px] font-semibold text-foreground">
-                        {t('headerSyntaxQA')}
+                    <div className="mb-2 flex items-center justify-between">
+                        <h3 className="text-xs font-semibold">{t('relationsTitle')}</h3>
+                        {hasRun && (
+                            <span className="text-[10px] text-muted-foreground">
+                                {result.relations.length}
+                            </span>
+                        )}
                     </div>
-                    {(() => {
-                        const bi = asJson(qaBiTerm);
-                        const pairs: Array<{ source: string; target: string; score?: number }> =
-                            normalizePairs(qaBiTerm).map(p => ({
-                                source: p.source,
-                                target: p.target,
-                                score: p.score,
-                            }));
-                        const coverage: number | undefined =
-                            typeof bi?.coverage === 'number' ? bi.coverage : undefined;
-                        if (!bi)
-                            return <div className="text-xs text-foreground/60">{t('notRun')}</div>;
-                        return (
-                            <div className="space-y-2 overflow-auto text-xs">
-                                {typeof coverage === 'number' && (
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-foreground/60">{t('coverage')}</span>
-                                        <div className="h-1.5 w-40 rounded bg-slate-200">
-                                            <div
-                                                className="h-1.5 rounded bg-purple-500"
-                                                style={{
-                                                    width: `${Math.max(0, Math.min(100, Math.round(coverage * 100)))}%`,
-                                                }}
-                                            />
-                                        </div>
-                                        <span className="text-foreground/70">
-                                            {Math.round(coverage * 100)}%
-                                        </span>
-                                    </div>
-                                )}
-                                {pairs.length ? (
-                                    <table className="w-full text-xs">
-                                        <thead>
-                                            <tr className="text-foreground/60">
-                                                <th className="w-1/3 px-2 py-1 text-left font-normal">
-                                                    {t('colSourceTerm')}
-                                                </th>
-                                                <th className="w-1/3 px-2 py-1 text-left font-normal">
-                                                    {t('colAlignedTranslation')}
-                                                </th>
-                                                <th className="px-2 py-1 text-left font-normal">
-                                                    {t('colScore')}
-                                                </th>
-                                                <th className="w-[60px] px-2 py-1 text-left text-center font-normal">
-                                                    {t('colDislike')}
-                                                </th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {pairs.map((p, i) => {
-                                                const key = `${p.source}::${p.target}::${i}`;
-                                                const noted = notedTerms[p.source] === true;
-                                                const rowCls = cn(
-                                                    'border-t',
-                                                    noted
-                                                        ? 'bg-purple-50/70 dark:bg-purple-900/20'
-                                                        : ''
-                                                );
-                                                const disliked =
-                                                    (dislikedPairs || {})[key] === true;
-                                                const toggleDislike = async () => {
-                                                    const prev = dislikedPairs || {};
-                                                    const next = {
-                                                        ...prev,
-                                                        [key]: !(prev[key] === true),
-                                                    };
-                                                    setQADislikedPairs(next);
-                                                    const docId = (activeDocumentItem as any)?.id;
-                                                    if (docId) {
-                                                        try {
-                                                            await saveQualityAssureResultsAction(
-                                                                docId,
-                                                                { dislikedPairs: next }
-                                                            );
-                                                        } catch { }
-                                                    }
-                                                };
-                                                const onToggle = () => toggleNote(p.source);
-                                                return (
-                                                    <tr
-                                                        key={key}
-                                                        className={rowCls}
-                                                        onClick={onToggle}
-                                                        role="button"
-                                                        tabIndex={0}
-                                                        onKeyDown={e => {
-                                                            if (
-                                                                e.key === 'Enter' ||
-                                                                e.key === ' '
-                                                            ) {
-                                                                e.preventDefault();
-                                                                onToggle();
-                                                            }
-                                                        }}
-                                                    >
-                                                        <td className="break-words px-2 py-1 align-top">
-                                                            {p.source}
-                                                        </td>
-                                                        <td className="break-words px-2 py-1 align-top">
-                                                            {p.target}
-                                                        </td>
-                                                        <td className="px-2 py-1 align-top">
-                                                            {typeof p.score === 'number' ? (
-                                                                <div className="flex items-center gap-2">
-                                                                    <div className="h-1 w-20 rounded bg-slate-200">
-                                                                        <div
-                                                                            className="h-1 rounded bg-emerald-500"
-                                                                            style={{
-                                                                                width: `${Math.max(0, Math.min(100, Math.round(p.score * 100)))}%`,
-                                                                            }}
-                                                                        />
-                                                                    </div>
-                                                                    <span className="text-foreground/70">
-                                                                        {Math.round(p.score * 100)}%
-                                                                    </span>
-                                                                </div>
-                                                            ) : (
-                                                                <span className="text-foreground/60">
-                                                                    —
-                                                                </span>
-                                                            )}
-                                                        </td>
-                                                        <td
-                                                            className="px-2 py-1 text-center align-top"
-                                                            onClick={e => {
-                                                                e.stopPropagation();
-                                                                toggleDislike();
-                                                            }}
-                                                        >
-                                                            <button
-                                                                className={cn(
-                                                                    'inline-flex items-center justify-center rounded border p-1',
-                                                                    disliked
-                                                                        ? 'border-red-300 bg-red-50 text-red-600'
-                                                                        : 'border-slate-200 text-foreground/60 hover:bg-muted'
-                                                                )}
-                                                                title={
-                                                                    disliked
-                                                                        ? t('markedAsPoor')
-                                                                        : t('markAsPoor')
-                                                                }
-                                                            >
-                                                                <ThumbsDown className="h-3.5 w-3.5" />
-                                                            </button>
-                                                        </td>
-                                                    </tr>
-                                                );
-                                            })}
-                                        </tbody>
-                                    </table>
-                                ) : (
-                                    <div className="text-foreground/60">{t('noPairs')}</div>
-                                )}
+                    <div className="min-h-0 flex-1 space-y-2 overflow-auto pr-1 text-xs">
+                        {!hasRun ? (
+                            <div className="text-muted-foreground">{t('notRun')}</div>
+                        ) : result.status === 'failed' ? (
+                            <div className="rounded border border-red-200 bg-red-50 p-2 text-red-700">
+                                {t('invalidResult')}
                             </div>
-                        );
-                    })()}
-                </ResizablePanel>
-                <ResizableHandle withHandle className="bg-transparent" />
-
-                {/* 句法特征评估 */}
-                <ResizablePanel
-                    defaultSize={33}
-                    minSize={20}
-                    className={cn('flex flex-col h-full rounded bg-white p-2 dark:bg-slate-900', panelCls)}
-                >
-                    <div className="mb-1 text-[11px] font-semibold text-foreground">
-                        {t('syntaxFeatureAssessment')}
-                    </div>
-                    {(() => {
-                        const syn = asJson(qaSyntax);
-                        const issues: Array<{ type: string; span?: string; advice?: string }> =
-                            syn?.issues || [];
-                        const selectedMap: Record<string, boolean> = (syn?.selectedMap ||
-                            {}) as Record<string, boolean>;
-                        const makeKey = (
-                            it: { type?: string; span?: string; advice?: string },
-                            idx: number
-                        ) => {
-                            const t = String(it?.type || '')
-                                .trim()
-                                .toLowerCase();
-                            const s = String(it?.span || '')
-                                .trim()
-                                .toLowerCase();
-                            const a = String(it?.advice || '')
-                                .trim()
-                                .toLowerCase();
-                            // 采用内容派生的键，避免重排导致的索引漂移
-                            return `${t}|${s}|${a}` || `idx:${idx}`;
-                        };
-                        const toggleSelect = async (key: string) => {
-                            try {
-                                const nextSelected = !(selectedMap?.[key] === true);
-                                const nextMap = {
-                                    ...(selectedMap || {}),
-                                    [key]: nextSelected,
-                                } as Record<string, boolean>;
-                                const nextSyn = { ...(syn || {}), selectedMap: nextMap } as any;
-                                setQAOutputs({ syntax: nextSyn });
-                                const docId = (activeDocumentItem as any)?.id;
-                                if (docId) {
-                                    try {
-                                        await saveQualityAssureResultsAction(docId, {
-                                            syntax: nextSyn,
-                                        });
-                                    } catch { }
-                                }
-                            } catch { }
-                        };
-                        if (!syn)
-                            return (
-                                <div className="text-xs text-foreground/60">{t('notDetected')}</div>
-                            );
-                        return (
-                            <div className="space-y-1 overflow-auto text-xs">
-                                {issues.length ? (
-                                    issues.map((it, i) => {
-                                        const key = makeKey(it, i);
-                                        const checked = selectedMap?.[key] === true;
-                                        return (
-                                            <div
-                                                key={key}
+                        ) : result.relations.length ? (
+                            result.relations.map(relation => (
+                                <div
+                                    key={relation.id}
+                                    className="rounded-md border border-slate-200 p-2 dark:border-slate-800"
+                                >
+                                    <div className="mb-1.5 flex flex-wrap items-center gap-1">
+                                        <Badge variant="outline" className="text-[10px]">
+                                            {t(`categories.${relation.category}`)}
+                                        </Badge>
+                                        <Badge
+                                            variant="outline"
+                                            className={cn(
+                                                'text-[10px]',
+                                                relationClass(relation.status)
+                                            )}
+                                        >
+                                            {t(`relationStatus.${relation.status}`)}
+                                        </Badge>
+                                        {relation.severity && (
+                                            <Badge
+                                                variant="outline"
                                                 className={cn(
-                                                    'flex cursor-pointer items-start gap-2 rounded border px-2 py-1 hover:border-emerald-300/60',
-                                                    checked
-                                                        ? 'border-emerald-300 bg-emerald-50/40 dark:bg-emerald-900/10'
-                                                        : ''
+                                                    'text-[10px]',
+                                                    severityClass(relation.severity)
                                                 )}
-                                                role="button"
-                                                tabIndex={0}
-                                                onClick={() => toggleSelect(key)}
-                                                onKeyDown={e => {
-                                                    if (e.key === 'Enter' || e.key === ' ') {
-                                                        e.preventDefault();
-                                                        toggleSelect(key);
-                                                    }
-                                                }}
                                             >
-                                                <span className="whitespace-nowrap rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-800">
-                                                    {it.type || t('issueTag')}
-                                                </span>
-                                                <div className="flex-1">
-                                                    {it.span && (
-                                                        <div className="break-words text-foreground/80">
-                                                            {it.span}
-                                                        </div>
-                                                    )}
-                                                    {it.advice && (
-                                                        <div className="text-foreground/60">
-                                                            {t('advicePrefix')} {it.advice}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                                {checked && (
-                                                    <div className="pl-2 pt-0.5 text-emerald-600">
-                                                        <Check className="h-4 w-4" />
-                                                    </div>
-                                                )}
-                                            </div>
-                                        );
-                                    })
-                                ) : (
-                                    <div className="text-foreground/60">
-                                        No obvious issues found
+                                                {t(`severity.${relation.severity}`)}
+                                            </Badge>
+                                        )}
+                                        {typeof relation.confidence === 'number' && (
+                                            <span className="ml-auto text-[10px] text-muted-foreground">
+                                                {Math.round(relation.confidence * 100)}%
+                                            </span>
+                                        )}
                                     </div>
-                                )}
-                            </div>
-                        );
-                    })()}
+                                    <div className="grid grid-cols-[1fr_auto_1fr] items-start gap-2">
+                                        <div className="break-words rounded bg-slate-50 p-1.5 text-foreground/80 dark:bg-slate-900">
+                                            {relation.sourceSpan || '—'}
+                                        </div>
+                                        <ArrowRight className="mt-1.5 h-3.5 w-3.5 text-muted-foreground" />
+                                        <div className="break-words rounded bg-slate-50 p-1.5 text-foreground/80 dark:bg-slate-900">
+                                            {relation.targetSpan || '—'}
+                                        </div>
+                                    </div>
+                                    {relation.explanation && (
+                                        <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
+                                            {relation.explanation}
+                                        </p>
+                                    )}
+                                </div>
+                            ))
+                        ) : (
+                            <div className="text-muted-foreground">{t('noRelations')}</div>
+                        )}
+                    </div>
                 </ResizablePanel>
-                <ResizableHandle withHandle className="bg-transparent" />
-                {/* 句法嵌入翻译 */}
+
+                <ResizableHandle
+                    withHandle
+                    aria-label={t('resizePanels')}
+                    className={cn(isNarrow && 'hidden')}
+                />
+
                 <ResizablePanel
-                    defaultSize={34}
-                    minSize={20}
-                    className={cn('flex flex-col h-full flex-1 rounded bg-white p-2 dark:bg-slate-900', panelCls)}
+                    id="qa-review-panel-issues"
+                    defaultSize={36}
+                    minSize={24}
+                    className={cn(panelClass, isNarrow && activePanel !== 'issues' && 'hidden')}
+                    role={isNarrow ? 'tabpanel' : undefined}
+                    aria-labelledby={isNarrow ? 'qa-review-tab-issues' : undefined}
+                    aria-busy={savingSelection}
                 >
-                    <div className="flex items-center justify-between">
-                        <div className="mb-1 text-[11px] font-semibold text-foreground">
-                            {t('syntaxEmbedding')}
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <label className="flex items-center gap-1 text-[11px] text-foreground/70">
-                                <input
-                                    type="checkbox"
-                                    disabled={!baseline && !qaEmbeddedText}
-                                    checked={!!showDiff}
-                                    onChange={() => setShowDiff(v => !v)}
-                                />
-                                {t('showDiff')}
-                            </label>
+                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                        <h3 className="text-xs font-semibold">{t('issuesTitle')}</h3>
+                        <div className="flex items-center gap-1">
                             <Button
+                                type="button"
+                                variant="outline"
                                 size="sm"
-                                className="h-6 px-2 py-0 text-[11px]"
-                                onClick={genSyntaxEmbedded}
-                                disabled={loadingEmbedded}
-                                title={t('reEmbedTitle')}
+                                className="h-9 px-2 text-[10px]"
+                                disabled={
+                                    savingSelection ||
+                                    !issues.length ||
+                                    !result.evaluation?.id ||
+                                    result.status !== 'complete'
+                                }
+                                onClick={selectBySeverity}
                             >
-                                {loadingEmbedded ? (
-                                    <>
-                                        <Loader2 className="h-4 w-4 animate-spin" />
-                                        <span className="whitespace-nowrap">{t('generating')}</span>
-                                    </>
-                                ) : (
-                                    t('reEmbed')
-                                )}
+                                {t('selectHighRisk')}
+                            </Button>
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-9 px-2 text-[10px]"
+                                disabled={
+                                    savingSelection ||
+                                    !selectedIds.length ||
+                                    !result.evaluation?.id ||
+                                    result.status !== 'complete'
+                                }
+                                onClick={clearSelection}
+                            >
+                                {t('clearSelection')}
                             </Button>
                         </div>
                     </div>
-
-                    {(() => {
-                        const a = String(baseline || '');
-                        const b = String(qaEmbeddedText || '');
-                        const hasAny = (a && a.length > 0) || (b && b.length > 0);
-                        const d =
-                            showDiff && baseline !== null && qaEmbeddedText !== null
-                                ? wordDiff(a, b)
-                                : null;
-                        return (
-                            <div className="mt-4 space-y-2 overflow-auto text-xs">
-                                {!hasAny && (
-                                    <div className="text-foreground/60">{t('noResults')}</div>
-                                )}
-                                {hasAny && (
-                                    <>
-                                        <div
-                                            className={cn(
-                                                'cursor-pointer rounded-md border bg-muted/30 p-2 transition-colors hover:border-emerald-300/60',
-                                                appliedKind === 'baseline'
-                                                    ? 'border-emerald-400 bg-emerald-50/40 dark:bg-emerald-900/10'
-                                                    : 'border-slate-200 dark:border-slate-800'
-                                            )}
-                                            role="button"
-                                            tabIndex={0}
-                                            onClick={() => {
-                                                if (a) {
-                                                    applyToTarget(String(a));
-                                                    setAppliedKind('baseline');
+                    <div className="min-h-0 flex-1 space-y-2 overflow-auto pr-1 text-xs">
+                        {!hasRun ? (
+                            <div className="text-muted-foreground">{t('notDetected')}</div>
+                        ) : issues.length ? (
+                            issues.map(issue => {
+                                const selected = result.selectedMap[issue.id] === true;
+                                return (
+                                    <label
+                                        key={issue.id}
+                                        className={cn(
+                                            'block cursor-pointer rounded-md border p-2 transition-colors',
+                                            selected
+                                                ? 'border-emerald-300 bg-emerald-50/50 dark:border-emerald-800 dark:bg-emerald-950/20'
+                                                : 'border-slate-200 hover:border-purple-300 dark:border-slate-800 dark:hover:border-purple-800'
+                                        )}
+                                    >
+                                        <div className="flex items-start gap-2">
+                                            <input
+                                                type="checkbox"
+                                                className="mt-0.5 h-4 w-4 rounded border-slate-300 accent-emerald-600"
+                                                checked={selected}
+                                                disabled={
+                                                    savingSelection ||
+                                                    !result.evaluation?.id ||
+                                                    result.status !== 'complete'
                                                 }
-                                            }}
-                                            onKeyDown={e => {
-                                                if ((e.key === 'Enter' || e.key === ' ') && a) {
-                                                    e.preventDefault();
-                                                    applyToTarget(String(a));
-                                                    setAppliedKind('baseline');
-                                                }
-                                            }}
-                                        >
-                                            <div className="mb-1 flex w-full items-center justify-between text-[11px]">
-                                                <div
-                                                    className={cn(
-                                                        'flex w-full items-center justify-between gap-2',
-                                                        appliedKind === 'baseline'
-                                                            ? 'text-emerald-700 dark:text-emerald-300'
-                                                            : 'text-foreground/60'
-                                                    )}
-                                                >
-                                                    <span>{t('termEmbeddedTranslation')}</span>
-                                                    {appliedKind === 'baseline' && (
-                                                        <Badge
-                                                            variant="outline"
-                                                            className="h-4 border-emerald-300 px-1 py-0 text-[10px] text-emerald-700"
-                                                        >
-                                                            {t('applied')}
-                                                        </Badge>
-                                                    )}
+                                                onChange={() => toggleIssue(issue)}
+                                                aria-label={t('selectIssue', {
+                                                    category: t(`categories.${issue.category}`),
+                                                })}
+                                            />
+                                            <div className="min-w-0 flex-1">
+                                                <div className="flex flex-wrap items-center gap-1">
+                                                    <Badge
+                                                        variant="outline"
+                                                        className={cn(
+                                                            'text-[10px]',
+                                                            severityClass(issue.severity)
+                                                        )}
+                                                    >
+                                                        {issue.severity
+                                                            ? t(`severity.${issue.severity}`)
+                                                            : t('unrated')}
+                                                    </Badge>
+                                                    <Badge
+                                                        variant="outline"
+                                                        className="text-[10px]"
+                                                    >
+                                                        {t(`categories.${issue.category}`)}
+                                                    </Badge>
                                                 </div>
-                                            </div>
-                                            <div className="whitespace-pre-wrap break-words">
-                                                {d ? (
-                                                    d.baseline.map((t, idx) => {
-                                                        const isSpace = /^\s+$/.test(t.text);
-                                                        if (t.type === 'del' && !isSpace) {
-                                                            return (
-                                                                <mark
-                                                                    key={idx}
-                                                                    className="rounded-[2px] bg-red-100/70 font-normal text-red-800 ring-1 ring-red-200"
-                                                                >
-                                                                    {t.text}
-                                                                </mark>
-                                                            );
-                                                        }
-                                                        return (
-                                                            <span
-                                                                key={idx}
-                                                                className="text-foreground/80"
-                                                            >
-                                                                {t.text}
-                                                            </span>
-                                                        );
-                                                    })
-                                                ) : (
-                                                    <span className="text-foreground/80">
-                                                        {a.slice(0, 2000)}
-                                                    </span>
+                                                {(issue.sourceSpan || issue.targetSpan) && (
+                                                    <div className="mt-1.5 grid gap-1 text-[11px]">
+                                                        {issue.sourceSpan && (
+                                                            <div>
+                                                                <span className="text-muted-foreground">
+                                                                    {t('sourceEvidence')}
+                                                                </span>{' '}
+                                                                {issue.sourceSpan}
+                                                            </div>
+                                                        )}
+                                                        {issue.targetSpan && (
+                                                            <div>
+                                                                <span className="text-muted-foreground">
+                                                                    {t('targetEvidence')}
+                                                                </span>{' '}
+                                                                {issue.targetSpan}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
+                                                {issue.message && (
+                                                    <p className="mt-1.5 leading-relaxed text-foreground/80">
+                                                        {issue.message}
+                                                    </p>
+                                                )}
+                                                {issue.advice && (
+                                                    <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                                                        {t('advicePrefix')} {issue.advice}
+                                                    </p>
                                                 )}
                                             </div>
                                         </div>
-                                        {qaEmbeddedText !== null && (
-                                            <div
-                                                className={cn(
-                                                    'cursor-pointer rounded-md border bg-muted/30 p-2 transition-colors hover:border-emerald-300/60',
-                                                    appliedKind === 'embedded'
-                                                        ? 'border-emerald-400 bg-emerald-50/40 dark:bg-emerald-900/10'
-                                                        : 'border-slate-200 dark:border-slate-800'
-                                                )}
-                                                role="button"
-                                                tabIndex={0}
-                                                onClick={() => {
-                                                    if (b) {
-                                                        applyToTarget(String(b));
-                                                        setAppliedKind('embedded');
-                                                    }
-                                                }}
-                                                onKeyDown={e => {
-                                                    if ((e.key === 'Enter' || e.key === ' ') && b) {
-                                                        e.preventDefault();
-                                                        applyToTarget(String(b));
-                                                        setAppliedKind('embedded');
-                                                    }
-                                                }}
-                                            >
-                                                <div className="mb-1 flex w-full items-center justify-between text-[11px]">
-                                                    <div
-                                                        className={cn(
-                                                            'flex w-full items-center justify-between gap-2',
-                                                            appliedKind === 'embedded'
-                                                                ? 'text-emerald-700 dark:text-emerald-300'
-                                                                : 'text-foreground/60'
-                                                        )}
-                                                    >
-                                                        <span>{t('syntaxAdviceEmbedded')}</span>
-                                                        {appliedKind === 'embedded' && (
-                                                            <Badge
-                                                                variant="outline"
-                                                                className="h-4 border-emerald-300 px-1 py-0 text-[10px] text-emerald-700"
-                                                            >
-                                                                {t('applied')}
-                                                            </Badge>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                                <div className="whitespace-pre-wrap break-words">
-                                                    {d ? (
-                                                        d.embedded.map((t, idx) => {
-                                                            const isSpace = /^\s+$/.test(t.text);
-                                                            if (t.type === 'ins' && !isSpace) {
-                                                                return (
-                                                                    <mark
-                                                                        key={idx}
-                                                                        className="rounded-[2px] bg-emerald-100/70 font-normal text-emerald-800 ring-1 ring-emerald-200"
-                                                                    >
-                                                                        {t.text}
-                                                                    </mark>
-                                                                );
-                                                            }
-                                                            return (
-                                                                <span
-                                                                    key={idx}
-                                                                    className="text-foreground/80"
-                                                                >
-                                                                    {t.text}
-                                                                </span>
-                                                            );
-                                                        })
-                                                    ) : (
-                                                        <span className="text-foreground/80">
-                                                            {b.slice(0, 2000)}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        )}
-                                    </>
-                                )}
+                                    </label>
+                                );
+                            })
+                        ) : result.status === 'complete' && !result.legacy ? (
+                            <div className="flex items-start gap-2 rounded border border-emerald-200 bg-emerald-50 p-2 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300">
+                                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+                                {t('noIssuesComplete')}
                             </div>
-                        );
-                    })()}
+                        ) : (
+                            <div className="text-muted-foreground">{t('noIssuesUnknown')}</div>
+                        )}
+                    </div>
+                </ResizablePanel>
+
+                <ResizableHandle
+                    withHandle
+                    aria-label={t('resizePanels')}
+                    className={cn(isNarrow && 'hidden')}
+                />
+
+                <ResizablePanel
+                    id="qa-review-panel-rewrite"
+                    defaultSize={32}
+                    minSize={22}
+                    className={cn(panelClass, isNarrow && activePanel !== 'rewrite' && 'hidden')}
+                    role={isNarrow ? 'tabpanel' : undefined}
+                    aria-labelledby={isNarrow ? 'qa-review-tab-rewrite' : undefined}
+                >
+                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                        <h3 className="text-xs font-semibold">{t('rewriteTitle')}</h3>
+                        <label className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                            <input
+                                type="checkbox"
+                                checked={showDiff}
+                                disabled={!baseText || !proposalText}
+                                onChange={() => setShowDiff(value => !value)}
+                            />
+                            {t('showDiff')}
+                        </label>
+                    </div>
+
+                    <Button
+                        type="button"
+                        size="sm"
+                        className="mb-2 min-h-9 w-full text-xs"
+                        disabled={
+                            loadingEmbedded ||
+                            !selectedIds.length ||
+                            !result.evaluation?.id ||
+                            result.status !== 'complete' ||
+                            revisionContextStale
+                        }
+                        onClick={generateRevision}
+                    >
+                        {loadingEmbedded ? (
+                            <>
+                                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                                {t('generating')}
+                            </>
+                        ) : (
+                            t('regenerateSelected', { count: selectedIds.length })
+                        )}
+                    </Button>
+
+                    {hasRun && (!result.evaluation?.id || revisionContextStale) && (
+                        <div className="mb-2 flex gap-1.5 rounded border border-amber-200 bg-amber-50 p-2 text-[11px] text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+                            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                            {t('rerunRequired')}
+                        </div>
+                    )}
+
+                    <div
+                        className="min-h-0 flex-1 space-y-2 overflow-auto pr-1 text-xs"
+                        aria-live="polite"
+                    >
+                        {!baseText && !proposalText && (
+                            <div className="text-muted-foreground">{t('noResults')}</div>
+                        )}
+                        {baseText && (
+                            <div
+                                className={cn(
+                                    'rounded-md border p-2',
+                                    baseApplied
+                                        ? 'border-emerald-300 bg-emerald-50/30 dark:border-emerald-800 dark:bg-emerald-950/20'
+                                        : 'border-slate-200 dark:border-slate-800'
+                                )}
+                            >
+                                <div className="mb-1.5 flex items-center justify-between gap-2">
+                                    <span className="text-[11px] font-medium">
+                                        {t('baseTranslation')}
+                                    </span>
+                                    {baseApplied && (
+                                        <Badge
+                                            variant="outline"
+                                            className="border-emerald-300 text-[10px] text-emerald-700"
+                                        >
+                                            {t('applied')}
+                                        </Badge>
+                                    )}
+                                </div>
+                                <div className="whitespace-pre-wrap break-words leading-relaxed text-foreground/80">
+                                    {diff
+                                        ? diff.baseline.map((part, index) =>
+                                              part.type === 'del' && !/^\s+$/.test(part.text) ? (
+                                                  <mark
+                                                      key={index}
+                                                      className="bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200"
+                                                  >
+                                                      {part.text}
+                                                  </mark>
+                                              ) : (
+                                                  <span key={index}>{part.text}</span>
+                                              )
+                                          )
+                                        : baseText}
+                                </div>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="mt-2 h-9 text-[11px]"
+                                    disabled={!result.evaluation?.id || revisionContextStale}
+                                    onClick={() => void applyToTarget('base')}
+                                >
+                                    {t('restoreBase')}
+                                </Button>
+                            </div>
+                        )}
+                        {proposalText && (
+                            <div
+                                className={cn(
+                                    'rounded-md border p-2',
+                                    proposalApplied
+                                        ? 'border-emerald-300 bg-emerald-50/30 dark:border-emerald-800 dark:bg-emerald-950/20'
+                                        : proposalStale
+                                          ? 'border-amber-300 bg-amber-50/40 dark:border-amber-800 dark:bg-amber-950/20'
+                                          : 'border-slate-200 dark:border-slate-800'
+                                )}
+                            >
+                                <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+                                    <span className="text-[11px] font-medium">
+                                        {t('revisedTranslation')}
+                                    </span>
+                                    {proposalApplied && (
+                                        <Badge
+                                            variant="outline"
+                                            className="border-emerald-300 text-[10px] text-emerald-700"
+                                        >
+                                            {t('applied')}
+                                        </Badge>
+                                    )}
+                                    {proposalStale && (
+                                        <Badge
+                                            variant="outline"
+                                            className="border-amber-300 text-[10px] text-amber-700"
+                                        >
+                                            {t('staleProposal')}
+                                        </Badge>
+                                    )}
+                                </div>
+                                <div className="whitespace-pre-wrap break-words leading-relaxed text-foreground/80">
+                                    {diff
+                                        ? diff.embedded.map((part, index) =>
+                                              part.type === 'ins' && !/^\s+$/.test(part.text) ? (
+                                                  <mark
+                                                      key={index}
+                                                      className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200"
+                                                  >
+                                                      {part.text}
+                                                  </mark>
+                                              ) : (
+                                                  <span key={index}>{part.text}</span>
+                                              )
+                                          )
+                                        : proposalText}
+                                </div>
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    className="mt-2 h-9 text-[11px]"
+                                    disabled={proposalStale}
+                                    onClick={() => void applyToTarget('proposal')}
+                                >
+                                    {t('applyToTarget')}
+                                </Button>
+                            </div>
+                        )}
+                    </div>
                 </ResizablePanel>
             </ResizablePanelGroup>
         </div>

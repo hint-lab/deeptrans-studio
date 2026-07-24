@@ -3,12 +3,13 @@
 import {
     clearDocumentItemIntermediateResultsDB,
     fetchDocumentItemIntermediateResultsDB,
-    findDocumentItemMetadataByIdDB,
     updateDocumentItemByIdDB,
 } from '@/db/documentItem';
+import { prisma } from '@/lib/db';
 import { requireWritableDocumentItem } from '@/lib/guards';
 import { createLogger } from '@/lib/logger';
 import { sourceRevision, withSourceRevisions } from '@/lib/source-revision';
+import { Prisma } from '@prisma/client';
 const logger = createLogger(
     {
         type: 'actions:intermediate-results',
@@ -72,20 +73,51 @@ export async function saveQualityAssureResultsAction(
         syntax?: any;
         syntaxEmbedded?: any;
         dislikedPairs?: Record<string, boolean>;
-    }
+    },
+    expected?: { sourceText?: string; targetText?: string }
 ) {
     try {
-        await requireWritableDocumentItem(id);
-        const meta = await findDocumentItemMetadataByIdDB(id);
-        return await updateDocumentItemByIdDB(id, {
-            qualityAssureBiTerm: results.biTerm as any,
-            qualityAssureSyntax: results.syntax as any,
-            qualityAssureSyntaxEmbedded: results.syntaxEmbedded as any,
-            // 将用户踩的对对齐结果存入 metadata
-            metadata: results.dislikedPairs
-                ? { ...(meta || {}), qaDislikedPairs: results.dislikedPairs }
-                : undefined,
-        } as any);
+        const item = await requireWritableDocumentItem(id);
+        if (
+            expected?.sourceText !== undefined &&
+            String((item as any).sourceText || '') !== expected.sourceText
+        ) {
+            throw new Error('当前分段原文已变化，已拒绝写入过期质检结果');
+        }
+        if (
+            expected?.targetText !== undefined &&
+            String((item as any).targetText || '') !== expected.targetText
+        ) {
+            throw new Error('当前分段译文已变化，已拒绝写入过期质检结果');
+        }
+        const meta = ((item as any).metadata as Record<string, unknown> | null) || {};
+        const hasOwn = (key: keyof typeof results) =>
+            Object.prototype.hasOwnProperty.call(results, key);
+        const update: Record<string, any> = {};
+        if (hasOwn('biTerm')) {
+            update.qualityAssureBiTerm = results.biTerm === null ? Prisma.DbNull : results.biTerm;
+        }
+        if (hasOwn('syntax')) {
+            update.qualityAssureSyntax = results.syntax === null ? Prisma.DbNull : results.syntax;
+        }
+        if (hasOwn('syntaxEmbedded')) {
+            update.qualityAssureSyntaxEmbedded =
+                results.syntaxEmbedded === null ? Prisma.DbNull : results.syntaxEmbedded;
+        }
+        if (hasOwn('dislikedPairs')) {
+            update.metadata = {
+                ...(meta || {}),
+                qaDislikedPairs: results.dislikedPairs || {},
+            };
+        }
+        const written = await prisma.documentItem.updateMany({
+            where: { id, updatedAt: (item as any).updatedAt },
+            data: update,
+        });
+        if (Number(written?.count || 0) !== 1) {
+            throw new Error('当前分段已被其他操作更新，请重试');
+        }
+        return written;
     } catch (error) {
         logger.error('保存质检结果失败:', error);
         throw error;
@@ -124,9 +156,10 @@ export async function getDocumentItemIntermediateResultsAction(id: string) {
         const storedRevision = String(metadata.preTranslateSourceRevision || '');
         const hasPreTranslateResult = Boolean(
             (item as any)?.preTranslateEmbedded ||
-                (Array.isArray((item as any)?.preTranslateTerms) &&
-                    (item as any).preTranslateTerms.length) ||
-                (Array.isArray((item as any)?.preTranslateDict) && (item as any).preTranslateDict.length)
+            (Array.isArray((item as any)?.preTranslateTerms) &&
+                (item as any).preTranslateTerms.length) ||
+            (Array.isArray((item as any)?.preTranslateDict) &&
+                (item as any).preTranslateDict.length)
         );
 
         return {

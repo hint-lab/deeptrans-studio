@@ -821,8 +821,8 @@
     "Agents": {
         "roles": {
             "professional_assistant": "专业助手",
-            "syntax_evaluator": "句法连接词和情态词的用法评估助手",
-            "syntax_analyzer": "句法对比分析助手",
+            "syntax_evaluator": "句法结构与规范关系评估助手",
+            "syntax_analyzer": "双语结构关系对齐助手",
             "term_extractor": "术语提取助手",
             "terminology_extractor": "文档级术语提取助手",
             "terminology_translator": "术语翻译助手",
@@ -937,9 +937,13 @@
                 "task_instruction": "任务：在不改变原意的前提下，按上述建议对'当前译文'做最小幅度改写。仅输出最终改写后的译文纯文本。"
             },
             "syntax_evaluate": {
-                "output_format": "输出格式：{ \"issues\": Array<{\"type\":string, \"span\"?:string, \"advice\"?:string}> }",
-                "type_options": "type 可取：modality, conditional, logic, punctuation, number, parenthesis, case, register, other",
-                "focus": "重点检查：1) 情态句（modality）是否自然、语气是否合宜；2) 条件句（conditional）结构与连接词是否符合惯用法；3) 逻辑衔接（logic）与指代是否清晰；同时兼顾标点/数字/括号/大小写/文体等级。"
+                "output_format": "仅输出 JSON：{\"version\":2,\"relations\":[{\"id\":string,\"category\":string,\"sourceSpan\":string,\"targetSpan\":string,\"sourceFunction\"?:string,\"targetFunction\"?:string,\"status\":\"preserved|shifted|omitted|added|uncertain\",\"severity\"?:\"critical|major|minor\",\"confidence\":number,\"explanation\"?:string}],\"issues\":[{\"id\":string,\"relationId\"?:string,\"category\":string,\"severity\":\"critical|major|minor\",\"sourceSpan\":string,\"targetSpan\":string,\"message\":string,\"advice\":string}],\"dimensions\":[{\"category\":string,\"status\":\"pass|issue|not_applicable|uncertain\",\"note\"?:string}]}。数组为空时也必须保留字段。dimensions 必须为下列十个类别各返回且仅返回一条有效 status，无法适用时也要返回 not_applicable。",
+                "type_options": "category 必须取：modality_deontic, condition_exception, negation_scope, actor_role, coordination_logic, attachment_boundary, temporal_sequence, quantifier_number, reference_coreference, grammar_register。dimensions 必须逐项覆盖全部 10 类。",
+                "relation_rules": "逐一核对源文与译文的规范力/许可义务、条件和例外、否定及作用域、施事与责任主体、并列与 and-or 逻辑、修饰附着和边界、时间顺序与期限、数量和量词、条款指代与共指、目标语语法和法律文体。每个有语言证据的关系都写入 relations，不得只列连接词。",
+                "severity_rules": "critical 仅用于会反转或遗漏义务、禁止、否定、条件、例外、责任主体等核心法律效果的问题；major 用于实质范围或逻辑偏移；minor 用于不改变核心效果的局部语法或表达问题。低置信度时用 uncertain，不能武断升级风险。",
+                "review_boundary": "只报告源文与译文之间可由证据支持的结构或规范意义问题；不要把偏好的润色写成句法错误，不要改写事实、术语、数字或法律效果。advice 必须是最小修改。",
+                "cue_hints": "以下是确定性规则找到的高召回线索，仅用于确保逐项核对，不代表已判定有错：{cues}",
+                "focus": "先判断关系是否保持，再报告风险。无问题时 issues 返回空数组，并对已检查维度给出 pass；不适用维度标记 not_applicable。"
             },
             "mono_term_extract": {
                 "output_format": "输出 JSON 数组，每项 {\"term\": string, \"score\"?: number}"
@@ -1328,7 +1332,72 @@
             "termEmbeddedTranslation": "术语嵌入译文",
             "syntaxAdviceEmbedded": "句法建议嵌入译文",
             "markedAsPoor": "已标记为不佳",
-            "markAsPoor": "标记为不佳"
+            "markAsPoor": "标记为不佳",
+            "title": "句法与规范关系质检",
+            "humanReviewNote": "模型质检结果需人工确认，不构成法律结论。",
+            "relationsTitle": "结构关系对齐",
+            "issuesTitle": "风险与修订建议",
+            "rewriteTitle": "质检修订译文",
+            "relationCount": "关系 {count}",
+            "issueCount": "问题 {count}",
+            "selectedCount": "已选 {selected}/{total}",
+            "dimensionsLabel": "质检维度",
+            "legacyResult": "旧版结果",
+            "incompleteResult": "质检结果不完整",
+            "incompleteWarning": "本次质检未覆盖全部必检维度，请重新运行质检后再生成修订译文。",
+            "reviewSections": "质检复核分区",
+            "invalidResult": "质检结果无法解析，请重新运行质检。",
+            "noRelations": "未识别到需要对齐的结构关系",
+            "noIssuesComplete": "已完成全部维度检查，未发现显著结构问题。",
+            "noIssuesUnknown": "没有可确认的问题；旧版或不完整结果建议重新质检。",
+            "selectHighRisk": "选择严重/重要",
+            "clearSelection": "清空",
+            "selectIssue": "选择{category}问题",
+            "sourceEvidence": "原文：",
+            "targetEvidence": "译文：",
+            "regenerateSelected": "按已选建议生成（{count}）",
+            "selectAtLeastOne": "请先勾选至少一条质检问题",
+            "rerunRequired": "该结果未绑定当前评估版本，请重新质检",
+            "revisionGenerated": "已按所选问题生成修订译文",
+            "baseTranslation": "质检基线译文",
+            "revisedTranslation": "质检修订译文",
+            "restoreBase": "恢复基线译文",
+            "applyToTarget": "应用到译文",
+            "staleProposal": "已过期",
+            "loadFailed": "质检结果加载失败",
+            "selectionSaveFailed": "问题选择保存失败",
+            "resizePanels": "调整质检面板大小",
+            "unrated": "未评级",
+            "categories": {
+                "modality_deontic": "规范效力与情态",
+                "condition_exception": "条件与例外",
+                "negation_scope": "否定与作用域",
+                "actor_role": "主体与角色",
+                "coordination_logic": "并列与选择逻辑",
+                "attachment_boundary": "修饰与管辖边界",
+                "temporal_sequence": "时序与期限",
+                "quantifier_number": "数量与范围",
+                "reference_coreference": "指代与条款引用",
+                "grammar_register": "语法与法律文体"
+            },
+            "dimensionStatus": {
+                "pass": "通过",
+                "issue": "有问题",
+                "not_applicable": "不适用",
+                "uncertain": "待确认"
+            },
+            "relationStatus": {
+                "preserved": "对应保持",
+                "shifted": "关系偏移",
+                "omitted": "译文遗漏",
+                "added": "译文新增",
+                "uncertain": "待人工确认"
+            },
+            "severity": {
+                "critical": "严重",
+                "major": "重要",
+                "minor": "轻微"
+            }
         },
         "explorerPanel": {
             "files": "文件",
@@ -1457,9 +1526,9 @@
             "termExtraction": "术语抽取",
             "dictionaryQuery": "词典查询",
             "termEmbeddedTranslation": "术语嵌入翻译",
-            "syntaxEvaluation": "句法评估",
-            "syntaxSuggestion": "句法建议",
-            "syntaxEmbeddedTranslation": "句法嵌入翻译",
+            "syntaxEvaluation": "结构关系对齐",
+            "syntaxSuggestion": "结构风险识别",
+            "syntaxEmbeddedTranslation": "按选项生成修订",
             "discourseQuery": "语篇查询",
             "discourseEvaluation": "语篇评估",
             "discourseEmbeddedTranslation": "语篇嵌入翻译",
@@ -1467,7 +1536,10 @@
             "query": "查询",
             "embed": "嵌入",
             "complete": "完成",
-            "modalConjunctions": "情态/连词",
+            "modalConjunctions": "结构关系",
+            "relationCoverage": "十维关系检查",
+            "riskClassification": "风险分级",
+            "humanSelection": "人工选择",
             "syntax": "句法",
             "evaluation": "评估",
             "embeddedTranslation": "嵌入翻译"
@@ -1504,8 +1576,8 @@
             "ERROR": "错误",
             "RUNNING": "运行中",
             "START": "开始",
-            "oneClickCompletion": "一键完成",
-            "oneClickCompletionDesc": "从当前分段开始，自动完成所有后续流程",
+            "oneClickCompletion": "自动运行至人工复核",
+            "oneClickCompletionDesc": "自动执行可安全完成的步骤，并在质检复核处停下",
             "groups": {
                 "preTranslation": "预翻译",
                 "qaProcess": "质检",

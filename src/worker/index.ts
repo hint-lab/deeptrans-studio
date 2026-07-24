@@ -34,6 +34,29 @@ const logger = createLogger(
 
 const connection = getQueueConnection();
 
+async function markQABatchItemTerminal(
+    batchId: string,
+    itemId: string,
+    outcome: 'done' | 'failed'
+): Promise<{ marked: boolean; count: number }> {
+    const result = (await connection.eval(
+        `
+        local inserted = redis.call('set', KEYS[1], ARGV[1], 'EX', ARGV[2], 'NX')
+        if inserted then
+            local count = redis.call('incr', KEYS[2])
+            return {1, count}
+        end
+        return {0, tonumber(redis.call('get', KEYS[2]) or '0')}
+        `,
+        2,
+        `qa.${batchId}.terminal.${itemId}`,
+        `qa.${batchId}.${outcome}`,
+        outcome,
+        String(TTL_BATCH)
+    )) as [number | string, number | string];
+    return { marked: Number(result?.[0]) === 1, count: Number(result?.[1] || 0) };
+}
+
 async function assertJobCanWriteItem(jobData: any) {
     const itemId = String(jobData?.id || '');
     const userId = String(jobData?.userId || '');
@@ -125,25 +148,30 @@ const qaWorker = createWorker(
         const { id, sourceText, targetText, targetLanguage, domain, tenantId, userId, batchId } =
             job.data as any;
         const cancel = await connection.get(`qa.${batchId}.cancel`);
-        if (cancel === '1') throw new Error('JOB_CANCELED');
+        if (cancel === '1') {
+            job.discard();
+            throw new Error('JOB_CANCELED');
+        }
         const res = await runQualityAssureForOwner(
             sourceText,
             targetText,
             { userId, tenantId },
             { targetLanguage, domain }
         );
-        await connection.set(
+        await setJSONWithTTL(
+            connection,
             `qa.${batchId}.item.${id}`,
-            JSON.stringify({
+            {
                 id,
                 qualityAssureBiTerm: res?.biTerm ?? undefined,
                 qualityAssureSyntax: res?.syntax ?? undefined,
-                qualityAssureSyntaxEmbedded: res?.syntaxEmbedded ?? undefined,
-            })
+                qualityAssureSyntaxEmbedded: null,
+            },
+            TTL_BATCH
         );
-        await connection.incr(`qa.${batchId}.done`);
+        const terminal = await markQABatchItemTerminal(batchId, id, 'done');
         const total = Number(await connection.get(`qa.${batchId}.total`)) || 0;
-        const done = Number(await connection.get(`qa.${batchId}.done`)) || 0;
+        const done = terminal.count;
         const percent = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
         await job.updateProgress(percent);
         logger.info(`[qa] job=${job.id} QA pipeline complete`);
@@ -164,11 +192,25 @@ qaWorker.on('failed', async (job, err) => {
     logger.error(`[qa] failed job=${job?.id} error=${err?.message || err}`);
     try {
         const batchId = (job?.data as any)?.batchId;
-        if (batchId) {
-            await connection.incr(`qa.${batchId}.failed`).catch(() => {});
-            await connection
-                .set(`qa.${batchId}.fail.${job?.id}`, String((err as Error)?.message || err))
-                .catch(() => {});
+        const attempts = Math.max(1, Number(job?.opts?.attempts || 1));
+        const isFinalFailure =
+            (err as Error)?.message === 'JOB_CANCELED' ||
+            Number(job?.attemptsMade || 0) >= attempts;
+        const itemId = String((job?.data as any)?.id || job?.id || '');
+        if (batchId && itemId && isFinalFailure) {
+            const terminal = await markQABatchItemTerminal(batchId, itemId, 'failed').catch(
+                () => undefined
+            );
+            if (terminal?.marked) {
+                await connection
+                    .set(
+                        `qa.${batchId}.fail.${itemId}`,
+                        String((err as Error)?.message || err),
+                        'EX',
+                        TTL_BATCH
+                    )
+                    .catch(() => {});
+            }
         }
     } catch {}
 });

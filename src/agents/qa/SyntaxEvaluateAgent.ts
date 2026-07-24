@@ -1,5 +1,10 @@
 import { BaseAgent, type AgentRunContext } from '../base';
 import { createAgentI18n } from '../i18n';
+import {
+    collectSyntaxCueHints,
+    normalizeSyntaxQualityResult,
+    type SyntaxQualityResult,
+} from '@/lib/syntax-quality';
 
 export class SyntaxEvaluateAgent extends BaseAgent<
     {
@@ -10,7 +15,7 @@ export class SyntaxEvaluateAgent extends BaseAgent<
         prompt?: string;
         locale?: string;
     },
-    any
+    SyntaxQualityResult
 > {
     constructor(targetLanguage?: string, domain?: string, locale?: string) {
         super({
@@ -34,7 +39,7 @@ export class SyntaxEvaluateAgent extends BaseAgent<
             locale?: string;
         },
         ctx?: AgentRunContext
-    ): Promise<any> {
+    ): Promise<SyntaxQualityResult> {
         // 使用上下文中的locale或输入中的locale
         const locale = ctx?.locale || input.locale || this.locale;
         const i18n = await createAgentI18n(locale);
@@ -43,6 +48,9 @@ export class SyntaxEvaluateAgent extends BaseAgent<
         const systemPrompt = await this.buildPrompt('json', [
             i18n.getAgentPrompt('syntax_evaluate', 'output_format'),
             i18n.getAgentPrompt('syntax_evaluate', 'type_options'),
+            i18n.getAgentPrompt('syntax_evaluate', 'relation_rules'),
+            i18n.getAgentPrompt('syntax_evaluate', 'severity_rules'),
+            i18n.getAgentPrompt('syntax_evaluate', 'review_boundary'),
         ]);
 
         // 构建用户提示词
@@ -57,9 +65,14 @@ export class SyntaxEvaluateAgent extends BaseAgent<
         const sourceText = i18n.getUserPrompt('source_text', { text: input.source || '' });
         const targetText = i18n.getUserPrompt('target_text', { text: input.target || '' });
         const focus = i18n.getAgentPrompt('syntax_evaluate', 'focus');
+        const cues = collectSyntaxCueHints(input.source || '', input.target || '');
+        const cueHints = i18n.getAgentPrompt('syntax_evaluate', 'cue_hints', {
+            cues: JSON.stringify(cues),
+        });
 
-        const userContent = `${userPref}${lang}\n${dom}\n\n${sourceText}\n\n${targetText}\n\n${focus}`;
+        const userContent = `${userPref}${lang}\n${dom}\n\n${sourceText}\n\n${targetText}\n\n${cueHints}\n${focus}`;
         const messages = this.messages(systemPrompt, userContent);
-        return this.json(messages, { maxTokens: 900 });
+        const raw = await this.json(messages, { maxTokens: 2200 });
+        return normalizeSyntaxQualityResult(raw);
     }
 }

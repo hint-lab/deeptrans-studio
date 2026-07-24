@@ -1,9 +1,16 @@
 import { BaseAgent, type AgentRunContext } from '../base';
 import { createAgentI18n } from '../i18n';
+import {
+    buildSyntaxAlignmentResult,
+    normalizeSyntaxQualityResult,
+    type SyntaxQualityResult,
+} from '@/lib/syntax-quality';
+
+type SyntaxAlignmentResult = ReturnType<typeof buildSyntaxAlignmentResult>;
 
 export class SyntaxMarkerExtractAgent extends BaseAgent<
     { source: string; target: string; prompt?: string; locale?: string },
-    any
+    SyntaxAlignmentResult
 > {
     constructor(locale?: string) {
         super({
@@ -19,7 +26,7 @@ export class SyntaxMarkerExtractAgent extends BaseAgent<
     async execute(
         input: { source: string; target: string; prompt?: string; locale?: string },
         ctx?: AgentRunContext
-    ): Promise<any> {
+    ): Promise<SyntaxAlignmentResult> {
         const locale = ctx?.locale || input.locale || this.locale;
         const i18n = await createAgentI18n(locale);
 
@@ -46,6 +53,7 @@ export class SyntaxMarkerExtractAgent extends BaseAgent<
 
         const userContent = `${userPref}${sourceText}\n\n${targetText}\n\n${taskInstruction}\n${identifyMarkers}\n${establishCorrespondence}\n${evaluateAccuracy}\n${annotateTypes}\n${overallQuality}`;
         const messages = this.messages(systemPrompt, userContent);
-        return this.json(messages, { maxTokens: 900 });
+        const raw = await this.json<SyntaxQualityResult>(messages, { maxTokens: 1600 });
+        return buildSyntaxAlignmentResult(normalizeSyntaxQualityResult(raw));
     }
 }

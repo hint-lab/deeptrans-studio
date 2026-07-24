@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/db';
-import { type DocumentItem as PrismaDocumentItem } from '@prisma/client';
+import { Prisma, type DocumentItem as PrismaDocumentItem } from '@prisma/client';
 
 export type DocumentItem = PrismaDocumentItem;
 
@@ -154,9 +154,7 @@ export async function deleteDocumentItemsByDocumentIdDB(
 }
 
 // 通过一组 id 批量查询（轻量字段）
-export async function findDocumentItemsLiteByIdsDB(
-    ids: string[]
-): Promise<
+export async function findDocumentItemsLiteByIdsDB(ids: string[]): Promise<
     Array<{
         id: string;
         sourceText: string | null;
@@ -226,18 +224,18 @@ export async function clearDocumentItemIntermediateResultsDB(id: string) {
     return prisma.documentItem.update({
         where: { id },
         data: {
-            preTranslateTerms: null,
-            preTranslateDict: null,
-            preTranslateEmbedded: null,
-            qualityAssureBiTerm: null,
-            qualityAssureSyntax: null,
-            qualityAssureSyntaxEmbedded: null,
-            postEditDiscourse: null,
-            postEditEmbedded: null,
-            needsReview: null as any,
-            locked: null as any,
-            metadata: null,
-        } as any,
+            preTranslateTerms: Prisma.DbNull,
+            preTranslateDict: Prisma.DbNull,
+            preTranslateEmbedded: Prisma.DbNull,
+            qualityAssureBiTerm: Prisma.DbNull,
+            qualityAssureSyntax: Prisma.DbNull,
+            qualityAssureSyntaxEmbedded: Prisma.DbNull,
+            postEditDiscourse: Prisma.DbNull,
+            postEditEmbedded: Prisma.DbNull,
+            needsReview: false,
+            locked: false,
+            metadata: Prisma.DbNull,
+        },
     });
 }
 

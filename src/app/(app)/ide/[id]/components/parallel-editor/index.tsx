@@ -16,11 +16,7 @@ import {
     extractMonolingualTermsAction,
     lookupDictionaryAction,
 } from '@/actions/pre-translate';
-import {
-    embedSyntaxAdviceAction,
-    evaluateSyntaxAction,
-    extractBilingualSyntaxMarkersAction,
-} from '@/actions/quality-assure';
+import { runQualityAssureAction } from '@/actions/quality-assure';
 import {
     recordGoToNextTranslationProcessEventAction,
     recordGoToPreviousTranslationStageAction,
@@ -44,7 +40,7 @@ import { cn } from '@/lib/utils';
 import MarkdownPreview from '@uiw/react-markdown-preview';
 import { ChevronLeft, ChevronRight, PanelBottomClose, PanelBottomOpen } from 'lucide-react';
 import { useSession } from 'next-auth/react';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { useParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -99,6 +95,7 @@ function TranslationPendingPlaceholder({ label }: { label: string }) {
 
 export default function ParallelEditor({ className }: { className?: string }) {
     const t = useTranslations('IDE.parallelEditor');
+    const locale = useLocale();
     const {
         contentItemId,
         sourceText,
@@ -119,6 +116,7 @@ export default function ParallelEditor({ className }: { className?: string }) {
     const {
         setPreOutputs,
         setQAOutputs,
+        setQASyntaxEmbedded,
         setPosteditOutputs,
         setPreStep,
         setQAStep,
@@ -137,8 +135,10 @@ export default function ParallelEditor({ className }: { className?: string }) {
     const contentLoadRef = useRef(0);
     const activeItemIdRef = useRef(String(activeDocumentItem?.id || ''));
     const sourceTextRef = useRef(String(sourceText || ''));
+    const targetTextRef = useRef(String(targetText || ''));
     activeItemIdRef.current = String(activeDocumentItem?.id || '');
     sourceTextRef.current = String(sourceText || '');
+    targetTextRef.current = String(targetText || '');
 
     const runTranslate = async () => {
         if (!activeDocumentItem?.id) return;
@@ -264,10 +264,21 @@ export default function ParallelEditor({ className }: { className?: string }) {
 
     const runQA = async () => {
         if (!activeDocumentItem?.id) return;
+        const itemId = String(activeDocumentItem.id);
+        if (contentItemId !== itemId || sourceLoading) {
+            toast.error('当前分段仍在加载，请加载完成后再启动质检');
+            throw new Error('当前分段内容尚未加载完成');
+        }
         if (!targetText || String(targetText).trim() === '') {
             toast.error(t('qaRequiresTranslation'));
-            return;
+            throw new Error('当前分段译文为空');
         }
+        const inputSource = String(sourceText || '');
+        const inputTarget = String(targetText || '');
+        const isCurrentItem = () =>
+            activeItemIdRef.current === itemId &&
+            sourceTextRef.current === inputSource &&
+            targetTextRef.current === inputTarget;
 
         try {
             logAgent('QA');
@@ -278,72 +289,56 @@ export default function ParallelEditor({ className }: { className?: string }) {
             });
 
             // 记录 QA 阶段开始
-            await recordGoToNextTranslationProcessEventAction(
-                activeDocumentItem.id,
-                'QA',
-                'AGENT',
-                'STARTED'
-            );
+            try {
+                await recordGoToNextTranslationProcessEventAction(itemId, 'QA', 'AGENT', 'STARTED');
+            } catch (eventError) {
+                logger.warn(`QA 已启动，但开始事件记录失败: ${eventError}`);
+            }
 
-            // 1) 双语句法连接词/情态词提取
+            // 结构关系评估只生成待复核的问题；修改译文必须由用户勾选后另行触发。
             setQAStep('bi-term-eval');
-            logSystem('开始双语句法/情态词提取');
-            const biTerm = await extractBilingualSyntaxMarkersAction(
-                sourceText || '',
-                targetText || ''
-            );
-            setQAOutputs({ biTerm });
-            try {
-                await saveQualityAssureResultsAction(activeDocumentItem.id, { biTerm });
-            } catch {}
-
-            // 2) 句法特征评估
-            setQAStep('syntax-eval');
-            logSystem('开始句法特征评估');
-            const syntax = await evaluateSyntaxAction(sourceText || '', targetText || '', {
+            logSystem('开始句法与规范关系质检');
+            const result = await runQualityAssureAction(inputSource, inputTarget, {
                 targetLanguage,
+                locale,
             });
-            setQAOutputs({ syntax });
-            try {
-                await saveQualityAssureResultsAction(activeDocumentItem.id, { syntax });
-            } catch {}
-
-            // 3) 句法建议嵌入（可选：此处默认使用全部 issues；若有选择逻辑，请替换为勾选的集合）
-            setQAStep('syntex-embed-trans');
-            logSystem('开始句法建议嵌入');
-            const issues = Array.isArray((syntax as any)?.issues) ? (syntax as any).issues : [];
-            try {
-                const embedded = await embedSyntaxAdviceAction(
-                    sourceText || '',
-                    targetText || '',
-                    issues
-                );
-                try {
-                    await saveQualityAssureResultsAction(activeDocumentItem.id, {
-                        syntaxEmbedded: embedded,
-                    });
-                } catch {}
-            } catch {}
+            if (!isCurrentItem()) throw new Error('当前分段已切换，已丢弃过期质检结果');
+            setQAStep('syntax-eval');
+            await saveQualityAssureResultsAction(
+                itemId,
+                {
+                    biTerm: result.biTerm,
+                    syntax: result.syntax,
+                    syntaxEmbedded: null,
+                },
+                {
+                    sourceText: inputSource,
+                    targetText: inputTarget,
+                }
+            );
+            if (isCurrentItem()) {
+                setQAOutputs({ itemId, biTerm: result.biTerm, syntax: result.syntax });
+                setQASyntaxEmbedded(undefined);
+            }
 
             logInfo('单例质检完成');
 
             // 记录 QA 阶段成功完成
-            await recordGoToNextTranslationProcessEventAction(
-                activeDocumentItem.id,
-                'QA',
-                'AGENT',
-                'SUCCESS'
-            );
+            try {
+                await recordGoToNextTranslationProcessEventAction(itemId, 'QA', 'AGENT', 'SUCCESS');
+            } catch (eventError) {
+                logger.warn(`QA 已完成，但成功事件记录失败: ${eventError}`);
+            }
         } catch (e) {
             logger.error(`单例质检失败: ${e}`);
 
             // 记录 QA 阶段失败
-            await recordGoToNextTranslationProcessEventAction(
-                activeDocumentItem.id,
-                'QA',
-                'AGENT',
-                'FAILED'
-            );
+            try {
+                await recordGoToNextTranslationProcessEventAction(itemId, 'QA', 'AGENT', 'FAILED');
+            } catch (eventError) {
+                logger.warn(`QA 失败，且失败事件记录失败: ${eventError}`);
+            }
+            throw e;
         } finally {
             setQARunning(false);
             setQAStep('idle');
@@ -352,29 +347,25 @@ export default function ParallelEditor({ className }: { className?: string }) {
 
     const undoQA = async () => {
         if (!activeDocumentItem?.id) return;
+        const itemId = String(activeDocumentItem.id);
 
         try {
             logAgent('QA');
             await new Promise(r => setTimeout(r, 300));
             logSystem('撤销单例质检');
-            setTargetTranslationText('');
-
-            // 清空 useAgentWorkflowSteps 状态
-            setQAOutputs(undefined);
-
-            // 清空质检结果到数据库
-            try {
-                await saveQualityAssureResultsAction(activeDocumentItem.id, {
-                    biTerm: undefined,
-                    syntax: undefined,
-                });
+            await saveQualityAssureResultsAction(itemId, {
+                biTerm: null,
+                syntax: null,
+                syntaxEmbedded: null,
+            });
+            if (activeItemIdRef.current === itemId) {
+                setQAOutputs(undefined);
+                setQASyntaxEmbedded(undefined);
                 logInfo('单例质检结果已撤销');
-            } catch (error) {
-                logger.error(`撤销单例质检结果失败: ${error}`);
             }
-            logInfo('单例质检结果已撤销');
         } catch (error) {
             logger.error(`撤销单例质检失败: ${error}`);
+            throw error;
         }
     };
 
@@ -574,6 +565,7 @@ export default function ParallelEditor({ className }: { className?: string }) {
 
                     // 只传递 setQAOutputs 需要的字段
                     setQAOutputs({
+                        itemId: id,
                         biTerm: intermediateResults.qualityAssureBiTerm,
                         syntax: intermediateResults.qualityAssureSyntax,
                         discourse: intermediateResults.postEditDiscourse,
