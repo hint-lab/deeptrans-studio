@@ -75,7 +75,6 @@ export default function DictionariesPage() {
                 )
             );
         } catch (error) {
-            setAuthenticatedUserId(undefined);
             logger.error(t('loadErrorDesc'), error);
             toast.error(t('loadError'), { description: t('loadErrorDesc') as string });
         } finally {
