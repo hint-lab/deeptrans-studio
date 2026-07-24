@@ -200,6 +200,7 @@ export async function fetchDictionaryDashboardAction() {
         return {
             success: true,
             data: {
+                userId: authCtx.userId,
                 publicDictionaries,
                 projectDictionaries: projectDictionariesWithAccess,
                 privateDictionaries,

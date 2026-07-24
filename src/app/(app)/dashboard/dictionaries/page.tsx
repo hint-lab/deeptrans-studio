@@ -2,7 +2,6 @@
 
 import { fetchDictionaryDashboardAction } from '@/actions/dictionary';
 import { createLogger } from '@/lib/logger';
-import { useSession } from 'next-auth/react';
 import { useTranslations } from 'next-intl';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -29,7 +28,6 @@ const logger = createLogger(
     }
 );
 export default function DictionariesPage() {
-    const { data: session, status } = useSession();
     const router = useRouter();
     const t = useTranslations('Dashboard.Dictionaries');
     const [publicDictionaries, setPublicDictionaries] = useState<UIDictionary[]>([]);
@@ -38,6 +36,7 @@ export default function DictionariesPage() {
     const [activeTab, setActiveTab] = useState('private');
     const searchParams = useSearchParams();
     const [loading, setLoading] = useState(true);
+    const [authenticatedUserId, setAuthenticatedUserId] = useState<string>();
 
     // 加载词典数据
     const loadDictionaries = async () => {
@@ -45,6 +44,7 @@ export default function DictionariesPage() {
         try {
             const result = await fetchDictionaryDashboardAction();
             if (!result.success || !result.data) throw new Error(result.error || 'load failed');
+            setAuthenticatedUserId(result.data.userId);
 
             const mapDictionary = (
                 dictionary: any,
@@ -75,6 +75,7 @@ export default function DictionariesPage() {
                 )
             );
         } catch (error) {
+            setAuthenticatedUserId(undefined);
             logger.error(t('loadErrorDesc'), error);
             toast.error(t('loadError'), { description: t('loadErrorDesc') as string });
         } finally {
@@ -100,9 +101,8 @@ export default function DictionariesPage() {
     };
 
     useEffect(() => {
-        if (status === 'loading') return;
         void loadDictionaries();
-    }, [status, session?.user?.id]);
+    }, []);
 
     // 允许通过 URL 指定默认页签，如 /dashboard/dictionaries?tab=private
     useEffect(() => {
@@ -224,7 +224,7 @@ export default function DictionariesPage() {
                         <div className="ml-auto flex items-center gap-2">
                             <AddPublicDictionaryDialog
                                 onDictionaryAdded={handlePublicDictionaryAdded}
-                                userId={session?.user?.id}
+                                userId={authenticatedUserId}
                             />
                         </div>
                     </div>
@@ -259,7 +259,7 @@ export default function DictionariesPage() {
                                 </div>
                                 <AddPublicDictionaryDialog
                                     onDictionaryAdded={handlePublicDictionaryAdded}
-                                    userId={session?.user?.id}
+                                    userId={authenticatedUserId}
                                 />
                             </div>
                         </div>
@@ -274,7 +274,7 @@ export default function DictionariesPage() {
                     <div className="flex items-center justify-between">
                         <div className="space-y-1">
                             <p className="text-sm text-muted-foreground">
-                                {session?.user?.id
+                                {authenticatedUserId
                                     ? t('privateDescription')
                                     : t('privateLoginRequired')}
                             </p>
@@ -283,7 +283,7 @@ export default function DictionariesPage() {
                             <ImportDictionaryDialog
                                 modeContext="private"
                                 dictionaries={undefined}
-                                userId={session?.user?.id}
+                                userId={authenticatedUserId}
                                 onImported={() => {
                                     void loadDictionaries();
                                     toast.success(t('importComplete'), {
@@ -295,13 +295,13 @@ export default function DictionariesPage() {
                                 onDictionaryCreated={d =>
                                     handleDictionaryCreated(d as unknown as UIDictionary)
                                 }
-                                userId={session?.user?.id}
+                                userId={authenticatedUserId}
                                 visibility="PRIVATE"
                             />
                         </div>
                     </div>
                     <Separator className="my-4" />
-                    {!session?.user?.id ? (
+                    {!authenticatedUserId ? (
                         <div className="py-8 text-center">
                             <p className="mb-4 text-muted-foreground">{t('loginRequired')}</p>
                             <Button asChild>
@@ -339,7 +339,7 @@ export default function DictionariesPage() {
                                 <ImportDictionaryDialog
                                     modeContext="private"
                                     dictionaries={undefined}
-                                    userId={session?.user?.id}
+                                    userId={authenticatedUserId}
                                     onImported={() => {
                                         void loadDictionaries();
                                         toast.success(t('importComplete'), {
@@ -364,7 +364,7 @@ export default function DictionariesPage() {
                             <ImportDictionaryDialog
                                 modeContext="project"
                                 dictionaries={undefined}
-                                userId={session?.user?.id}
+                                userId={authenticatedUserId}
                                 onImported={() => {
                                     void loadDictionaries();
                                     toast.success(t('importComplete'), {
@@ -377,13 +377,13 @@ export default function DictionariesPage() {
                                 onDictionaryCreated={d =>
                                     handleDictionaryCreated(d as unknown as UIDictionary)
                                 }
-                                userId={session?.user?.id}
+                                userId={authenticatedUserId}
                                 visibility="PROJECT"
                             />
                         </div>
                     </div>
                     <Separator className="my-4" />
-                    {!session?.user?.id ? (
+                    {!authenticatedUserId ? (
                         <div className="py-8 text-center">
                             <p className="mb-4 text-muted-foreground">
                                 {t('projectLoginRequired')}
@@ -426,7 +426,7 @@ export default function DictionariesPage() {
                                     <ImportDictionaryDialog
                                         modeContext="project"
                                         dictionaries={undefined}
-                                        userId={session?.user?.id}
+                                        userId={authenticatedUserId}
                                         onImported={() => {
                                             void loadDictionaries();
                                             toast.success(t('importComplete'), {
