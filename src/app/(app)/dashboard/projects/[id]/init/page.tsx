@@ -45,6 +45,8 @@ export default function ProjectInitPage() {
     const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const statusPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const statusAbortRef = useRef<AbortController | null>(null);
+    const restartStatusPollingRef = useRef<(() => void) | null>(null);
+    const termFailureNotifiedRef = useRef(false);
     const [preview, setPreview] = useState<string>('');
     const [terms, setTerms] = useState<Array<{ term: string; count: number; score?: number }>>([]);
     const [previewHtml, setPreviewHtml] = useState<string>('');
@@ -148,8 +150,9 @@ export default function ProjectInitPage() {
     const [translateCount, setTranslateCount] = useState<number | null>(null);
 
     async function startTerms() {
-        if (!projectId) return;
+        if (!projectId) return false;
         setStarting(true);
+        termFailureNotifiedRef.current = false;
         try {
             const r = await fetch(`/api/projects/${projectId}/terms`, {
                 method: 'POST',
@@ -159,10 +162,22 @@ export default function ProjectInitPage() {
                     terms: { maxTerms, chunkSize, overlap, prompt: termPrompt },
                 }),
             });
-            if (!r.ok) throw new Error('terms failed');
+            const response = await r.json().catch(() => ({}));
+            if (!r.ok) throw new Error(response?.error || '术语提取任务启动失败，请重试');
+            setPhase('RUNNING');
+            restartStatusPollingRef.current?.();
             // 状态由全局轮询同步
-        } catch {
+            return true;
+        } catch (error: any) {
             setPhase('ERROR');
+            setTermFlow('idle');
+            setTermApplying(false);
+            setShowTermApplyModal(false);
+            termFailureNotifiedRef.current = true;
+            toast.error('术语提取未启动', {
+                description: error?.message || '术语提取任务启动失败，请重试',
+            });
+            return false;
         } finally {
             setStarting(false);
         }
@@ -309,6 +324,19 @@ export default function ProjectInitPage() {
                 const j = await s.json();
                 const a = Math.max(0, Math.min(100, Number(j?.segProgress || 0)));
                 const b = Math.max(0, Math.min(100, Number(j?.termsProgress || 0)));
+                if (j?.termsStatus === 'failed') {
+                    setPhase('ERROR');
+                    setTermFlow('idle');
+                    setTermApplying(false);
+                    setShowTermApplyModal(false);
+                    if (!termFailureNotifiedRef.current) {
+                        termFailureNotifiedRef.current = true;
+                        toast.error('术语提取失败', {
+                            description: j?.termsError || '请重试',
+                        });
+                    }
+                    return;
+                }
                 const nextA = Math.max(a, segPctRef.current);
                 const nextB = Math.max(b, termPctRef.current);
                 segPctRef.current = nextA;
@@ -316,6 +344,7 @@ export default function ProjectInitPage() {
                 updateProgress(nextA, nextB);
                 if (Array.isArray(j?.terms)) setTerms(j.terms);
                 if (Array.isArray(j?.dict)) setDictMatches(j.dict);
+                if (b >= 100) termFailureNotifiedRef.current = false;
                 if (!(a >= 100 && b >= 100)) {
                     longPoll(a, b);
                 } else {
@@ -329,10 +358,14 @@ export default function ProjectInitPage() {
         };
 
         // 初次强制返回一次最新状态
-        longPoll(-1, -1);
+        restartStatusPollingRef.current = () => {
+            void longPoll(segPctRef.current, termPctRef.current);
+        };
+        void longPoll(-1, -1);
 
         return () => {
             stopped = true;
+            restartStatusPollingRef.current = null;
             if (pollRef.current) clearInterval(pollRef.current);
             if (statusPollRef.current) clearInterval(statusPollRef.current);
             if (statusAbortRef.current) {

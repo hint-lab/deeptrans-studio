@@ -107,6 +107,10 @@ export class DocumentTermExtractAgent extends BaseAgent<
             const messages = this.messages(systemPrompt, userContent);
             const result = await this.json<Array<{ term: string; score?: number }>>(messages, {
                 maxTokens: termMaxLen,
+                timeoutMs: Math.max(
+                    1000,
+                    Number(process.env.DOCUMENT_TERMS_LLM_TIMEOUT_MS || 90000)
+                ),
             });
 
             const arr = Array.isArray(result) ? result : [];

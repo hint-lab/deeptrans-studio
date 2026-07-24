@@ -70,7 +70,7 @@ export abstract class BaseAgent<TInput, TOutput> {
     // Core LLM wrappers (for subclasses)
     protected async json<T = any>(
         messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
-        opts?: { maxTokens?: number }
+        opts?: { maxTokens?: number; timeoutMs?: number }
     ): Promise<T> {
         logger.debug('发送的json消息', {
             messageCount: messages.length,
@@ -80,7 +80,7 @@ export abstract class BaseAgent<TInput, TOutput> {
     }
     protected async text(
         messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
-        opts?: { maxTokens?: number }
+        opts?: { maxTokens?: number; timeoutMs?: number }
     ): Promise<string> {
         logger.debug('发送的text消息', {
             messageCount: messages.length,

@@ -27,7 +27,7 @@ function getModelName(override?: string) {
 
 export async function chatText(
     messages: ChatMessage[],
-    options?: { model?: string; temperature?: number; maxTokens?: number }
+    options?: { model?: string; temperature?: number; maxTokens?: number; timeoutMs?: number }
 ): Promise<string> {
     const cfg = getLLMConfig();
     const model = options?.model || getModelName();
@@ -48,6 +48,10 @@ export async function chatText(
             temperature: options?.temperature ?? 0.2,
             max_tokens: options?.maxTokens,
         }),
+        signal:
+            Number(options?.timeoutMs) > 0
+                ? AbortSignal.timeout(Number(options?.timeoutMs))
+                : undefined,
     });
 
     const text = await response.text();
@@ -72,7 +76,7 @@ export async function chatText(
 
 export async function chatJSON<T = any>(
     messages: ChatMessage[],
-    options?: { model?: string; temperature?: number; maxTokens?: number }
+    options?: { model?: string; temperature?: number; maxTokens?: number; timeoutMs?: number }
 ): Promise<T> {
     const content = await chatText(messages, options);
     try {

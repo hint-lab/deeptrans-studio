@@ -7,9 +7,11 @@ if (process.env.NODE_ENV !== 'production') {
         .catch(() => {});
 }
 import { fetchDocumentItemNeedsMtReviewByIdDB, updateDocumentItemByIdDB } from '@/db/documentItem';
+import { updateDocumentStatusDB } from '@/db/document';
+import { DOCUMENT_TERMS_RUN_ERROR } from '@/lib/document-term-job';
 import { prisma } from '@/lib/db';
 import { createLogger } from '@/lib/logger';
-import { TTL_BATCH, setJSONWithTTL } from '@/lib/redis-ttl';
+import { TTL_BATCH, setJSONWithTTL, setTextWithTTL } from '@/lib/redis-ttl';
 import { getStorageService } from '@/lib/storage/service';
 import { canWriteDocumentItemForOwner } from '@/server/document-item-access';
 import { embedBatchForOwner } from '@/server/embedding';
@@ -200,7 +202,8 @@ const docTermsWorker = createWorker(
                 { id, terms },
                 TTL_BATCH
             );
-            await connection.incr(`docTerms.${batchId}.done`);
+            await setTextWithTTL(connection, `docTerms.${batchId}.total`, '1', TTL_BATCH);
+            await setTextWithTTL(connection, `docTerms.${batchId}.done`, '1', TTL_BATCH);
             const total = Number(await connection.get(`docTerms.${batchId}.total`)) || 0;
             const done = Number(await connection.get(`docTerms.${batchId}.done`)) || 0;
             const percent = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 100;
@@ -221,11 +224,35 @@ docTermsWorker.on('active', job => {
 docTermsWorker.on('progress', (job, progress) => {
     logger.info(`[doc-terms] progress job=${job.id} progress=${progress}`);
 });
-docTermsWorker.on('completed', job => {
+docTermsWorker.on('completed', async job => {
     logger.info(`[doc-terms] completed job=${job.id}`);
+    const batchId = (job?.data as any)?.batchId;
+    if (batchId) {
+        await connection
+            .del(`docTerms.${batchId}.failed`, `docTerms.${batchId}.error`)
+            .catch(() => {});
+    }
 });
 docTermsWorker.on('failed', async (job, err) => {
     logger.error(`[doc-terms] failed job=${job?.id} error=${err?.message || err}`);
+    try {
+        const batchId = (job?.data as any)?.batchId;
+        if (batchId) {
+            await setTextWithTTL(
+                connection,
+                `docTerms.${batchId}.error`,
+                DOCUMENT_TERMS_RUN_ERROR,
+                TTL_BATCH
+            );
+            await connection.set(`docTerms.${batchId}.failed`, '1', 'EX', TTL_BATCH);
+        }
+        const documentId = (job?.data as any)?.documentId;
+        if (documentId) await updateDocumentStatusDB(documentId, 'ERROR');
+    } catch (statusError: any) {
+        logger.error(
+            `[doc-terms] failed to persist failure state job=${job?.id} error=${statusError?.message || statusError}`
+        );
+    }
 });
 docTermsWorker.on('error', err => {
     logger.error(`[doc-terms] worker error: ${err?.message || err}`);

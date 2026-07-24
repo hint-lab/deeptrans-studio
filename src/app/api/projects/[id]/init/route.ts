@@ -3,6 +3,10 @@ import { uploadFileAction } from '@/actions/upload';
 import {
     updateDocumentStructuredDB
 } from '@/db/document';
+import {
+    DOCUMENT_TERMS_RUN_ERROR,
+    resolveDocumentTermsStatus,
+} from '@/lib/document-term-job';
 import { guardMessage, guardStatus, requireOwnedProject, requireWritableProject } from '@/lib/guards';
 import { readInitStructuredRaw, scopedProjectBatchId } from '@/lib/init-artifact-keys';
 import { getRedis } from '@/lib/redis';
@@ -158,6 +162,8 @@ export async function GET(req: NextRequest, ctx: any) {
                 segD,
                 tT,
                 tD,
+                termsFailed,
+                termsError,
                 preview,
                 termsJson,
                 previewHtmlStored,
@@ -168,6 +174,8 @@ export async function GET(req: NextRequest, ctx: any) {
                 redis.get(`seg.${segBatch}.done`),
                 redis.get(`docTerms.${scopedBatchId}.total`),
                 redis.get(`docTerms.${scopedBatchId}.done`),
+                redis.get(`docTerms.${scopedBatchId}.failed`),
+                redis.get(`docTerms.${scopedBatchId}.error`),
                 redis.get(`init.${scopedBatchId}.preview`),
                 redis.get(`docTerms.${scopedBatchId}.item.terms.all`),
                 redis.get(`init.${scopedBatchId}.previewHtml`),
@@ -176,6 +184,7 @@ export async function GET(req: NextRequest, ctx: any) {
             ]);
             const segProgress = toPct(segT, segD);
             const termsProgress = toPct(tT, tD);
+            const termsStatus = resolveDocumentTermsStatus(tT, tD, termsFailed);
             let terms: Array<{ term: string; count: number; score?: number }> = [];
             let dict: Array<{
                 term: string;
@@ -258,6 +267,11 @@ export async function GET(req: NextRequest, ctx: any) {
             return {
                 segProgress,
                 termsProgress,
+                termsStatus,
+                termsError:
+                    termsStatus === 'failed'
+                        ? String(termsError || DOCUMENT_TERMS_RUN_ERROR)
+                        : undefined,
                 preview: preview || '',
                 previewHtml: fullHtml || '',
                 previewHtmlLimited: limitHtml || '',
@@ -271,17 +285,22 @@ export async function GET(req: NextRequest, ctx: any) {
         if (waitMs > 0) {
             const start = Date.now();
             while (Date.now() - start < waitMs) {
-                const [segT, segD, tT, tD] = await Promise.all([
+                const [segT, segD, tT, tD, termsFailed] = await Promise.all([
                     redis.get(`seg.${segBatch}.total`),
                     redis.get(`seg.${segBatch}.done`),
                     redis.get(`docTerms.${scopedBatchId}.total`),
                     redis.get(`docTerms.${scopedBatchId}.done`),
+                    redis.get(`docTerms.${scopedBatchId}.failed`),
                 ]);
                 const curSeg = toPct(segT, segD);
                 const curTerms = toPct(tT, tD);
                 // 不再因 curSeg>=100 无条件提前返回，避免进入高频短轮询
                 // 预览模式下，只要有进度（>0）即返回，让前端尽快展示部分预览
                 if (previewMode && curSeg > 0) {
+                    const status = await readStatus();
+                    return NextResponse.json(status);
+                }
+                if (Number(termsFailed) > 0) {
                     const status = await readStatus();
                     return NextResponse.json(status);
                 }
