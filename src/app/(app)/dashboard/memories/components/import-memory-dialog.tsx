@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
     DialogContent,
+    DialogDescription,
     DialogFooter,
     DialogHeader,
     DialogTitle,
@@ -25,7 +26,15 @@ import { Loader2, FileText, Eye, Settings, CheckCircle2 } from 'lucide-react';
 import { LANGUAGES } from '@/constants/languages';
 import { toast } from 'sonner';
 import { listMemoriesAction } from '@/actions/memories';
+import {
+    createMemoryImportPreviewRows,
+    detectMemoryImportColumns,
+    type MemoryImportPreviewRecord,
+} from '@/lib/memory-import-preview';
 import { useTranslations } from 'next-intl';
+
+const PREVIEW_ROW_LIMIT = 10;
+
 export function ImportMemoryDialog({ onCompleted }: { onCompleted?: () => void }) {
     const t = useTranslations('Dashboard.Memories.ImportDialog');
     const common = useTranslations('Common');
@@ -42,6 +51,7 @@ export function ImportMemoryDialog({ onCompleted }: { onCompleted?: () => void }
     const [targetKey, setTargetKey] = useState('target');
     const [notesKey, setNotesKey] = useState('notes');
     const [submitting, setSubmitting] = useState(false);
+    const [previewRecords, setPreviewRecords] = useState<MemoryImportPreviewRecord[]>([]);
     const [previewLines, setPreviewLines] = useState<string[]>([]);
     const [submittingUI, setSubmittingUI] = useState(false);
     const [progress, setProgress] = useState(0);
@@ -70,29 +80,30 @@ export function ImportMemoryDialog({ onCompleted }: { onCompleted?: () => void }
         };
     }, [open]);
 
-    const detectMapping = (headers: string[]) => {
-        const norm = (s: string) =>
-            String(s || '')
-                .trim()
-                .toLowerCase();
-        const hs = headers.map(norm);
-        const findAny = (cands: string[]) => {
-            for (const c of cands) {
-                const idx = hs.indexOf(norm(c));
-                if (idx >= 0) return headers[idx];
-            }
-            return '';
-        };
-        const s = findAny(['source', 'src', '源', '原文']);
-        const t = findAny(['target', 'tgt', '译', '译文']);
-        const n = findAny(['notes', 'note', '备注']);
-        if (s) setSourceKey(s);
-        if (t) setTargetKey(t);
-        if (n) setNotesKey(n);
+    const previewRows = useMemo(
+        () =>
+            createMemoryImportPreviewRows(previewRecords, {
+                sourceKey,
+                targetKey,
+                notesKey,
+            }),
+        [notesKey, previewRecords, sourceKey, targetKey]
+    );
+
+    const applyDetectedMapping = (headers: string[]) => {
+        const detected = detectMemoryImportColumns(headers, {
+            sourceKey,
+            targetKey,
+            notesKey,
+        });
+        setSourceKey(detected.sourceKey);
+        setTargetKey(detected.targetKey);
+        setNotesKey(detected.notesKey);
     };
 
     const handleFileChange = async (f: File | null) => {
         setFile(f);
+        setPreviewRecords([]);
         setPreviewLines([]);
         if (!f) return;
         try {
@@ -105,20 +116,26 @@ export function ImportMemoryDialog({ onCompleted }: { onCompleted?: () => void }
                 const sn = wb.SheetNames[0];
                 const ws = sn ? wb.Sheets[sn] : undefined;
                 const rows: any[] = ws ? XLSX.utils.sheet_to_json(ws, { defval: '' }) : [];
-                if (rows.length > 0) detectMapping(Object.keys(rows[0]));
-                setPreviewLines(rows.slice(0, 10).map(r => JSON.stringify(r)));
+                if (rows.length > 0) applyDetectedMapping(Object.keys(rows[0]));
+                setPreviewRecords(rows.slice(0, PREVIEW_ROW_LIMIT));
             } else if (ext === 'csv' || ext === 'tsv') {
                 const txt = await f.text();
                 const lines = txt.split(/\r?\n/).filter(Boolean);
                 if (lines.length > 0) {
                     const headerLine = lines[0] ?? '';
                     const header = headerLine.split(/,|\t/).map(h => h.trim());
-                    detectMapping(header);
+                    applyDetectedMapping(header);
+                    const records = lines.slice(1, PREVIEW_ROW_LIMIT + 1).map(line => {
+                        const cells = line.split(/,|\t/);
+                        return Object.fromEntries(
+                            header.map((column, index) => [column, cells[index] ?? ''])
+                        );
+                    });
+                    setPreviewRecords(records);
                 }
-                setPreviewLines(lines.slice(0, 10));
             } else if (ext === 'tmx' || ext === 'xml') {
                 const txt = await f.text();
-                setPreviewLines(txt.split(/\r?\n/).slice(0, 10));
+                setPreviewLines(txt.split(/\r?\n/).slice(0, PREVIEW_ROW_LIMIT));
             } else {
                 setPreviewLines([`不支持的文件类型: .${ext}`]);
             }
@@ -244,6 +261,7 @@ export function ImportMemoryDialog({ onCompleted }: { onCompleted?: () => void }
             <DialogContent className="flex max-h-[90vh] max-w-4xl flex-col">
                 <DialogHeader className="flex-shrink-0">
                     <DialogTitle className="flex items-center gap-2">{t('title')}</DialogTitle>
+                    <DialogDescription className="text-left">{t('description')}</DialogDescription>
                 </DialogHeader>
 
                 <div className="flex-1 space-y-4 overflow-auto">
@@ -427,28 +445,82 @@ export function ImportMemoryDialog({ onCompleted }: { onCompleted?: () => void }
                             <CardTitle className="flex items-center gap-2 text-base">
                                 <Eye className="h-4 w-4" />
                                 {t('filePreview')}
-                                {previewLines.length > 0 && (
+                                {previewRows.length + previewLines.length > 0 && (
                                     <Badge variant="outline" className="ml-2">
-                                        {t('previewLineCount', { count: previewLines.length })}
+                                        {t('previewLineCount', {
+                                            count: previewRows.length || previewLines.length,
+                                        })}
                                     </Badge>
                                 )}
                             </CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <div className="max-h-48 overflow-auto rounded-lg bg-slate-50 p-4">
-                                {previewLines.length > 0 ? (
+                            <div className="max-h-72 overflow-auto rounded-lg border bg-slate-50/70">
+                                {previewRows.length > 0 ? (
+                                    <table className="w-full min-w-[720px] table-fixed text-left text-xs">
+                                        <thead className="sticky top-0 z-10 bg-slate-100 text-slate-600 shadow-[0_1px_0_0_theme(colors.slate.200)]">
+                                            <tr>
+                                                <th
+                                                    scope="col"
+                                                    className="w-[38%] px-3 py-2.5 font-medium"
+                                                >
+                                                    {t('previewSource')}
+                                                    <span className="ml-1.5 font-mono text-[10px] font-normal text-slate-400">
+                                                        source
+                                                    </span>
+                                                </th>
+                                                <th
+                                                    scope="col"
+                                                    className="w-[38%] border-l border-slate-200 px-3 py-2.5 font-medium"
+                                                >
+                                                    {t('previewTarget')}
+                                                    <span className="ml-1.5 font-mono text-[10px] font-normal text-slate-400">
+                                                        target
+                                                    </span>
+                                                </th>
+                                                <th
+                                                    scope="col"
+                                                    className="w-[24%] border-l border-slate-200 px-3 py-2.5 font-medium"
+                                                >
+                                                    {t('previewNotes')}
+                                                    <span className="ml-1.5 font-mono text-[10px] font-normal text-slate-400">
+                                                        notes
+                                                    </span>
+                                                </th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-200 bg-white">
+                                            {previewRows.map((row, index) => (
+                                                <tr
+                                                    key={index}
+                                                    className="align-top hover:bg-indigo-50/40"
+                                                >
+                                                    <td className="whitespace-pre-wrap break-words px-3 py-3 leading-5 text-slate-800">
+                                                        {row.source || '—'}
+                                                    </td>
+                                                    <td className="whitespace-pre-wrap break-words border-l border-slate-100 px-3 py-3 leading-5 text-slate-800">
+                                                        {row.target || '—'}
+                                                    </td>
+                                                    <td className="whitespace-pre-wrap break-words border-l border-slate-100 px-3 py-3 leading-5 text-slate-600">
+                                                        {row.notes || '—'}
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                ) : previewLines.length > 0 ? (
                                     <div className="space-y-1 font-mono text-xs">
                                         {previewLines.map((line, idx) => (
                                             <div
                                                 key={idx}
-                                                className="leading-relaxed text-slate-700"
+                                                className="px-4 leading-relaxed text-slate-700 first:pt-4 last:pb-4"
                                             >
                                                 {line}
                                             </div>
                                         ))}
                                     </div>
                                 ) : (
-                                    <div className="py-4 text-center text-sm text-slate-500">
+                                    <div className="py-8 text-center text-sm text-slate-500">
                                         {t('previewPlaceholder')}
                                     </div>
                                 )}

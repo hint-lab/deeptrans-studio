@@ -424,6 +424,7 @@
             "ImportDialog": {
                 "open": "导入记忆",
                 "title": "导入翻译记忆",
+                "description": "确认文件、字段映射和内容预览后再开始导入。",
                 "embedding": "嵌入生成中…",
                 "vector": "写入 PostgreSQL 向量索引中…",
                 "complete": "导入完成",
@@ -442,6 +443,9 @@
                 "notesColumnOptional": "备注列名（可选）",
                 "filePreview": "文件预览",
                 "previewLineCount": "预览 {count} 行",
+                "previewSource": "原文",
+                "previewTarget": "译文",
+                "previewNotes": "备注",
                 "previewPlaceholder": "请先选择文件以查看内容预览…",
                 "selectedFile": "已选择文件：{name}",
                 "selectFileHint": "请选择文件后开始导入",

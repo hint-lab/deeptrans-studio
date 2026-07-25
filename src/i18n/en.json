@@ -424,6 +424,7 @@
             "ImportDialog": {
                 "open": "Import Memory",
                 "title": "Import Translation Memory",
+                "description": "Review the file, field mapping, and content preview before importing.",
                 "embedding": "Embedding…",
                 "vector": "Indexing to PostgreSQL vector store…",
                 "complete": "Import Completed",
@@ -442,6 +443,9 @@
                 "notesColumnOptional": "Notes column (optional)",
                 "filePreview": "File Preview",
                 "previewLineCount": "Preview {count} lines",
+                "previewSource": "Source",
+                "previewTarget": "Target",
+                "previewNotes": "Notes",
                 "previewPlaceholder": "Select a file to preview its contents…",
                 "selectedFile": "Selected file: {name}",
                 "selectFileHint": "Select a file to start import",
