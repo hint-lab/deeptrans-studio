@@ -32,6 +32,7 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { MemorySettingsDialog } from './components/memory-settings-dialog';
+import { MemoryImportHelpDialog } from './components/memory-import-guide';
 import { useTranslations, useLocale } from 'next-intl';
 
 export default function MemoriesPage() {
@@ -190,7 +191,8 @@ export default function MemoriesPage() {
                         </p>
                     </div>
 
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <MemoryImportHelpDialog />
                         <ImportMemoryDialog onCompleted={loadMemories} />
                         <Button variant="outline" className="gap-2">
                             <Download className="h-4 w-4" />
