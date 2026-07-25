@@ -1,38 +1,58 @@
 import { bulkUpsertEntriesAction, findProjectDictionaryAction } from '@/actions/dictionary';
 import { translateTermsBatchAction } from '@/actions/project-init';
-import { findBlankDictionaryEntriesBySourcesDB, updateDictionaryEntryTargetTextDB } from '@/db/dictionaryEntry';
-import { updateDocumentStatusDB } from '@/db/document';
-import { guardMessage, guardStatus, requireOwnedProjectDocument, requireUser, requireWritableProject } from '@/lib/guards';
+import {
+    findBlankDictionaryEntriesBySourcesDB,
+    updateDictionaryEntryTargetTextDB,
+} from '@/db/dictionaryEntry';
+import { type DocumentStatusValue, updateDocumentStatusIfCurrentDB } from '@/db/document';
+import {
+    guardMessage,
+    guardStatus,
+    requireOwnedProjectDocument,
+    requireUser,
+    requireWritableProject,
+} from '@/lib/guards';
 import { scopedProjectBatchId } from '@/lib/init-artifact-keys';
 import { createLogger } from '@/lib/logger';
 import { getRedis } from '@/lib/redis';
+import { releaseOwnedRedisLock } from '@/lib/redis-lock';
 import { DocumentStatus } from '@/types/enums';
+import { randomUUID } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
-const logger = createLogger({
-    type: 'term:apply',
-}, {
-    json: false,// 开启json格式输出
-    pretty: false, // 关闭开发环境美化输出
-    colors: true, // 仅当json：false时启用颜色输出可用
-    includeCaller: false, // 日志不包含调用者
-});
+const logger = createLogger(
+    {
+        type: 'term:apply',
+    },
+    {
+        json: false, // 开启json格式输出
+        pretty: false, // 关闭开发环境美化输出
+        colors: true, // 仅当json：false时启用颜色输出可用
+        includeCaller: false, // 日志不包含调用者
+    }
+);
 
-async function setDocumentStatus(documentId: string, status: DocumentStatus): Promise<boolean> {
+async function setDocumentStatus(
+    documentId: string,
+    status: DocumentStatus,
+    allowedCurrentStatuses: readonly DocumentStatusValue[]
+): Promise<boolean> {
     if (!documentId) return false;
     try {
-        const updated = await updateDocumentStatusDB(documentId, status as any);
-        if (updated) return true;
-    } catch { }
+        return await updateDocumentStatusIfCurrentDB(
+            documentId,
+            status as any,
+            allowedCurrentStatuses
+        );
+    } catch {}
     logger.error('document status update failed', { documentId, status });
     return false;
 }
 
-async function markDocumentError(documentId: string) {
-    await setDocumentStatus(documentId, DocumentStatus.ERROR);
-}
-
 export async function POST(req: NextRequest, ctx: any) {
     let ownedDocumentId = '';
+    let lockRedis: Awaited<ReturnType<typeof getRedis>> | null = null;
+    let applyLockKey = '';
+    let applyLockValue = '';
     try {
         const { id: projectId } = await (ctx?.params || {});
         const q = req.nextUrl.searchParams;
@@ -66,12 +86,35 @@ export async function POST(req: NextRequest, ctx: any) {
         if (!ownedDocumentId) {
             return NextResponse.json({ error: 'document not available' }, { status: 404 });
         }
-        if (!(await setDocumentStatus(ownedDocumentId, DocumentStatus.TERMS_EXTRACTING))) {
-            return NextResponse.json({ error: 'document status update failed' }, { status: 500 });
+        if (String(ownedDocument?.status || '') !== 'TERMS_EXTRACTING') {
+            return NextResponse.json(
+                { error: '文档已进入其他阶段，不能从旧页面重复写入术语' },
+                { status: 409 }
+            );
+        }
+        lockRedis = await getRedis();
+        applyLockKey = `project-init:terms-apply-lock:${ownedDocumentId}`;
+        applyLockValue = randomUUID();
+        const applyLockAcquired = await lockRedis.set(
+            applyLockKey,
+            applyLockValue,
+            'EX',
+            15 * 60,
+            'NX'
+        );
+        if (applyLockAcquired !== 'OK') {
+            return NextResponse.json({ error: '术语正在写入，请勿重复提交' }, { status: 409 });
+        }
+        if (
+            !(await setDocumentStatus(ownedDocumentId, DocumentStatus.TERMS_EXTRACTING, [
+                'TERMS_EXTRACTING',
+            ]))
+        ) {
+            return NextResponse.json({ error: '文档阶段已变化，术语未写入' }, { status: 409 });
         }
         const scopedBatchId = scopedProjectBatchId(projectId, batchId);
 
-        const redis = await getRedis();
+        const redis = lockRedis;
         let unique: string[] = [];
         {
             const raw = await redis.get(`docTerms.${scopedBatchId}.item.terms.all`);
@@ -92,7 +135,6 @@ export async function POST(req: NextRequest, ctx: any) {
             }
         }
         if (!unique.length) {
-            await markDocumentError(ownedDocumentId);
             return NextResponse.json(
                 { error: '未提取到可写入的术语，请重试或调整提取设置' },
                 { status: 422 }
@@ -102,7 +144,6 @@ export async function POST(req: NextRequest, ctx: any) {
         // 找/建项目词库（封装，PROJECT 可见性）
         const found = await findProjectDictionaryAction(projectId);
         if (!found?.success || !found.data?.id) {
-            await markDocumentError(ownedDocumentId);
             return NextResponse.json(
                 { error: found?.error || 'dictionary not available' },
                 { status: 500 }
@@ -120,7 +161,6 @@ export async function POST(req: NextRequest, ctx: any) {
         });
         if (!applied?.success) {
             logger.error({ error: applied?.error || 'apply failed' });
-            await markDocumentError(ownedDocumentId);
             return NextResponse.json({ error: applied?.error || 'apply failed' }, { status: 500 });
         }
         let { inserted = 0, updated = 0, skipped = 0 } = applied.data || {};
@@ -197,7 +237,6 @@ export async function POST(req: NextRequest, ctx: any) {
                         translatedCount,
                         untranslatedCount,
                     });
-                    await markDocumentError(ownedDocumentId);
                     return NextResponse.json(
                         {
                             error: `术语预翻译未完成（${untranslatedCount} 条），请重试`,
@@ -209,23 +248,38 @@ export async function POST(req: NextRequest, ctx: any) {
                 }
             } catch (e: any) {
                 logger.error('translate terms batch failed', e);
-                await markDocumentError(ownedDocumentId);
                 return NextResponse.json({ error: '术语预翻译失败，请重试' }, { status: 502 });
             }
         }
         if (finalize !== false) {
-            if (!(await setDocumentStatus(ownedDocumentId, DocumentStatus.COMPLETED))) {
-                await markDocumentError(ownedDocumentId);
+            if (
+                !(await setDocumentStatus(ownedDocumentId, DocumentStatus.COMPLETED, [
+                    'TERMS_EXTRACTING',
+                ]))
+            ) {
                 return NextResponse.json(
                     { error: '术语已写入，但文档状态更新失败，请重试' },
                     { status: 500 }
                 );
             }
         }
-        return NextResponse.json({ ok: true, dictionaryId, inserted, updated, skipped, translated });
+        return NextResponse.json({
+            ok: true,
+            dictionaryId,
+            inserted,
+            updated,
+            skipped,
+            translated,
+        });
     } catch (e: any) {
-        await markDocumentError(ownedDocumentId);
         logger.error({ error: e?.message || 'apply failed' });
-        return NextResponse.json({ error: guardMessage(e) || 'apply failed' }, { status: guardStatus(e) });
+        return NextResponse.json(
+            { error: guardMessage(e) || 'apply failed' },
+            { status: guardStatus(e) }
+        );
+    } finally {
+        if (lockRedis && applyLockKey && applyLockValue) {
+            await releaseOwnedRedisLock(lockRedis, applyLockKey, applyLockValue).catch(() => {});
+        }
     }
 }

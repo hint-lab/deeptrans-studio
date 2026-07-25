@@ -6,6 +6,7 @@ import {
 } from '@/actions/document';
 import { Button } from '@/components/ui/button';
 import { useProjectInit } from '@/hooks/useProjectInit';
+import { resolveProjectInitResumeTarget } from '@/lib/document-init-status';
 import type { SegmentGranularity } from '@/lib/document-segmentation';
 import { createLogger } from '@/lib/logger';
 import { Coffee, Loader, Loader2, Redo2, Square, SquareCheckBig } from 'lucide-react';
@@ -59,6 +60,35 @@ export default function ProjectInitPage() {
         /* 由 useProjectInit.ensure 初始化 batchId；此处不再本地生成 */
     }, [projectId]);
 
+    function resumeFromDocumentStatus(status: unknown): boolean {
+        const target = resolveProjectInitResumeTarget(status);
+        if (target === 'parse') return false;
+        if (target === 'ide') {
+            setIsNavigatingToIDE(true);
+            router.replace(`/ide/${projectId}`);
+            return true;
+        }
+        if (target === 'segment' || target === 'terms') {
+            updateStep(target);
+            return true;
+        }
+        setPhase('ERROR');
+        setPreviewHtml('ERROR:PARSER_FAILED');
+        return true;
+    }
+
+    async function loadParsePreview(resultBatchId: string, waitMs: number) {
+        const statusUrl = new URL(`/api/projects/${projectId}/init`, window.location.origin);
+        statusUrl.searchParams.set('batchId', resultBatchId);
+        statusUrl.searchParams.set('wait', String(waitMs));
+        const statusResponse = await fetch(statusUrl.toString());
+        if (!statusResponse.ok) return false;
+        const result = await statusResponse.json();
+        if (typeof result?.preview === 'string') setPreview(result.preview);
+        if (typeof result?.previewHtml === 'string') setPreviewHtml(result.previewHtml);
+        return typeof result?.previewHtml === 'string' && result.previewHtml.length > 0;
+    }
+
     async function runParse() {
         if (!projectId) return;
         setPreviewHtml('');
@@ -67,17 +97,24 @@ export default function ProjectInitPage() {
             const u = new URL(`/api/projects/${projectId}/parse`, window.location.origin);
             u.searchParams.set('batchId', batchId);
             const r = await fetch(u.toString(), { method: 'POST' });
-            if (!r.ok) throw new Error('parse failed');
-            // 解析完成后，取一次状态以获取预览，停留等待用户确认
-            const u2 = new URL(`/api/projects/${projectId}/init`, window.location.origin);
-            u2.searchParams.set('batchId', batchId);
-            u2.searchParams.set('wait', '3000');
-            const s = await fetch(u2.toString());
-            if (s.ok) {
-                const j = await s.json();
-                if (typeof j?.preview === 'string') setPreview(j.preview);
-                if (typeof j?.previewHtml === 'string') setPreviewHtml(j.previewHtml);
+            const parsed = await r.json().catch(() => ({}));
+            if (!r.ok) throw new Error(parsed?.error || 'parse failed');
+            if (parsed?.skipped) {
+                const activeBatchId = String(parsed?.activeBatchId || batchId);
+                if (activeBatchId !== batchId) {
+                    updateBatchId(activeBatchId);
+                }
+                if (!resumeFromDocumentStatus(parsed?.status)) {
+                    let previewReady = false;
+                    for (let attempt = 0; attempt < 10 && !previewReady; attempt += 1) {
+                        previewReady = await loadParsePreview(activeBatchId, 30_000);
+                    }
+                    if (!previewReady) throw new Error('parse result timeout');
+                }
+                return;
             }
+            // 解析完成后，取一次状态以获取预览，停留等待用户确认
+            await loadParsePreview(batchId, 3000);
             updateStep('parse');
         } catch {
             setPhase('ERROR');
@@ -86,6 +123,37 @@ export default function ProjectInitPage() {
             setStarting(false);
         }
     }
+
+    // The database status is authoritative. In particular, never re-run parse
+    // for a document that has already advanced to segmentation, terms, or IDE.
+    useEffect(() => {
+        if (!projectId || !batchId) return;
+        let cancelled = false;
+        void (async () => {
+            try {
+                const latest = await getLatestDocumentStatusForProjectAction(projectId);
+                if (cancelled || !latest) return;
+                setSegmentDocumentId(latest.documentId);
+                if (resolveProjectInitResumeTarget(latest.status) === 'terms') {
+                    updateStep('terms');
+                    await startTerms();
+                    return;
+                }
+                if (!resumeFromDocumentStatus(latest.status)) await runParse();
+            } catch {
+                if (!cancelled) {
+                    setPhase('ERROR');
+                    setPreviewHtml('ERROR:PARSER_FAILED');
+                }
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+        // Bootstrap once per server-backed initialization run. runParse and the
+        // resume handler intentionally use the state for this project/batch.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [projectId, batchId]);
     // 预览兜底：没有服务端 HTML 时，用纯文本拼简易 HTML
     useEffect(() => {}, [preview, previewHtml]);
 
@@ -148,7 +216,7 @@ export default function ProjectInitPage() {
         setTranslateCount(null);
     }
 
-    async function startTerms() {
+    async function startTerms(options?: { retry?: boolean }) {
         if (!projectId) return false;
         setStarting(true);
         setTerms([]);
@@ -164,11 +232,15 @@ export default function ProjectInitPage() {
                 headers: { 'content-type': 'application/json' },
                 body: JSON.stringify({
                     batchId,
+                    retry: options?.retry === true,
                     terms: { maxTerms, chunkSize, overlap, prompt: termPrompt },
                 }),
             });
             const response = await r.json().catch(() => ({}));
             if (!r.ok) throw new Error(response?.error || '术语提取任务启动失败，请重试');
+            if (response?.activeBatchId && response.activeBatchId !== batchId) {
+                updateBatchId(String(response.activeBatchId));
+            }
             setPhase('RUNNING');
             restartStatusPollingRef.current?.();
             // 状态由全局轮询同步
@@ -247,7 +319,8 @@ export default function ProjectInitPage() {
         }
         setStarting(true);
         try {
-            await updateDocumentStatusByIdAction(segmentDocumentId, 'COMPLETED');
+            const completed = await updateDocumentStatusByIdAction(segmentDocumentId, 'COMPLETED');
+            if (!completed) throw new Error('文档阶段已变化，请刷新后重试');
             termPctRef.current = 100;
             updateProgress(undefined, 100);
             updateStep('done');
@@ -318,7 +391,6 @@ export default function ProjectInitPage() {
     }
 
     useEffect(() => {
-        if (projectId && batchId) runParse();
         // 取消旧的定时轮询
         if (statusPollRef.current) {
             clearInterval(statusPollRef.current);
@@ -407,16 +479,6 @@ export default function ProjectInitPage() {
             toast.success('术语提取完成，请确认结果后再写入词库');
         }
     }, [termPct, showTermApplyModal, termFlow]);
-
-    // 获取当前项目的最新文档，用于预览/应用
-    useEffect(() => {
-        (async () => {
-            try {
-                const s = await getLatestDocumentStatusForProjectAction(projectId);
-                if (s && s.documentId) setSegmentDocumentId(s.documentId);
-            } catch {}
-        })();
-    }, [projectId]);
 
     async function loadSegPreview(opts?: { all?: boolean; regenerate?: boolean }) {
         if (!projectId || !batchId) return;
@@ -648,10 +710,6 @@ export default function ProjectInitPage() {
                                             u.searchParams.set('batchId', batchId);
                                             void fetch(u.toString(), { method: 'POST' });
                                             updateStep('segment');
-                                            updateDocumentStatusByIdAction(
-                                                segmentDocumentId,
-                                                'PARSING'
-                                            );
                                         }}
                                         disabled={
                                             starting ||
@@ -698,7 +756,9 @@ export default function ProjectInitPage() {
                                                     if (cancelTermApplyRequested) return;
                                                     try {
                                                         setTermApplying(true);
-                                                        await startTerms();
+                                                        await startTerms({
+                                                            retry: phase === 'ERROR',
+                                                        });
                                                     } catch {}
                                                 }, 500);
                                             }}
@@ -715,7 +775,9 @@ export default function ProjectInitPage() {
                                                 setTermFlow('applying');
                                                 void applyTermsPipeline();
                                             }}
-                                            disabled={applyingTerms || (!termsApplied && !terms.length)}
+                                            disabled={
+                                                applyingTerms || (!termsApplied && !terms.length)
+                                            }
                                         >
                                             {applyingTerms ? '写入中…' : '手动写入词库'}
                                         </Button>
@@ -732,7 +794,9 @@ export default function ProjectInitPage() {
                                                 setTermFlow('applying');
                                                 void applyTermsPipeline();
                                             }}
-                                            disabled={applyingTerms || (!termsApplied && !terms.length)}
+                                            disabled={
+                                                applyingTerms || (!termsApplied && !terms.length)
+                                            }
                                         >
                                             {t('next')}
                                         </Button>

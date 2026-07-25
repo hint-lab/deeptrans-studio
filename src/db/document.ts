@@ -6,6 +6,16 @@ import { DocumentStatus as PrismaDocumentStatus } from '@prisma/client';
 
 export type Document = PrismaDocument;
 
+export type DocumentStatusValue =
+    | 'WAITING'
+    | 'PARSING'
+    | 'SEGMENTING'
+    | 'TERMS_EXTRACTING'
+    | 'PREPROCESSED'
+    | 'TRANSLATING'
+    | 'COMPLETED'
+    | 'ERROR';
+
 export type DocumentCreateInput = {
     name: string;
     originalName: string;
@@ -77,19 +87,64 @@ export const updateDocumentStructuredDB = async (
     );
 };
 
+export const updateDocumentStructuredIfCurrentDB = async (
+    id: string,
+    structured: any,
+    allowedCurrentStatuses: readonly DocumentStatusValue[]
+): Promise<boolean> => {
+    const updated = await dbTry<{ count: number }>(() =>
+        prisma.document.updateMany({
+            where: { id, status: { in: [...allowedCurrentStatuses] as any } },
+            data: { structured: structured as any },
+        })
+    );
+    return Number(updated?.count || 0) === 1;
+};
+
 export const updateDocumentStatusDB = async (
     id: string,
-    status:
-        | 'WAITING'
-        | 'PARSING'
-        | 'SEGMENTING'
-        | 'TERMS_EXTRACTING'
-        | 'PREPROCESSED'
-        | 'TRANSLATING'
-        | 'COMPLETED'
-        | 'ERROR'
+    status: DocumentStatusValue
 ): Promise<Document | null> => {
     return dbTry(() => updateDocumentByIdDB(id, { status }));
+};
+
+type DocumentStatusUpdateRunner = {
+    document: {
+        updateMany: (args: unknown) => Promise<{ count: number }>;
+    };
+};
+
+export async function updateDocumentStatusIfCurrentWithRunner(
+    database: DocumentStatusUpdateRunner,
+    id: string,
+    status: DocumentStatusValue,
+    allowedCurrentStatuses: readonly DocumentStatusValue[]
+): Promise<boolean> {
+    if (!id || !allowedCurrentStatuses.length) return false;
+    const result = await database.document.updateMany({
+        where: {
+            id,
+            status: { in: [...allowedCurrentStatuses] },
+        },
+        data: { status },
+    });
+    return result.count === 1;
+}
+
+export const updateDocumentStatusIfCurrentDB = async (
+    id: string,
+    status: DocumentStatusValue,
+    allowedCurrentStatuses: readonly DocumentStatusValue[]
+): Promise<boolean> => {
+    const updated = await dbTry(() =>
+        updateDocumentStatusIfCurrentWithRunner(
+            prisma as unknown as DocumentStatusUpdateRunner,
+            id,
+            status,
+            allowedCurrentStatuses
+        )
+    );
+    return updated === true;
 };
 
 export const updateDocumentByIdDB = async (

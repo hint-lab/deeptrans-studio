@@ -30,8 +30,8 @@ export function LeftSection() {
 
     return (
         <div className="flex w-full items-center justify-start">
-            <SidebarToggle isOpen={isSidebarOpen} onToggle={toggleSidebar} />
             <LogoMenu logoSrc={logoSrc} compact={!isSidebarOpen} />
+            <SidebarToggle isOpen={isSidebarOpen} onToggle={toggleSidebar} />
             <DashboardMenu />
             <EditMenu />
             <ViewMenu />

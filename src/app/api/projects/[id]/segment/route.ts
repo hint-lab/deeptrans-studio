@@ -1,6 +1,8 @@
 import { getFileUrlAction } from '@/actions/upload';
-import { updateDocumentStatusDB } from '@/db/document';
-import { replaceDocumentItemsAtomicDB } from '@/db/documentItem';
+import {
+    DOCUMENT_INITIALIZATION_CONFLICT,
+    replaceDocumentItemsForInitializationDB,
+} from '@/db/documentItem';
 import { extractTextFromUrl } from '@/lib/file-parser';
 import {
     guardMessage,
@@ -24,10 +26,10 @@ import {
     segmentStructuredParagraphs,
     type StructuredParagraph,
 } from '@/lib/document-segmentation';
+import { canWriteDocumentSegmentStatus } from '@/lib/document-init-status';
 import { createLogger } from '@/lib/logger';
 import { getRedis } from '@/lib/redis';
 import { TTL_BATCH, TTL_PROGRESS, setJSONWithTTL, setTextWithTTL } from '@/lib/redis-ttl';
-import { DocumentStatus } from '@/types/enums';
 import { NextRequest, NextResponse } from 'next/server';
 const logger = createLogger(
     {
@@ -94,7 +96,6 @@ function paragraphsFromText(text: string): StructuredParagraph[] {
 }
 
 export async function POST(req: NextRequest, ctx: any) {
-    let ownedDocumentId = '';
     try {
         const redis = await getRedis();
         const { id: projectIdFromParams } = await (ctx?.params || {});
@@ -125,9 +126,14 @@ export async function POST(req: NextRequest, ctx: any) {
             : project.documents?.[0];
         if (!only || !only.url)
             return NextResponse.json({ error: 'document not found' }, { status: 404 });
-        ownedDocumentId = only.id;
-        // 构造正文（优先 structured）
         const isPreview = segment?.preview === true;
+        if (!isPreview && !canWriteDocumentSegmentStatus(only.status)) {
+            return NextResponse.json(
+                { error: '文档已进入后续阶段，不能从旧页面重新分割' },
+                { status: 409 }
+            );
+        }
+        // 构造正文（优先 structured）
         let previewGeneration: number | undefined;
         if (isPreview) {
             const generationKey = segmentPreviewGenerationKey(scopedBatchId);
@@ -282,7 +288,7 @@ export async function POST(req: NextRequest, ctx: any) {
             type: segmentItem.type || 'TEXT',
             metadata: segmentItem.metadata ?? null,
         }));
-        const persisted = await replaceDocumentItemsAtomicDB(docId, items);
+        const persisted = await replaceDocumentItemsForInitializationDB(docId, items);
         logger.info(`持久化文档${docId}内容到数据库`, { count: persisted.count });
 
         await setTextWithTTL(redis, `seg.${segBatch}.total`, '1', TTL_PROGRESS);
@@ -293,9 +299,6 @@ export async function POST(req: NextRequest, ctx: any) {
             { segments: outAll, granularity: segment.granularity },
             TTL_BATCH
         );
-        try {
-            await updateDocumentStatusDB(only.id, DocumentStatus.SEGMENTING as any);
-        } catch {}
         return NextResponse.json({
             ok: true,
             step: 'segment',
@@ -303,10 +306,11 @@ export async function POST(req: NextRequest, ctx: any) {
             granularity: segment.granularity,
         });
     } catch (e: any) {
-        if (ownedDocumentId) {
-            try {
-                await updateDocumentStatusDB(ownedDocumentId, DocumentStatus.ERROR as any);
-            } catch {}
+        if (String(e?.message || '') === DOCUMENT_INITIALIZATION_CONFLICT) {
+            return NextResponse.json(
+                { error: '文档已有分段或已进入后续阶段，禁止覆盖现有翻译内容' },
+                { status: 409 }
+            );
         }
         return NextResponse.json({ error: guardMessage(e) }, { status: guardStatus(e) });
     }
@@ -384,9 +388,7 @@ export async function GET(req: NextRequest, ctx: any) {
                 segments: limited.segments,
                 totalCount: limited.totalCount,
                 bodyCount: limited.bodyCount,
-                granularity: normalizeSegmentGranularity(
-                    cachedGranularity || selectedGranularity
-                ),
+                granularity: normalizeSegmentGranularity(cachedGranularity || selectedGranularity),
             };
         }
 

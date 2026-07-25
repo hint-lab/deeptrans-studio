@@ -39,7 +39,6 @@ export default function Header() {
 
     return (
         <div className="z-50 flex size-full items-center justify-between bg-background/95 px-4 backdrop-blur">
-            <SidebarToggle isOpen={isSidebarOpen} onToggle={toggleSidebar} />
             {isSidebarOpen ? (
                 <Link href="/dashboard" className="flex items-center">
                     <Image
@@ -52,6 +51,7 @@ export default function Header() {
                     />
                 </Link>
             ) : null}
+            <SidebarToggle isOpen={isSidebarOpen} onToggle={toggleSidebar} />
             <div className="ml-auto flex items-center space-x-4 px-3">
                 <LocaleSwitcher />
                 <Button

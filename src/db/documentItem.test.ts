@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+    DOCUMENT_INITIALIZATION_CONFLICT,
     replaceDocumentItemsAtomicWithRunner,
+    replaceDocumentItemsForInitializationWithRunner,
     type DocumentItemCreateInput,
 } from './documentItem';
 
@@ -126,4 +128,67 @@ test('rejects an empty replacement before opening a transaction', async () => {
         /no document items/
     );
     assert.equal(transactionCalls, 0);
+});
+
+test('does not replace items after a document has advanced beyond initialization', async () => {
+    let deleteCalls = 0;
+    const database = {
+        $transaction: async (operation: (tx: any) => Promise<any>) =>
+            operation({
+                document: {
+                    findUnique: async () => ({ status: 'COMPLETED' }),
+                    updateMany: async () => ({ count: 0 }),
+                },
+                documentItem: {
+                    count: async () => 0,
+                    deleteMany: async () => {
+                        deleteCalls += 1;
+                        return { count: 1 };
+                    },
+                    createMany: async () => ({ count: 1 }),
+                },
+            }),
+    };
+
+    await assert.rejects(
+        replaceDocumentItemsForInitializationWithRunner(database, 'document-1', [
+            item('document-1', 1, 'new'),
+        ]),
+        new RegExp(DOCUMENT_INITIALIZATION_CONFLICT)
+    );
+    assert.equal(deleteCalls, 0);
+});
+
+test('does not replace stale parsing items that already exist', async () => {
+    let updateCalls = 0;
+    let deleteCalls = 0;
+    const database = {
+        $transaction: async (operation: (tx: any) => Promise<any>) =>
+            operation({
+                document: {
+                    findUnique: async () => ({ status: 'PARSING' }),
+                    updateMany: async () => {
+                        updateCalls += 1;
+                        return { count: 1 };
+                    },
+                },
+                documentItem: {
+                    count: async ({ where }: any) => (where.OR ? 0 : 198),
+                    deleteMany: async () => {
+                        deleteCalls += 1;
+                        return { count: 198 };
+                    },
+                    createMany: async () => ({ count: 1 }),
+                },
+            }),
+    };
+
+    await assert.rejects(
+        replaceDocumentItemsForInitializationWithRunner(database, 'document-1', [
+            item('document-1', 1, 'new'),
+        ]),
+        new RegExp(DOCUMENT_INITIALIZATION_CONFLICT)
+    );
+    assert.equal(updateCalls, 0);
+    assert.equal(deleteCalls, 0);
 });

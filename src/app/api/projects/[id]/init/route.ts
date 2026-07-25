@@ -1,6 +1,6 @@
 import { queryDictionaryEntriesExactByScope } from '@/actions/dictionary';
 import { uploadFileAction } from '@/actions/upload';
-import { updateDocumentStructuredDB } from '@/db/document';
+import { updateDocumentStructuredIfCurrentDB } from '@/db/document';
 import { DOCUMENT_TERMS_RUN_ERROR, resolveDocumentTermsStatus } from '@/lib/document-term-job';
 import {
     DEFAULT_SEGMENT_GRANULARITY,
@@ -16,10 +16,23 @@ import {
     requireWritableProject,
 } from '@/lib/guards';
 import { readInitStructuredRaw, scopedProjectBatchId } from '@/lib/init-artifact-keys';
+import {
+    canPersistDocumentParseArtifacts,
+    resolveProjectInitResumeTarget,
+} from '@/lib/document-init-status';
 import { getRedis } from '@/lib/redis';
 import { NextRequest, NextResponse } from 'next/server';
 
 async function handlePersist(only: any, batchId: string, projectIdFromParams: string) {
+    if (!canPersistDocumentParseArtifacts(only?.status)) {
+        return NextResponse.json({
+            ok: true,
+            skipped: true,
+            step: 'already-initialized',
+            status: String(only?.status || ''),
+            resumeTarget: resolveProjectInitResumeTarget(only?.status),
+        });
+    }
     const redis = await getRedis();
     const scopedBatchId = scopedProjectBatchId(projectIdFromParams, batchId);
     const [previewHtmlStored, structuredStored] = await Promise.all([
@@ -77,9 +90,16 @@ async function handlePersist(only: any, batchId: string, projectIdFromParams: st
             jsonFile: jsonRes?.fileName || null,
         },
     };
-    try {
-        await updateDocumentStructuredDB(only.id, stored);
-    } catch {}
+    const persisted = await updateDocumentStructuredIfCurrentDB(only.id, stored, ['PARSING']);
+    if (!persisted) {
+        return NextResponse.json({
+            ok: true,
+            skipped: true,
+            step: 'already-initialized',
+            status: String(only?.status || ''),
+            resumeTarget: resolveProjectInitResumeTarget(only?.status),
+        });
+    }
     return NextResponse.json({ ok: true, step: 'persist', artifacts: stored });
 }
 
@@ -321,18 +341,23 @@ export async function GET(req: NextRequest, ctx: any) {
         if (waitMs > 0) {
             const start = Date.now();
             while (Date.now() - start < waitMs) {
-                const [segT, segD, tT, tD, termsFailed] = await Promise.all([
+                const [segT, segD, tT, tD, termsFailed, parsePreviewReady] = await Promise.all([
                     redis.get(`seg.${segBatch}.total`),
                     redis.get(`seg.${segBatch}.done`),
                     redis.get(`docTerms.${scopedBatchId}.total`),
                     redis.get(`docTerms.${scopedBatchId}.done`),
                     redis.get(`docTerms.${scopedBatchId}.failed`),
+                    redis.get(`init.${scopedBatchId}.previewHtml`),
                 ]);
                 const curSeg = toPct(segT, segD);
                 const curTerms = toPct(tT, tD);
                 // 不再因 curSeg>=100 无条件提前返回，避免进入高频短轮询
                 // 预览模式下，只要有进度（>0）即返回，让前端尽快展示部分预览
                 if (previewMode && curSeg > 0) {
+                    const status = await readStatus();
+                    return NextResponse.json(status);
+                }
+                if (parsePreviewReady) {
                     const status = await readStatus();
                     return NextResponse.json(status);
                 }

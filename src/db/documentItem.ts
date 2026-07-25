@@ -88,6 +88,69 @@ export async function replaceDocumentItemsAtomicDB(
     return replaceDocumentItemsAtomicWithRunner(prisma, documentId, items);
 }
 
+export const DOCUMENT_INITIALIZATION_CONFLICT = 'DOCUMENT_INITIALIZATION_CONFLICT';
+
+/**
+ * Re-segmentation is destructive, so claim the document stage and inspect the
+ * existing items in the same transaction that replaces them.
+ */
+export async function replaceDocumentItemsForInitializationWithRunner(
+    database: {
+        $transaction: <T>(operation: (tx: any) => Promise<T>) => Promise<T>;
+    },
+    documentId: string,
+    items: DocumentItemCreateInput[]
+): Promise<{ count: number }> {
+    if (!documentId) throw new Error('missing document id');
+    if (!Array.isArray(items) || !items.length) throw new Error('no document items to replace');
+
+    return database.$transaction(async (tx: any) => {
+        const document = await tx.document.findUnique({
+            where: { id: documentId },
+            select: { status: true },
+        });
+        const currentStatus = String(document?.status || '');
+        if (!['PARSING', 'SEGMENTING'].includes(currentStatus)) {
+            throw new Error(DOCUMENT_INITIALIZATION_CONFLICT);
+        }
+
+        const [existingCount, progressedCount] = await Promise.all([
+            tx.documentItem.count({ where: { documentId } }),
+            tx.documentItem.count({
+                where: {
+                    documentId,
+                    OR: [{ status: { not: 'NOT_STARTED' } }, { targetText: { not: null } }],
+                },
+            }),
+        ]);
+        if (progressedCount > 0 || (currentStatus === 'PARSING' && existingCount > 0)) {
+            throw new Error(DOCUMENT_INITIALIZATION_CONFLICT);
+        }
+
+        const claimed = await tx.document.updateMany({
+            where: { id: documentId, status: currentStatus },
+            data: { status: 'SEGMENTING' },
+        });
+        if (claimed.count !== 1) throw new Error(DOCUMENT_INITIALIZATION_CONFLICT);
+
+        await tx.documentItem.deleteMany({ where: { documentId } });
+        const created = await tx.documentItem.createMany({ data: items });
+        if (Number(created?.count || 0) !== items.length) {
+            throw new Error(
+                `document item replacement incomplete: expected ${items.length}, created ${Number(created?.count || 0)}`
+            );
+        }
+        return { count: created.count };
+    });
+}
+
+export async function replaceDocumentItemsForInitializationDB(
+    documentId: string,
+    items: DocumentItemCreateInput[]
+): Promise<{ count: number }> {
+    return replaceDocumentItemsForInitializationWithRunner(prisma, documentId, items);
+}
+
 // 查找：按 id
 export async function findDocumentItemByIdDB(id: string): Promise<DocumentItem | null> {
     return prisma.documentItem.findUnique({ where: { id } });

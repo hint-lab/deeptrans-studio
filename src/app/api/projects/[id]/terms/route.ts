@@ -1,31 +1,41 @@
 import { findProjectDictionaryAction } from '@/actions/dictionary';
-import { updateDocumentStatusDB } from '@/db/document';
+import { updateDocumentStatusIfCurrentDB } from '@/db/document';
 import { extractTextFromUrl } from '@/lib/file-parser';
 import {
     DOCUMENT_TERMS_START_ERROR,
+    documentTermsBatchPointerKey,
     documentTermsJobId,
     normalizeDocumentTermJobOptions,
+    resolveDocumentTermsStatus,
 } from '@/lib/document-term-job';
 import { guardMessage, guardStatus, requireUser, requireWritableProject } from '@/lib/guards';
 import { scopedProjectBatchId } from '@/lib/init-artifact-keys';
+import { canWriteDocumentTermsStatus } from '@/lib/document-init-status';
 import { createLogger } from '@/lib/logger';
 import { getRedis } from '@/lib/redis';
-import { TTL_PROGRESS, setTextWithTTL } from '@/lib/redis-ttl';
+import { releaseOwnedRedisLock } from '@/lib/redis-lock';
+import { TTL_BATCH, TTL_PROGRESS, setTextWithTTL } from '@/lib/redis-ttl';
 import { DocumentStatus } from '@/types/enums';
 import { getQueue } from '@/worker/queue';
+import { randomUUID } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
-const logger = createLogger({
-    type: 'request:api:projects:[id]:terms',
-}, {
-    json: false,// 开启json格式输出
-    pretty: false, // 关闭开发环境美化输出
-    colors: true, // 仅当json：false时启用颜色输出可用
-    includeCaller: false, // 日志不包含调用者
-});
+const logger = createLogger(
+    {
+        type: 'request:api:projects:[id]:terms',
+    },
+    {
+        json: false, // 开启json格式输出
+        pretty: false, // 关闭开发环境美化输出
+        colors: true, // 仅当json：false时启用颜色输出可用
+        includeCaller: false, // 日志不包含调用者
+    }
+);
 export async function POST(req: NextRequest, ctx: any) {
-    let ownedDocumentId = '';
     let progressRedis: Awaited<ReturnType<typeof getRedis>> | null = null;
     let progressBatchId = '';
+    let termsLockKey = '';
+    let termsLockValue = '';
+    let termsLockTransferred = false;
     try {
         const redis = await getRedis();
         progressRedis = redis;
@@ -34,7 +44,7 @@ export async function POST(req: NextRequest, ctx: any) {
         let body: any = {};
         try {
             body = await req.json();
-        } catch { }
+        } catch {}
         const batchId = String(q.get('batchId') || body?.batchId || '');
         logger.debug(`req batchId: ${batchId}`);
         const termOptions = normalizeDocumentTermJobOptions(body?.terms);
@@ -45,25 +55,91 @@ export async function POST(req: NextRequest, ctx: any) {
         const scopedBatchId = scopedProjectBatchId(projectId, batchId);
         progressBatchId = scopedBatchId;
 
-        // 确保项目词库存在（PROJECT 范围）
-        try {
-            await findProjectDictionaryAction(projectId);
-        } catch { }
-
         const only = project.documents?.[0];
         if (!only || !only.url)
             return NextResponse.json({ error: 'document not found' }, { status: 404 });
-        ownedDocumentId = only.id;
+        if (!canWriteDocumentTermsStatus(only.status)) {
+            return NextResponse.json(
+                { error: '文档已进入其他阶段，不能从旧页面重新启动术语提取' },
+                { status: 409 }
+            );
+        }
+
+        const termsBatchPointerKey = documentTermsBatchPointerKey(only.id);
+        const rememberedBatchId = String((await redis.get(termsBatchPointerKey)) || '');
+        if (rememberedBatchId && body?.retry !== true) {
+            const rememberedScopedBatchId = scopedProjectBatchId(projectId, rememberedBatchId);
+            const [rememberedTotal, rememberedDone, rememberedFailed] = await Promise.all([
+                redis.get(`docTerms.${rememberedScopedBatchId}.total`),
+                redis.get(`docTerms.${rememberedScopedBatchId}.done`),
+                redis.get(`docTerms.${rememberedScopedBatchId}.failed`),
+            ]);
+            const rememberedStatus = resolveDocumentTermsStatus(
+                rememberedTotal,
+                rememberedDone,
+                rememberedFailed
+            );
+            if (rememberedStatus !== 'idle') {
+                return NextResponse.json({
+                    ok: true,
+                    step: 'terms',
+                    reused: true,
+                    activeBatchId: rememberedBatchId,
+                    termsStatus: rememberedStatus,
+                });
+            }
+            return NextResponse.json(
+                {
+                    error: '术语提取结果已过期，请重试',
+                    activeBatchId: rememberedBatchId,
+                    requiresRetry: true,
+                },
+                { status: 409 }
+            );
+        }
+
+        termsLockKey = `project-init:terms-lock:${only.id}`;
+        termsLockValue = JSON.stringify({ token: randomUUID(), batchId });
+        const termsLockAcquired = await redis.set(
+            termsLockKey,
+            termsLockValue,
+            'EX',
+            60 * 60,
+            'NX'
+        );
+        if (termsLockAcquired !== 'OK') {
+            const activeLock = await redis.get(termsLockKey);
+            let activeBatchId = '';
+            try {
+                activeBatchId = String(JSON.parse(String(activeLock || '{}'))?.batchId || '');
+            } catch {}
+            return NextResponse.json({
+                ok: true,
+                step: 'terms',
+                reused: true,
+                activeBatchId: activeBatchId || undefined,
+            });
+        }
+
+        // 确保项目词库存在（PROJECT 范围）
+        try {
+            await findProjectDictionaryAction(projectId);
+        } catch {}
 
         let bodyText = '';
         try {
             const { text } = await extractTextFromUrl(only.url);
             bodyText = String(text || '').trim();
-        } catch { }
+        } catch {}
         if (!bodyText) return NextResponse.json({ error: 'empty content' }, { status: 400 });
-        try {
-            await updateDocumentStatusDB(only.id, DocumentStatus.TERMS_EXTRACTING as any);
-        } catch { }
+        const claimed = await updateDocumentStatusIfCurrentDB(
+            only.id,
+            DocumentStatus.TERMS_EXTRACTING as any,
+            ['SEGMENTING', 'TERMS_EXTRACTING']
+        );
+        if (!claimed) {
+            return NextResponse.json({ error: '文档阶段已变化，术语提取未启动' }, { status: 409 });
+        }
 
         const queue = getQueue('doc-terms');
         const jobId = documentTermsJobId(scopedBatchId);
@@ -71,7 +147,17 @@ export async function POST(req: NextRequest, ctx: any) {
         if (existingJob) {
             const state = await existingJob.getState();
             if (!['completed', 'failed', 'unknown'].includes(state)) {
-                return NextResponse.json({ ok: true, step: 'terms', reused: true });
+                // Older/racing callers may already have queued this exact job
+                // without the document pointer. Remember it for reload recovery;
+                // the newly-acquired lock is released by finally because the
+                // existing worker does not own its token.
+                await setTextWithTTL(redis, termsBatchPointerKey, batchId, TTL_BATCH);
+                return NextResponse.json({
+                    ok: true,
+                    step: 'terms',
+                    reused: true,
+                    activeBatchId: batchId,
+                });
             }
             await existingJob.remove();
         }
@@ -93,10 +179,14 @@ export async function POST(req: NextRequest, ctx: any) {
                 userId: authCtx.userId,
                 tenantId: authCtx.tenantId || undefined,
                 projectId,
+                termsLockKey,
+                termsLockValue,
                 ...termOptions,
             },
             { jobId, removeOnComplete: 1000, removeOnFail: 5000 }
         );
+        await setTextWithTTL(redis, termsBatchPointerKey, batchId, TTL_BATCH);
+        termsLockTransferred = true;
         logger.debug(`queued ${jobId}`);
         return NextResponse.json({ ok: true, step: 'terms' });
     } catch (e: any) {
@@ -114,12 +204,7 @@ export async function POST(req: NextRequest, ctx: any) {
                     DOCUMENT_TERMS_START_ERROR,
                     TTL_PROGRESS
                 );
-            } catch { }
-        }
-        if (ownedDocumentId) {
-            try {
-                await updateDocumentStatusDB(ownedDocumentId, DocumentStatus.ERROR as any);
-            } catch { }
+            } catch {}
         }
         logger.error('[terms start error]', e);
         const status = guardStatus(e);
@@ -127,5 +212,11 @@ export async function POST(req: NextRequest, ctx: any) {
             { error: status >= 500 ? DOCUMENT_TERMS_START_ERROR : guardMessage(e) },
             { status }
         );
+    } finally {
+        if (progressRedis && termsLockKey && termsLockValue && !termsLockTransferred) {
+            await releaseOwnedRedisLock(progressRedis, termsLockKey, termsLockValue).catch(
+                () => {}
+            );
+        }
     }
 }

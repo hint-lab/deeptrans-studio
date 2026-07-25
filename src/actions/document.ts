@@ -3,6 +3,7 @@
 import {
     findDocumentWithItemsByIdDB,
     updateDocumentByIdDB,
+    updateDocumentStatusIfCurrentDB,
     updateDocumentStatusDB,
 } from '@/db/document';
 import {
@@ -268,7 +269,12 @@ export async function updateDocumentStatusByIdAction(
     status: keyof typeof DocumentStatus
 ) {
     if (!documentId) return false;
-    await requireWritableDocument(documentId);
-    await updateDocumentStatusDB(documentId, DocumentStatus[status] as any);
-    return true;
+    const document = await requireWritableDocument(documentId);
+    const nextStatus = DocumentStatus[status];
+    if (String(document.status) === String(nextStatus)) return true;
+    if (nextStatus !== DocumentStatus.COMPLETED) return false;
+    return updateDocumentStatusIfCurrentDB(documentId, DocumentStatus.COMPLETED as any, [
+        'SEGMENTING',
+        'TERMS_EXTRACTING',
+    ]);
 }

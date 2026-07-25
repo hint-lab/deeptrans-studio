@@ -15,6 +15,12 @@ export function documentTermsJobId(scopedBatchId: string): string {
     return `docTerms.${encodedBatchId}.all`;
 }
 
+export function documentTermsBatchPointerKey(documentId: string): string {
+    const normalized = String(documentId || '').trim();
+    if (!normalized) throw new Error('missing document id');
+    return `project-init:terms-batch:${normalized}`;
+}
+
 export function normalizeDocumentTermJobOptions(value: unknown): DocumentTermExtractOptions {
     const input = value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
     const finiteNumber = (candidate: unknown) => {

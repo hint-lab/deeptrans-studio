@@ -7,10 +7,10 @@ if (process.env.NODE_ENV !== 'production') {
         .catch(() => {});
 }
 import { fetchDocumentItemNeedsMtReviewByIdDB, updateDocumentItemByIdDB } from '@/db/documentItem';
-import { updateDocumentStatusDB } from '@/db/document';
 import { DOCUMENT_TERMS_RUN_ERROR } from '@/lib/document-term-job';
 import { prisma } from '@/lib/db';
 import { createLogger } from '@/lib/logger';
+import { releaseOwnedRedisLock } from '@/lib/redis-lock';
 import { TTL_BATCH, setJSONWithTTL, setTextWithTTL } from '@/lib/redis-ttl';
 import { getStorageService } from '@/lib/storage/service';
 import { canWriteDocumentItemForOwner } from '@/server/document-item-access';
@@ -274,9 +274,15 @@ docTermsWorker.on('completed', async job => {
             .del(`docTerms.${batchId}.failed`, `docTerms.${batchId}.error`)
             .catch(() => {});
     }
+    const termsLockKey = String((job?.data as any)?.termsLockKey || '');
+    const termsLockValue = String((job?.data as any)?.termsLockValue || '');
+    await releaseOwnedRedisLock(connection, termsLockKey, termsLockValue).catch(() => {});
 });
 docTermsWorker.on('failed', async (job, err) => {
     logger.error(`[doc-terms] failed job=${job?.id} error=${err?.message || err}`);
+    const termsLockKey = String((job?.data as any)?.termsLockKey || '');
+    const termsLockValue = String((job?.data as any)?.termsLockValue || '');
+    await releaseOwnedRedisLock(connection, termsLockKey, termsLockValue).catch(() => {});
     try {
         const batchId = (job?.data as any)?.batchId;
         if (batchId) {
@@ -288,8 +294,6 @@ docTermsWorker.on('failed', async (job, err) => {
             );
             await connection.set(`docTerms.${batchId}.failed`, '1', 'EX', TTL_BATCH);
         }
-        const documentId = (job?.data as any)?.documentId;
-        if (documentId) await updateDocumentStatusDB(documentId, 'ERROR');
     } catch (statusError: any) {
         logger.error(
             `[doc-terms] failed to persist failure state job=${job?.id} error=${statusError?.message || statusError}`

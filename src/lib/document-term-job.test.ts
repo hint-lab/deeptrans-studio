@@ -2,14 +2,19 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Job } from 'bullmq';
 import {
+    documentTermsBatchPointerKey,
     documentTermsJobId,
     normalizeDocumentTermJobOptions,
     resolveDocumentTermsStatus,
 } from './document-term-job';
 
+test('keeps a document-scoped pointer to the recoverable terms batch', () => {
+    assert.equal(documentTermsBatchPointerKey('document-1'), 'project-init:terms-batch:document-1');
+    assert.throws(() => documentTermsBatchPointerKey(''), /missing document id/);
+});
+
 test('encodes project-scoped batch IDs for BullMQ custom IDs', () => {
-    const scopedBatchId =
-        'cmryu7fmc0004pa019bk29uxl:cmryu7fmc0004pa019bk29uxl.1784891319255';
+    const scopedBatchId = 'cmryu7fmc0004pa019bk29uxl:cmryu7fmc0004pa019bk29uxl.1784891319255';
     const jobId = documentTermsJobId(scopedBatchId);
 
     assert.equal(jobId.includes(':'), false);
