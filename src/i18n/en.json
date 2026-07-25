@@ -308,9 +308,12 @@
             "readOnlyDictionary": "You can view this dictionary, but you cannot edit it.",
             "cannotDeleteReadOnlyEntry": "You can view this dictionary, but you cannot delete its entries.",
             "Guide": {
-                "title": "New to dictionaries? Finish in 3 steps",
+                "helpButton": "Excel import help",
+                "title": "Import a dictionary from Excel",
                 "recommended": "Excel recommended",
                 "description": "Use the standard template to avoid column mismatches. Each row becomes one bilingual term.",
+                "required": "required",
+                "optional": "optional",
                 "downloadTemplate": "Download Excel template",
                 "stepDownload": "Download template",
                 "stepDownloadDetail": "Start with the DeepTrans three-column sheet.",

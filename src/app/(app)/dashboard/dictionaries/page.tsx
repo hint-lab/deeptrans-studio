@@ -14,7 +14,7 @@ import { AddPublicDictionaryDialog } from './components/add-public-dictionary-di
 import { CreateDictionaryDialog } from './components/create-dictionary-dialog';
 import type { Dictionary as UIDictionary } from './components/dictionary-artwork';
 import { DictionaryArtwork } from './components/dictionary-artwork';
-import { DictionaryImportGuide } from './components/dictionary-import-guide';
+import { DictionaryImportHelpDialog } from './components/dictionary-import-guide';
 import ImportDictionaryDialog from './components/import-dictionary-dialog';
 const logger = createLogger(
     {
@@ -190,14 +190,15 @@ export default function DictionariesPage() {
 
     return (
         <div className="mx-auto w-full max-w-7xl p-6">
-            <div className="mb-4">
-                <h1 className="mb-1 text-3xl font-bold text-gray-900 dark:text-white">
-                    {t('title')}
-                </h1>
-                <p className="text-sm text-gray-600 dark:text-gray-400">{t('description')}</p>
+            <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                    <h1 className="mb-1 text-3xl font-bold text-gray-900 dark:text-white">
+                        {t('title')}
+                    </h1>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">{t('description')}</p>
+                </div>
+                <DictionaryImportHelpDialog />
             </div>
-
-            <DictionaryImportGuide />
 
             <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full space-y-6">
                 <div className="space-between flex items-center">

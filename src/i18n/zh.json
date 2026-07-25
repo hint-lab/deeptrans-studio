@@ -308,9 +308,12 @@
             "readOnlyDictionary": "您可以查看该词库，但无权编辑。",
             "cannotDeleteReadOnlyEntry": "您可以查看该词库，但无权删除词条。",
             "Guide": {
-                "title": "第一次增加词库？按这 3 步完成",
+                "helpButton": "Excel 导入帮助",
+                "title": "Excel 词库导入指南",
                 "recommended": "推荐 Excel",
                 "description": "使用统一模板可避免列名不匹配；系统会把每一行作为一条双语术语。",
+                "required": "必填",
+                "optional": "可选",
                 "downloadTemplate": "下载 Excel 模板",
                 "stepDownload": "下载模板",
                 "stepDownloadDetail": "使用 DeepTrans 的三列表格。",
