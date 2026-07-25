@@ -2,6 +2,7 @@ import { SyntaxAdviceEmbedAgent, SyntaxEvaluateAgent, SyntaxMarkerExtractAgent }
 import type { AuthContext } from '@/lib/guards';
 import { createLogger } from '@/lib/logger';
 import {
+    SYNTAX_CATEGORIES,
     buildSyntaxAlignmentResult,
     normalizeSyntaxQualityResult,
     type SyntaxIssue,
@@ -50,25 +51,51 @@ export async function evaluateSyntax(
         options?.domain,
         options?.locale
     );
-    const result = await agent.execute(
-        {
-            source,
-            target,
-            targetLanguage: options?.targetLanguage,
-            domain: options?.domain,
-            prompt: options?.prompt,
-            locale: options?.locale,
-        },
-        {
-            locale: options?.locale,
-        }
-    );
+    const execute = (prompt?: string) =>
+        agent.execute(
+            {
+                source,
+                target,
+                targetLanguage: options?.targetLanguage,
+                domain: options?.domain,
+                prompt,
+                locale: options?.locale,
+            },
+            {
+                locale: options?.locale,
+            }
+        );
+
+    const result = await runSyntaxEvaluationWithRetry(execute, options?.prompt);
     if (result.status !== 'complete' || result.legacy) {
         throw new Error(
             result.status === 'failed'
                 ? 'SYNTAX_QA_INVALID_RESPONSE'
                 : 'SYNTAX_QA_INCOMPLETE_RESPONSE'
         );
+    }
+    return result;
+}
+
+export async function runSyntaxEvaluationWithRetry(
+    execute: (prompt?: string) => Promise<SyntaxQualityResult>,
+    originalPrompt?: string
+) {
+    let result = await execute(originalPrompt);
+    if (result.status !== 'complete' || result.legacy) {
+        logger.warn('句法质检结果不完整，自动重试一次', {
+            status: result.status,
+            legacy: result.legacy,
+            warnings: result.warnings,
+        });
+        const retryInstruction = [
+            originalPrompt,
+            '上一次输出缺少必需字段。请只返回一个 version=2 的 JSON 对象，必须同时包含 relations、issues、dimensions。',
+            `dimensions 必须逐项覆盖且仅使用这些 category：${SYNTAX_CATEGORIES.join(', ')}。即使某项不适用，也要返回 status=not_applicable。`,
+        ]
+            .filter(Boolean)
+            .join('\n');
+        result = await execute(retryInstruction);
     }
     return result;
 }

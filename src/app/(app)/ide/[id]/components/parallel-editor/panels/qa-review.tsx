@@ -161,6 +161,7 @@ export default function QAPanel(_props: { projectId?: string }) {
         const requestId = ++loadRequestRef.current;
         selectionRequestRef.current += 1;
         setBaseline('');
+        setShowDiff(false);
         setSavingSelection(false);
         setQaSyntaxEmbedded(undefined);
         if (!activeItemId) {
@@ -291,6 +292,7 @@ export default function QAPanel(_props: { projectId?: string }) {
             if (activeItemIdRef.current !== itemId) return;
             setQAOutputs({ itemId, syntax: generated.syntax });
             setQaSyntaxEmbedded(generated.text || '');
+            setShowDiff(true);
             toast.success(t('revisionGenerated'));
         } catch (error) {
             toast.error(error instanceof Error ? error.message : t('generateFailed'));
@@ -318,8 +320,15 @@ export default function QAPanel(_props: { projectId?: string }) {
 
     const baseText = baseline || result.evaluation?.baseTarget || '';
     const proposalText = String(qaEmbeddedText || '');
+    const noRevisionNeeded = Boolean(
+        baseText && hasRun && result.status === 'complete' && !result.legacy && issues.length === 0
+    );
+    // A clean QA result still has a meaningful comparison: the reviewed text is
+    // intentionally identical to the baseline. Showing both sides makes the QA
+    // panel consistent with the other workflow panels without inventing a rewrite.
+    const comparisonText = proposalText || (noRevisionNeeded ? baseText : '');
     const diff =
-        showDiff && baseText && proposalText ? wordDiff(baseText, proposalText) : undefined;
+        showDiff && baseText && comparisonText ? wordDiff(baseText, comparisonText) : undefined;
     const baseApplied = Boolean(baseText && targetText === baseText);
     const proposalApplied = Boolean(proposalText && !proposalStale && targetText === proposalText);
     const panelClass =
@@ -708,12 +717,30 @@ export default function QAPanel(_props: { projectId?: string }) {
                             <input
                                 type="checkbox"
                                 checked={showDiff}
-                                disabled={!baseText || !proposalText}
+                                disabled={!baseText || !comparisonText}
                                 onChange={() => setShowDiff(value => !value)}
                             />
                             {t('showDiff')}
                         </label>
                     </div>
+
+                    {showDiff && baseText && comparisonText && (
+                        <div className="mb-2 flex flex-wrap items-center gap-3 rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-[10px] text-muted-foreground dark:border-slate-800 dark:bg-slate-900">
+                            <span className="flex items-center gap-1">
+                                <span className="h-2.5 w-2.5 rounded-sm bg-red-100 ring-1 ring-red-200 dark:bg-red-950 dark:ring-red-900" />
+                                {t('diffRemoved')}
+                            </span>
+                            <span className="flex items-center gap-1">
+                                <span className="h-2.5 w-2.5 rounded-sm bg-emerald-100 ring-1 ring-emerald-200 dark:bg-emerald-950 dark:ring-emerald-900" />
+                                {t('diffAdded')}
+                            </span>
+                            {noRevisionNeeded && (
+                                <span className="ml-auto font-medium text-emerald-700 dark:text-emerald-300">
+                                    {t('noRevisionNeeded')}
+                                </span>
+                            )}
+                        </div>
+                    )}
 
                     <Button
                         type="button"
@@ -802,11 +829,11 @@ export default function QAPanel(_props: { projectId?: string }) {
                                 </Button>
                             </div>
                         )}
-                        {proposalText && (
+                        {comparisonText && (
                             <div
                                 className={cn(
                                     'rounded-md border p-2',
-                                    proposalApplied
+                                    noRevisionNeeded || proposalApplied
                                         ? 'border-emerald-300 bg-emerald-50/30 dark:border-emerald-800 dark:bg-emerald-950/20'
                                         : proposalStale
                                           ? 'border-amber-300 bg-amber-50/40 dark:border-amber-800 dark:bg-amber-950/20'
@@ -823,6 +850,14 @@ export default function QAPanel(_props: { projectId?: string }) {
                                             className="border-emerald-300 text-[10px] text-emerald-700"
                                         >
                                             {t('applied')}
+                                        </Badge>
+                                    )}
+                                    {noRevisionNeeded && (
+                                        <Badge
+                                            variant="outline"
+                                            className="border-emerald-300 text-[10px] text-emerald-700 dark:text-emerald-300"
+                                        >
+                                            {t('noRevisionNeeded')}
                                         </Badge>
                                     )}
                                     {proposalStale && (
@@ -848,17 +883,28 @@ export default function QAPanel(_props: { projectId?: string }) {
                                                   <span key={index}>{part.text}</span>
                                               )
                                           )
-                                        : proposalText}
+                                        : comparisonText}
                                 </div>
-                                <Button
-                                    type="button"
-                                    size="sm"
-                                    className="mt-2 h-9 text-[11px]"
-                                    disabled={proposalStale}
-                                    onClick={() => void applyToTarget('proposal')}
-                                >
-                                    {t('applyToTarget')}
-                                </Button>
+                                {proposalText ? (
+                                    <Button
+                                        type="button"
+                                        size="sm"
+                                        className="mt-2 h-9 text-[11px]"
+                                        disabled={proposalStale}
+                                        onClick={() => void applyToTarget('proposal')}
+                                    >
+                                        {t('applyToTarget')}
+                                    </Button>
+                                ) : (
+                                    <p className="mt-2 text-[11px] leading-relaxed text-emerald-700 dark:text-emerald-300">
+                                        {t('noRevisionDetail')}
+                                    </p>
+                                )}
+                            </div>
+                        )}
+                        {baseText && !comparisonText && (
+                            <div className="rounded-md border border-dashed border-slate-300 bg-slate-50/60 p-3 text-[11px] leading-relaxed text-muted-foreground dark:border-slate-700 dark:bg-slate-900/60">
+                                {t('diffPendingHint')}
                             </div>
                         )}
                     </div>
