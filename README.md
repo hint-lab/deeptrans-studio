@@ -9,6 +9,7 @@
   [![React](https://img.shields.io/badge/React-19.1-149eca?logo=react)](https://react.dev/)
   [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178c6?logo=typescript)](https://www.typescriptlang.org/)
   [![Prisma](https://img.shields.io/badge/Prisma-6.1-2D3748?logo=prisma)](https://prisma.io/)
+  [![Version](https://img.shields.io/badge/version-0.6.0-6d28d9)](CHANGELOG.md)
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
   
   [English](#) | [中文](./README_ZH.md)
