@@ -34,6 +34,15 @@ import {
 import { useTranslations } from 'next-intl';
 
 const PREVIEW_ROW_LIMIT = 10;
+type ImportStage = 'uploading' | 'queued' | 'parsing' | 'embedding' | 'vector' | 'complete';
+
+async function readApiResult(response: Response, fallback: string) {
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || !payload?.success) {
+        throw new Error(payload?.error || fallback);
+    }
+    return payload.data;
+}
 
 export function ImportMemoryDialog({ onCompleted }: { onCompleted?: () => void }) {
     const t = useTranslations('Dashboard.Memories.ImportDialog');
@@ -57,7 +66,7 @@ export function ImportMemoryDialog({ onCompleted }: { onCompleted?: () => void }
     const [progress, setProgress] = useState(0);
     const [currentBatch, setCurrentBatch] = useState(0);
     const [totalBatches, setTotalBatches] = useState(0);
-    const [stage, setStage] = useState<'embedding' | 'vector' | 'complete'>('embedding');
+    const [stage, setStage] = useState<ImportStage>('uploading');
 
     // 打开对话框时加载记忆库列表
     useEffect(() => {
@@ -146,84 +155,104 @@ export function ImportMemoryDialog({ onCompleted }: { onCompleted?: () => void }
 
     const handleSubmit = async () => {
         if (!file) {
-            toast.error('提示', { description: '请先选择文件' });
+            toast.error(common('error'), { description: t('selectFileRequired') });
+            return;
+        }
+        if (!memoryId) {
+            toast.error(common('error'), { description: t('selectMemoryRequired') });
             return;
         }
 
         setSubmitting(true);
         setSubmittingUI(true);
-        setProgress(0);
+        setProgress(2);
         setCurrentBatch(0);
         setTotalBatches(0);
-        setStage('embedding');
+        setStage('uploading');
 
         try {
-            const form = new FormData();
-            form.append('file', file);
-            if (memoryId) form.append('memoryId', memoryId);
-            if (sourceLang) form.append('sourceLang', sourceLang);
-            if (targetLang) form.append('targetLang', targetLang);
-            if (sourceKey) form.append('sourceKey', sourceKey);
-            if (targetKey) form.append('targetKey', targetKey);
-            if (notesKey) form.append('notesKey', notesKey);
+            const uploadForm = new FormData();
+            uploadForm.append('file', file);
+            const uploadData = await readApiResult(
+                await fetch('/api/upload-proxy', {
+                    method: 'POST',
+                    body: uploadForm,
+                }),
+                t('uploadFailed')
+            );
 
-            // 使用流式 API 获取实时进度
-            const response = await fetch('/api/memories/import-progress', {
-                method: 'POST',
-                body: form,
-            });
+            setProgress(5);
+            setStage('queued');
+            const enqueueData = await readApiResult(
+                await fetch('/api/memories/import', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        fileKey: uploadData.fileName,
+                        fileType: file.name,
+                        memoryId,
+                        sourceLang: sourceLang || undefined,
+                        targetLang: targetLang || undefined,
+                        sourceKey,
+                        targetKey,
+                        notesKey,
+                    }),
+                }),
+                t('enqueueFailed')
+            );
+            const jobId = String(enqueueData.jobId || '');
+            if (!jobId) throw new Error(t('missingJobId'));
 
-            if (!response.ok) {
-                throw new Error('导入请求失败');
-            }
+            let result: { total?: number; indexed?: number; memoryId?: string } | null = null;
+            while (!result) {
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                const statusData = await readApiResult(
+                    await fetch(`/api/memories/import/status?jobId=${encodeURIComponent(jobId)}`, {
+                        cache: 'no-store',
+                    }),
+                    t('statusFailed')
+                );
 
-            const reader = response.body?.getReader();
-            if (!reader) {
-                throw new Error('无法读取响应流');
-            }
-
-            const decoder = new TextDecoder();
-            let result: any = null;
-
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-
-                const chunk = decoder.decode(value, { stream: true });
-                const lines = chunk.split('\n');
-
-                for (const line of lines) {
-                    if (line.startsWith('data: ')) {
-                        try {
-                            const data = JSON.parse(line.slice(6));
-
-                            if (data.type === 'init') {
-                                setTotalBatches(data.totalBatches);
-                                setStage(data.stage);
-                            } else if (data.type === 'progress') {
-                                setCurrentBatch(data.currentBatch);
-                                setTotalBatches(data.totalBatches);
-                                setProgress(data.progress);
-                                setStage(data.stage);
-                            } else if (data.type === 'complete') {
-                                setProgress(100);
-                                setStage('complete');
-                                result = data.result;
-                            } else if (data.type === 'error') {
-                                throw new Error(data.error);
-                            }
-                        } catch (parseError) {
-                            // 忽略解析错误，继续处理下一行
-                        }
+                if (statusData.state === 'failed') {
+                    throw new Error(statusData.error || t('jobFailed'));
+                }
+                if (statusData.state === 'completed') {
+                    if (
+                        !statusData.result ||
+                        typeof statusData.result.total !== 'number' ||
+                        typeof statusData.result.indexed !== 'number'
+                    ) {
+                        throw new Error(t('invalidJobResult'));
                     }
+                    result = statusData.result;
+                    setProgress(100);
+                    setStage('complete');
+                    break;
+                }
+
+                const next = statusData.progress;
+                if (next && typeof next === 'object') {
+                    if (typeof next.progress === 'number') setProgress(next.progress);
+                    if (typeof next.currentBatch === 'number') setCurrentBatch(next.currentBatch);
+                    if (typeof next.totalBatches === 'number') setTotalBatches(next.totalBatches);
+                    if (
+                        next.stage === 'parsing' ||
+                        next.stage === 'embedding' ||
+                        next.stage === 'vector'
+                    ) {
+                        setStage(next.stage);
+                    }
+                } else if (typeof next === 'number') {
+                    setProgress(next);
                 }
             }
 
-            if (!result?.success) {
-                throw new Error(result?.error || '导入失败');
-            }
-
-            toast.success('导入完成', { description: `成功导入 ${result.data.total} 条记忆` });
+            toast.success(common('success'), {
+                description: t('importSuccess', {
+                    total: result?.total ?? 0,
+                    indexed: result?.indexed ?? 0,
+                }),
+            });
 
             // 延迟关闭对话框，让用户看到完成状态
             setTimeout(() => {
@@ -232,7 +261,7 @@ export function ImportMemoryDialog({ onCompleted }: { onCompleted?: () => void }
                 onCompleted?.();
             }, 1000);
         } catch (e: any) {
-            toast.error('错误', { description: e.message || String(e) });
+            toast.error(common('error'), { description: e.message || String(e) });
         } finally {
             setSubmitting(false);
             // 延迟重置 UI 状态
@@ -271,20 +300,25 @@ export function ImportMemoryDialog({ onCompleted }: { onCompleted?: () => void }
                                 <div className="flex items-center gap-3">
                                     <Loader2 className="h-4 w-4 animate-spin text-amber-600" />
                                     <span className="text-amber-800">
+                                        {stage === 'uploading' && t('uploading')}
+                                        {stage === 'queued' && t('queued')}
+                                        {stage === 'parsing' && t('parsing')}
                                         {stage === 'embedding' && t('embedding')}
                                         {stage === 'vector' && t('vector')}
                                         {stage === 'complete' && t('complete')}
                                     </span>
                                 </div>
 
-                                {totalBatches > 0 && (
+                                {progress > 0 && (
                                     <div className="space-y-2">
                                         <div className="flex justify-between text-xs text-amber-700">
                                             <span>
-                                                {t('progressBatches', {
-                                                    current: currentBatch,
-                                                    total: totalBatches,
-                                                })}
+                                                {totalBatches > 0
+                                                    ? t('progressBatches', {
+                                                          current: currentBatch,
+                                                          total: totalBatches,
+                                                      })
+                                                    : t('backgroundImportHint')}
                                             </span>
                                             <span>{Math.round(progress)}%</span>
                                         </div>
@@ -543,7 +577,7 @@ export function ImportMemoryDialog({ onCompleted }: { onCompleted?: () => void }
                         </Button>
                         <Button
                             onClick={handleSubmit}
-                            disabled={submitting || !file}
+                            disabled={submitting || !file || !memoryId}
                             className="min-w-[120px]"
                         >
                             {submitting ? (

@@ -225,7 +225,7 @@ model TranslationMemoryEntry {
   memoryId    String
   sourceText  String
   targetText  String
-  embedding   Unsupported("vector(1536)")?
+  embedding   Unsupported("vector(2048)")?
   sourceLang  String?
   targetLang  String?
   notes       String?

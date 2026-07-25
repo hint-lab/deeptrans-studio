@@ -6,6 +6,7 @@ if (process.env.NODE_ENV !== 'production') {
         })
         .catch(() => {});
 }
+import { Prisma } from '@prisma/client';
 import { fetchDocumentItemNeedsMtReviewByIdDB, updateDocumentItemByIdDB } from '@/db/documentItem';
 import { DOCUMENT_TERMS_RUN_ERROR } from '@/lib/document-term-job';
 import { prisma } from '@/lib/db';
@@ -18,6 +19,7 @@ import { embedBatchForOwner } from '@/server/embedding';
 import { runPreTranslateForOwner } from '@/server/pre-translate';
 import { extractDocumentTermsForOwner } from '@/server/project-init';
 import { runQualityAssureForOwner } from '@/server/quality-assure';
+import { assertEmbeddingBatch } from '../lib/embedding-contract';
 import { upsertVectors } from '../lib/vector/postgres';
 import { createWorker, getQueueConnection } from './queue';
 const logger = createLogger(
@@ -326,6 +328,12 @@ process.on('SIGINT', async () => {
         await docTermsWorker.close();
     } catch {}
     try {
+        await memoryImportWorker.close();
+    } catch {}
+    try {
+        await memoryVectorBackfillWorker.close();
+    } catch {}
+    try {
         await connection.quit();
     } catch {}
     process.exit(0);
@@ -342,6 +350,12 @@ process.on('SIGTERM', async () => {
         await docTermsWorker.close();
     } catch {}
     try {
+        await memoryImportWorker.close();
+    } catch {}
+    try {
+        await memoryVectorBackfillWorker.close();
+    } catch {}
+    try {
         await connection.quit();
     } catch {}
     process.exit(0);
@@ -350,11 +364,55 @@ process.on('SIGTERM', async () => {
 logger.info('[worker] Pretranslate, DocTerms & QA workers started');
 
 // Memory-import worker
-const memoryImportWorker = createWorker(
+type MemoryImportJobData = {
+    fileKey: string;
+    fileType?: string;
+    memoryId: string;
+    sourceLang?: string;
+    targetLang?: string;
+    tenantId?: string | null;
+    userId: string;
+    sourceKey?: string;
+    targetKey?: string;
+    notesKey?: string;
+};
+
+type MemoryImportResult = {
+    total: number;
+    indexed: number;
+    memoryId: string;
+};
+
+type MemoryImportProgress = {
+    stage: 'parsing' | 'embedding' | 'vector' | 'complete';
+    currentBatch: number;
+    totalBatches: number;
+    progress: number;
+};
+
+const memoryImportWorker = createWorker<MemoryImportJobData, MemoryImportResult>(
     'memory-import',
     async job => {
-        const { fileKey, fileType, memoryId, sourceLang, targetLang, tenantId, userId } =
-            job.data as any;
+        const {
+            fileKey,
+            fileType,
+            memoryId,
+            sourceLang,
+            targetLang,
+            tenantId,
+            userId,
+            sourceKey,
+            targetKey,
+            notesKey,
+        } = job.data;
+        const updateProgress = (progress: MemoryImportProgress) => job.updateProgress(progress);
+        await updateProgress({
+            stage: 'parsing',
+            currentBatch: 0,
+            totalBatches: 1,
+            progress: 0,
+        });
+
         if (!userId || !memoryId) throw new Error('MISSING_OWNER_OR_MEMORY');
         if (!String(fileKey || '').startsWith(`users/${userId}/uploads/`)) {
             throw new Error('UNAUTHORIZED_FILE_KEY');
@@ -370,6 +428,13 @@ const memoryImportWorker = createWorker(
         // parse file
         let pairs: Array<{ source: string; target: string; notes?: string }> = [];
         const ext = String(fileType || '').toLowerCase();
+        const normalizeColumnKey = (value: unknown) =>
+            String(value ?? '')
+                .trim()
+                .toLowerCase();
+        const requestedSourceKey = normalizeColumnKey(sourceKey);
+        const requestedTargetKey = normalizeColumnKey(targetKey);
+        const requestedNotesKey = normalizeColumnKey(notesKey);
         if (ext.includes('tmx') || ext.includes('xml')) {
             const { XMLParser } = await import('fast-xml-parser');
             const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_' });
@@ -403,16 +468,18 @@ const memoryImportWorker = createWorker(
             const lines = text.split(/\r?\n/).filter(Boolean);
             if (lines.length) {
                 const headerLine = String(lines[0] || '');
-                const headers = headerLine.split(/,|\t/).map(h =>
-                    String(h || '')
-                        .trim()
-                        .toLowerCase()
-                );
-                const idx = (cands: string[]) =>
-                    cands.map(c => headers.indexOf(c)).find(i => i >= 0) ?? -1;
-                const si = idx(['source', 'src', '源', '原文']);
-                const ti = idx(['target', 'tgt', '译', '译文']);
-                const ni = idx(['notes', 'note', '备注']);
+                const headers = headerLine.split(/,|\t/).map(normalizeColumnKey);
+                const idx = (candidates: string[]) => {
+                    for (const candidate of candidates) {
+                        if (!candidate) continue;
+                        const columnIndex = headers.indexOf(candidate);
+                        if (columnIndex >= 0) return columnIndex;
+                    }
+                    return -1;
+                };
+                const si = idx([requestedSourceKey, 'source', 'src', '源', '原文']);
+                const ti = idx([requestedTargetKey, 'target', 'tgt', '译', '译文']);
+                const ni = idx([requestedNotesKey, 'notes', 'note', '备注']);
                 for (const line of lines.slice(1)) {
                     const cols = line.split(/,|\t/);
                     const s = si >= 0 ? String(cols[si] ?? '').trim() : '';
@@ -429,19 +496,26 @@ const memoryImportWorker = createWorker(
             if (name) {
                 const ws = wb.Sheets[name];
                 const rows: any[] = ws ? XLSX.utils.sheet_to_json(ws, { defval: '' }) : [];
-                const norm = (s: string) =>
-                    String(s || '')
-                        .trim()
-                        .toLowerCase();
-                const srcKey = norm('source');
-                const tgtKey = norm('target');
-                const noteKey = norm('notes');
                 for (const r of rows) {
-                    const kv: Record<string, any> = {};
-                    for (const k of Object.keys(r)) kv[norm(k)] = r[k];
-                    const s = String(kv[srcKey] ?? kv['源'] ?? kv['source'] ?? '').trim();
-                    const t = String(kv[tgtKey] ?? kv['译'] ?? kv['target'] ?? '').trim();
-                    const n = String(kv[noteKey] ?? kv['备注'] ?? kv['notes'] ?? '').trim();
+                    const kv: Record<string, unknown> = Object.create(null);
+                    for (const k of Object.keys(r)) kv[normalizeColumnKey(k)] = r[k];
+                    const readColumn = (candidates: string[]) => {
+                        for (const candidate of candidates) {
+                            if (candidate && Object.prototype.hasOwnProperty.call(kv, candidate)) {
+                                return kv[candidate];
+                            }
+                        }
+                        return '';
+                    };
+                    const s = String(
+                        readColumn([requestedSourceKey, 'source', 'src', '源', '原文']) ?? ''
+                    ).trim();
+                    const t = String(
+                        readColumn([requestedTargetKey, 'target', 'tgt', '译', '译文']) ?? ''
+                    ).trim();
+                    const n = String(
+                        readColumn([requestedNotesKey, 'notes', 'note', '备注']) ?? ''
+                    ).trim();
                     if (s && t) pairs.push({ source: s, target: t, notes: n ? n : undefined });
                 }
             }
@@ -449,12 +523,78 @@ const memoryImportWorker = createWorker(
             throw new Error('UNSUPPORTED_FILE_TYPE');
         }
 
+        await updateProgress({
+            stage: 'parsing',
+            currentBatch: 1,
+            totalBatches: 1,
+            progress: 5,
+        });
+
         if (!pairs.length) {
             logger.warn('[WORKER_IMPORT] 未解析到有效的翻译对，跳过后续处理');
-            return;
+            await updateProgress({
+                stage: 'complete',
+                currentBatch: 1,
+                totalBatches: 1,
+                progress: 100,
+            });
+            return { total: 0, indexed: 0, memoryId };
         }
 
-        // write rows to DB first so vector ids match TranslationMemoryEntry ids
+        // Generate and validate every vector before creating any text rows.
+        const texts = pairs.map(p => `${p.source}\n${p.target}`);
+        const vectors: number[][] = [];
+        const batchSize = 200;
+        const totalEmbeddingBatches = Math.ceil(texts.length / batchSize);
+        await updateProgress({
+            stage: 'embedding',
+            currentBatch: 0,
+            totalBatches: totalEmbeddingBatches,
+            progress: 5,
+        });
+
+        try {
+            logger.info(`[WORKER_IMPORT] 开始生成 ${texts.length} 条记录的嵌入向量...`);
+            for (let i = 0; i < texts.length; i += batchSize) {
+                const batch = texts.slice(i, i + batchSize);
+                const currentBatch = Math.floor(i / batchSize) + 1;
+                logger.info(
+                    `[WORKER_IMPORT] 处理第 ${i + 1}-${Math.min(i + batch.length, texts.length)} 条记录...`
+                );
+                const batchVectors = await embedBatchForOwner(batch, { userId, tenantId });
+                assertEmbeddingBatch(
+                    batchVectors,
+                    batch.length,
+                    `memory-import:${memoryId}:batch-${currentBatch}`
+                );
+                vectors.push(...batchVectors);
+                await updateProgress({
+                    stage: 'embedding',
+                    currentBatch,
+                    totalBatches: totalEmbeddingBatches,
+                    progress: Math.min(
+                        80,
+                        5 + Math.round((75 * currentBatch) / totalEmbeddingBatches)
+                    ),
+                });
+            }
+
+            assertEmbeddingBatch(vectors, texts.length, `memory-import:${memoryId}:complete`);
+            logger.info(
+                `[WORKER_IMPORT] 成功生成 ${vectors.length} 个向量，第一个向量维度: ${vectors[0]?.length || 0}`
+            );
+        } catch (error) {
+            logger.error(`[WORKER_IMPORT] 嵌入向量生成失败:`, error);
+            throw error;
+        }
+
+        await updateProgress({
+            stage: 'vector',
+            currentBatch: 0,
+            totalBatches: 1,
+            progress: 90,
+        });
+
         const created = await prisma.$transaction(
             pairs.map(p =>
                 (prisma as any).translationMemoryEntry.create({
@@ -471,65 +611,230 @@ const memoryImportWorker = createWorker(
                 })
             )
         );
+        const createdIds = created.map((row: any) => row.id);
 
-        // embed in batches and upsert to Postgres pgvector
-        const texts = pairs.map(p => `${p.source}\n${p.target}`);
-        let vectors: number[][] = [];
         try {
-            logger.info(`[WORKER_IMPORT] 开始生成 ${texts.length} 条记录的嵌入向量...`);
-            const batchSize = 200; // 设置为 200，留一些余量
-
-            for (let i = 0; i < texts.length; i += batchSize) {
-                const batch = texts.slice(i, i + batchSize);
-                logger.info(
-                    `[WORKER_IMPORT] 处理第 ${i + 1}-${Math.min(i + batch.length, texts.length)} 条记录...`
-                );
-                const batchVectors = await embedBatchForOwner(batch, { userId, tenantId });
-                vectors.push(...batchVectors);
-            }
+            const collection = 'TranslationMemory';
+            const points = created.map((row: any, i: number) => ({
+                id: row.id,
+                text: `${row.sourceText}\n${row.targetText}`,
+                vector: vectors[i],
+                meta: {
+                    memoryId: row.memoryId,
+                    sourceLang,
+                    targetLang,
+                    tenantId: tenantId || null,
+                    userId,
+                },
+            }));
 
             logger.info(
-                `[WORKER_IMPORT] 成功生成 ${vectors.length} 个向量，第一个向量维度: ${vectors[0]?.length || 0}`
+                `[WORKER_IMPORT] 准备写入 Postgres 向量索引: ${points.length}/${points.length} 条记录有有效向量`
             );
+
+            await upsertVectors({ collection, points });
+            logger.info(`[WORKER_IMPORT] 成功写入 Postgres 向量索引: ${points.length} 条记录`);
+            await updateProgress({
+                stage: 'vector',
+                currentBatch: 1,
+                totalBatches: 1,
+                progress: 100,
+            });
+            await updateProgress({
+                stage: 'complete',
+                currentBatch: 1,
+                totalBatches: 1,
+                progress: 100,
+            });
+            logger.info(`[WORKER_IMPORT] 导入成功，共写入 ${pairs.length} 条记忆数据`);
+            return { total: pairs.length, indexed: points.length, memoryId };
         } catch (error) {
-            logger.error(`[WORKER_IMPORT] 嵌入向量生成失败:`, error);
-        }
-
-        const collection = 'TranslationMemory';
-        const points = created.map((row: any, i: number) => ({
-            id: row.id,
-            text: `${row.sourceText}\n${row.targetText}`,
-            vector: vectors[i] || [],
-            meta: {
-                memoryId: row.memoryId,
-                sourceLang,
-                targetLang,
-                tenantId: tenantId || null,
-                userId,
-            },
-        }));
-        const valid = points.filter(
-            (p: { vector: number[] }) => Array.isArray(p.vector) && p.vector.length
-        );
-
-        logger.info(
-            `[WORKER_IMPORT] 准备写入 Postgres 向量索引: ${valid.length}/${points.length} 条记录有有效向量`
-        );
-
-        if (valid.length) {
+            logger.error(`[WORKER_IMPORT] 向量写入或任务收尾失败，正在删除本次文本行:`, error);
             try {
-                await upsertVectors({ collection, points: valid });
-                logger.info(`[WORKER_IMPORT] 成功写入 Postgres 向量索引: ${valid.length} 条记录`);
-            } catch (error) {
-                logger.error(`[WORKER_IMPORT] Postgres 向量索引写入失败:`, error);
-                throw error;
+                await (prisma as any).translationMemoryEntry.deleteMany({
+                    where: { memoryId, id: { in: createdIds } },
+                });
+                logger.info(`[WORKER_IMPORT] 已补偿删除 ${createdIds.length} 条本次创建的文本行`);
+            } catch (cleanupError) {
+                logger.error(`[WORKER_IMPORT] 补偿删除本次文本行失败:`, cleanupError);
             }
-        } else {
-            logger.warn(`[WORKER_IMPORT] 警告: 没有有效向量可写入 Postgres 向量索引`);
+            throw error;
         }
-        logger.info(`[WORKER_IMPORT] 导入成功，共写入 ${pairs.length} 条记忆数据`);
     },
     4
 );
 
 logger.info('[worker] memory-import worker started');
+
+type MemoryVectorBackfillJobData = {
+    memoryId: string;
+    userId: string;
+    tenantId?: string | null;
+    batchSize?: number;
+};
+
+type MemoryVectorBackfillResult = {
+    memoryId: string;
+    total: number;
+    indexed: number;
+    remaining: number;
+};
+
+type MemoryVectorBackfillRow = {
+    id: string;
+    sourceText: string;
+    targetText: string;
+    sourceLang: string | null;
+    targetLang: string | null;
+};
+
+function countFromRawResult(rows: Array<{ count: bigint | number | string }>) {
+    const count = Number(rows[0]?.count ?? 0);
+    if (!Number.isSafeInteger(count) || count < 0) {
+        throw new Error('INVALID_MEMORY_VECTOR_BACKFILL_COUNT');
+    }
+    return count;
+}
+
+const memoryVectorBackfillWorker = createWorker<
+    MemoryVectorBackfillJobData,
+    MemoryVectorBackfillResult
+>(
+    'memory-vector-backfill',
+    async job => {
+        const { memoryId, userId, tenantId } = job.data;
+        const requestedBatchSize = Number(job.data.batchSize || 100);
+        const batchSize = Math.max(
+            1,
+            Math.min(
+                200,
+                Number.isFinite(requestedBatchSize) ? Math.floor(requestedBatchSize) : 100
+            )
+        );
+        const updateProgress = (progress: MemoryImportProgress) => job.updateProgress(progress);
+
+        await updateProgress({
+            stage: 'parsing',
+            currentBatch: 0,
+            totalBatches: 1,
+            progress: 0,
+        });
+        if (!memoryId || !userId) throw new Error('MISSING_OWNER_OR_MEMORY');
+
+        const memory = await (prisma as any).translationMemory.findFirst({
+            where: { id: memoryId, userId },
+            select: { id: true },
+        });
+        if (!memory) throw new Error('UNAUTHORIZED_MEMORY');
+
+        const countMissing = async () => {
+            const rows = (await prisma.$queryRaw(Prisma.sql`
+                    SELECT COUNT(*)::bigint AS count
+                    FROM "TranslationMemoryEntry"
+                    WHERE "memoryId" = ${memory.id}
+                      AND embedding IS NULL
+                `)) as Array<{ count: bigint }>;
+            return countFromRawResult(rows);
+        };
+
+        const total = await countMissing();
+        const totalBatches = Math.ceil(total / batchSize);
+        await updateProgress({
+            stage: 'parsing',
+            currentBatch: 0,
+            totalBatches,
+            progress: 5,
+        });
+        if (!total) {
+            await updateProgress({
+                stage: 'complete',
+                currentBatch: 0,
+                totalBatches: 0,
+                progress: 100,
+            });
+            return { memoryId: memory.id, total: 0, indexed: 0, remaining: 0 };
+        }
+
+        let cursor: string | null = null;
+        let indexed = 0;
+        let currentBatch = 0;
+
+        while (true) {
+            const cursorFilter: Prisma.Sql = cursor ? Prisma.sql`AND id > ${cursor}` : Prisma.empty;
+            const rows = (await prisma.$queryRaw(Prisma.sql`
+                SELECT id, "sourceText", "targetText", "sourceLang", "targetLang"
+                FROM "TranslationMemoryEntry"
+                WHERE "memoryId" = ${memory.id}
+                  AND embedding IS NULL
+                  ${cursorFilter}
+                ORDER BY id ASC
+                LIMIT ${batchSize}
+            `)) as MemoryVectorBackfillRow[];
+            if (!rows.length) break;
+
+            const nextBatch = currentBatch + 1;
+            const progressBeforeBatch = Math.min(99, 5 + Math.floor((94 * indexed) / total));
+            await updateProgress({
+                stage: 'embedding',
+                currentBatch: nextBatch,
+                totalBatches,
+                progress: progressBeforeBatch,
+            });
+
+            const texts = rows.map(row => `${row.sourceText}\n${row.targetText}`);
+            const vectors = await embedBatchForOwner(texts, { userId, tenantId });
+            assertEmbeddingBatch(
+                vectors,
+                rows.length,
+                `memory-vector-backfill:${memory.id}:batch-${nextBatch}`
+            );
+
+            await updateProgress({
+                stage: 'vector',
+                currentBatch: nextBatch,
+                totalBatches,
+                progress: progressBeforeBatch,
+            });
+            await upsertVectors({
+                collection: 'TranslationMemory',
+                points: rows.map((row, index) => ({
+                    id: row.id,
+                    text: texts[index]!,
+                    vector: vectors[index]!,
+                    meta: {
+                        memoryId: memory.id,
+                        sourceLang: row.sourceLang,
+                        targetLang: row.targetLang,
+                        tenantId: tenantId || null,
+                        userId,
+                    },
+                })),
+            });
+
+            indexed += rows.length;
+            currentBatch = nextBatch;
+            cursor = rows[rows.length - 1]?.id || cursor;
+            await updateProgress({
+                stage: 'vector',
+                currentBatch,
+                totalBatches,
+                progress: Math.min(99, 5 + Math.floor((94 * indexed) / total)),
+            });
+        }
+
+        const remaining = await countMissing();
+        await updateProgress({
+            stage: 'complete',
+            currentBatch,
+            totalBatches,
+            progress: 100,
+        });
+        logger.info(
+            `[WORKER_BACKFILL] 完成记忆库 ${memory.id} 的向量补全：本次 ${indexed}/${total}，剩余 ${remaining}`
+        );
+        return { memoryId: memory.id, total, indexed, remaining };
+    },
+    2
+);
+
+logger.info('[worker] memory-vector-backfill worker started');

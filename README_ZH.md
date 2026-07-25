@@ -172,12 +172,12 @@ OPENAI_API_MODEL="gpt-4o-mini"
 # LLM_MODEL="gpt-4o-mini"
 
 # Embedding 提供方；EMBEDDING_* 未设置时回退到 OPENAI_*。
-OPENAI_EMBED_MODEL=doubao-embedding-text-240715
+OPENAI_EMBED_MODEL=doubao-embedding-vision-251215
 # EMBEDDING_API_KEY="sk-xxxx"
 # EMBEDDING_BASE_URL="https://api.openai.com/v1"
-# EMBEDDING_API_PATH="/embeddings"
-# EMBEDDING_MODEL="doubao-embedding-text-240715"
-# EMBEDDING_DIMENSIONS=
+# EMBEDDING_API_PATH="/embeddings/multimodal"
+# EMBEDDING_MODEL="doubao-embedding-vision-251215"
+# EMBEDDING_DIMENSIONS=2048
 
 # MinerU 在线 PDF 解析
 MINERU_API_MODE=agent

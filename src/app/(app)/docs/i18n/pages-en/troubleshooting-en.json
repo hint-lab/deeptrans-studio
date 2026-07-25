@@ -201,9 +201,8 @@
                             "TranslationMemoryEntry.embedding is empty after import"
                         ],
                         "solutions": [
-                            "Run the translation-memory vector backfill action",
-                            "Re-import the translation memory file",
-                            "Verify the embedding model and OPENAI_EMBED_MODEL configuration",
+                            "Start a missing-vector backfill job for the target memory; do not re-import text rows that already exist",
+                            "Verify EMBEDDING_MODEL, EMBEDDING_API_PATH, and EMBEDDING_DIMENSIONS=2048",
                             "Check PostgreSQL vector and PGroonga extensions with SQL"
                         ]
                     },
@@ -214,7 +213,8 @@
                             "Dimension mismatch error when searching"
                         ],
                         "solutions": [
-                            "Check embedding model configuration and keep the dimension at 1536 for the current schema",
+                            "Check the embedding configuration; translation memory uses a fixed 2048-dimensional contract",
+                            "Confirm the migration created the halfvec(2048) expression HNSW index",
                             "Run an explicit re-embedding migration before changing embedding models",
                             "Verify vector generation code and database schema are aligned"
                         ]

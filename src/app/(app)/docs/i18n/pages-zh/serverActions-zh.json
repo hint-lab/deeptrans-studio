@@ -247,14 +247,20 @@
                         {
                             "method": "POST",
                             "path": "/api/memories/import",
-                            "title": "导入记忆库",
-                            "description": "导入翻译记忆库文件（支持 TMX、CSV 等格式）"
+                            "title": "创建记忆导入任务",
+                            "description": "使用已上传文件的 fileKey 创建可恢复的后台导入任务"
+                        },
+                        {
+                            "method": "GET",
+                            "path": "/api/memories/import/status?jobId={jobId}",
+                            "title": "查询导入进度",
+                            "description": "按任务 ID 查询解析、嵌入和向量写入进度"
                         },
                         {
                             "method": "POST",
-                            "path": "/api/memories/import-progress",
-                            "title": "查询导入进度",
-                            "description": "查询记忆库导入任务的进度"
+                            "path": "/api/memories/{memoryId}/vectors",
+                            "title": "补全缺失向量",
+                            "description": "为指定记忆库创建仅处理缺失向量的可续跑任务"
                         },
                         {
                             "method": "POST",

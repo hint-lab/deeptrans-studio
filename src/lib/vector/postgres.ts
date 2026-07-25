@@ -1,5 +1,6 @@
 import pkg from '@prisma/client';
 import { prisma } from '@/lib/db';
+import { assertEmbeddingVector } from '@/lib/embedding-contract';
 import { createLogger } from '@/lib/logger';
 import {
     BM25Result,
@@ -27,15 +28,13 @@ type SearchScope = {
     tenantId?: string | null;
 };
 
+const VECTOR_UPSERT_BATCH_SIZE = 50;
+
 function vectorLiteral(vector: number[]) {
-    const values = vector
-        .map(v => Number(v))
-        .filter(v => Number.isFinite(v))
-        .map(v => {
-            const fixed = Number(v.toFixed(8));
-            return Object.is(fixed, -0) ? 0 : fixed;
-        });
-    if (!values.length) throw new Error('EMPTY_VECTOR');
+    const values = vector.map(v => {
+        const fixed = Number(v.toFixed(8));
+        return Object.is(fixed, -0) ? 0 : fixed;
+    });
     return `[${values.join(',')}]`;
 }
 
@@ -82,22 +81,50 @@ export async function upsertVectors(params: {
         throw new Error(`Unsupported vector collection: ${params.collection}`);
     }
 
-    const points = params.points.filter(p => p.id && Array.isArray(p.vector) && p.vector.length);
+    const points = params.points;
     if (!points.length) return;
+
+    const pointIds = new Set<string>();
+    for (const point of points) {
+        if (!point.id) throw new Error('translation memory vector write: missing point id');
+        if (pointIds.has(point.id)) {
+            throw new Error(`translation memory vector write: duplicate point id ${point.id}`);
+        }
+        pointIds.add(point.id);
+        assertEmbeddingVector(point.vector, 'translation memory vector write');
+    }
 
     logger.info(`[PGVECTOR] Upserting ${points.length} translation memory embeddings`);
 
-    await prisma.$transaction(
-        points.map(point =>
-            prisma.$executeRaw(
-                Prisma.sql`
-                    UPDATE "TranslationMemoryEntry"
-                    SET embedding = ${vectorLiteral(point.vector)}::vector
-                    WHERE id = ${point.id}
-                `
-            )
+    const batches: (typeof points)[] = [];
+    for (let index = 0; index < points.length; index += VECTOR_UPSERT_BATCH_SIZE) {
+        batches.push(points.slice(index, index + VECTOR_UPSERT_BATCH_SIZE));
+    }
+
+    const updatedCounts = (await prisma.$transaction(
+        batches.map(batch =>
+            prisma.$executeRaw(Prisma.sql`
+                UPDATE "TranslationMemoryEntry" AS entry
+                SET embedding = incoming.embedding
+                FROM (
+                    VALUES ${Prisma.join(
+                        batch.map(
+                            point =>
+                                Prisma.sql`(${point.id}::text, ${vectorLiteral(point.vector)}::vector(2048))`
+                        )
+                    )}
+                ) AS incoming(id, embedding)
+                WHERE entry.id = incoming.id
+            `)
         )
-    );
+    )) as number[];
+
+    const updated = updatedCounts.reduce((sum, count) => sum + Number(count || 0), 0);
+    if (updated !== points.length) {
+        throw new Error(
+            `translation memory vector write: expected ${points.length} updated rows, received ${updated}`
+        );
+    }
 }
 
 export async function searchVectors(params: {
@@ -112,7 +139,7 @@ export async function searchVectors(params: {
     tenantId?: string | null;
 }) {
     if (params.collection !== 'TranslationMemory') return [];
-    if (!Array.isArray(params.vector) || !params.vector.length) return [];
+    assertEmbeddingVector(params.vector, 'translation memory vector search');
 
     const k = Math.max(1, Math.min(200, params.k || 10));
     const scope = { ...scopeFromFilter(params.filter), ...params };
@@ -129,12 +156,12 @@ export async function searchVectors(params: {
                 e."targetLang",
                 m."tenantId",
                 m."userId",
-                1 - (e.embedding <=> ${queryVector}::vector) AS score
+                1 - ((e.embedding::halfvec(2048)) <=> (${queryVector}::halfvec(2048))) AS score
             FROM "TranslationMemoryEntry" e
             JOIN "TranslationMemory" m ON m.id = e."memoryId"
             WHERE e.embedding IS NOT NULL
             ${scopeSql(scope)}
-            ORDER BY e.embedding <=> ${queryVector}::vector
+            ORDER BY (e.embedding::halfvec(2048)) <=> (${queryVector}::halfvec(2048))
             LIMIT ${k}
         `
     )) as Array<any>;

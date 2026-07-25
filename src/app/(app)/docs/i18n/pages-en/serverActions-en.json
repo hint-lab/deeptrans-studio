@@ -247,14 +247,20 @@
                         {
                             "method": "POST",
                             "path": "/api/memories/import",
-                            "title": "Import Memory",
-                            "description": "Import translation memory files (supports TMX, CSV, and other formats)"
+                            "title": "Create Memory Import Job",
+                            "description": "Create a durable background import job from an uploaded fileKey"
+                        },
+                        {
+                            "method": "GET",
+                            "path": "/api/memories/import/status?jobId={jobId}",
+                            "title": "Query Import Progress",
+                            "description": "Query parsing, embedding, and vector-write progress by job ID"
                         },
                         {
                             "method": "POST",
-                            "path": "/api/memories/import-progress",
-                            "title": "Query Import Progress",
-                            "description": "Query translation memory import task progress"
+                            "path": "/api/memories/{memoryId}/vectors",
+                            "title": "Backfill Missing Vectors",
+                            "description": "Create a resumable job that only processes missing vectors in a memory"
                         },
                         {
                             "method": "POST",

@@ -2,6 +2,7 @@
 
 import { embedBatchAction, embedTextAction } from '@/actions/embedding';
 import { prisma } from '@/lib/db';
+import { assertEmbeddingBatch } from '@/lib/embedding-contract';
 import { type AuthContext, requireOwnedMemory, requireUser, userOwnedWhere } from '@/lib/guards';
 import { createLogger } from '@/lib/logger';
 import { hybridSearch, upsertVectors } from '@/lib/vector/postgres';
@@ -157,34 +158,14 @@ export async function importMemoryAction(input: ImportInput) {
         return { success: false, error: '当前数据模型未启用 TranslationMemory' } as const;
     }
 
-    let targetMemoryId = memoryId;
-    if (!targetMemoryId) {
-        const existing = await (prisma as any).translationMemory.findFirst({
-            where: {
-                name: '默认记忆库',
-                ...userOwnedWhere(authCtx),
-            },
-            orderBy: { createdAt: 'asc' },
-        });
-        const mem =
-            existing ??
-            (await (prisma as any).translationMemory.create({
-                data: {
-                    name: '默认记忆库',
-                    description: '默认导入',
-                    tenantId: authCtx.tenantId || null,
-                    userId: authCtx.userId,
-                },
-            }));
-        targetMemoryId = mem.id;
-    } else {
-        await requireOwnedMemory(targetMemoryId, authCtx);
-    }
+    if (!memoryId) return { success: false, error: '请选择目标记忆库' } as const;
+    const targetMemory = await requireOwnedMemory(memoryId, authCtx);
+    const targetMemoryId = targetMemory.id;
 
     if (entries.length > 0) {
         // 生成 embedding（源+译合并，有助对齐语篇检索）
         // 分批处理，避免超过 API 限制
-        let vectors: number[][] = [];
+        const vectors: number[][] = [];
         try {
             logger.log(`[MEMORY_IMPORT] 开始生成 ${entries.length} 条记录的嵌入向量...`);
             const texts = entries.map(e => `${e.source}\n${e.target}`);
@@ -196,6 +177,7 @@ export async function importMemoryAction(input: ImportInput) {
                     `[MEMORY_IMPORT] 处理第 ${i + 1}-${Math.min(i + batch.length, texts.length)} 条记录...`
                 );
                 const batchVectors = await embedBatchAction(batch);
+                assertEmbeddingBatch(batchVectors, batch.length, `记忆导入批次 ${currentBatch}`);
                 vectors.push(...batchVectors);
                 await emitProgress({
                     type: 'progress',
@@ -211,7 +193,9 @@ export async function importMemoryAction(input: ImportInput) {
             );
         } catch (error) {
             logger.error(`[MEMORY_IMPORT] 嵌入向量生成失败:`, error);
+            throw error;
         }
+        assertEmbeddingBatch(vectors, entries.length, '记忆导入');
         await emitProgress({
             type: 'progress',
             currentBatch: totalBatches,
@@ -237,41 +221,44 @@ export async function importMemoryAction(input: ImportInput) {
         );
         // 写入 Postgres pgvector embedding（TranslationMemory collection）
         try {
-            const points = created
-                .map((row: any, i: number) => ({
-                    id: row.id,
-                    text: `${row.sourceText}\n${row.targetText}`,
-                    vector: vectors[i] || [],
-                    meta: {
-                        memoryId: row.memoryId,
-                        sourceLang,
-                        targetLang,
-                        tenantId: authCtx.tenantId || null,
-                        userId: authCtx.userId,
-                    },
-                }))
-                .filter((p: { vector: number[] }) => Array.isArray(p.vector) && p.vector.length);
+            const points = created.map((row: any, i: number) => ({
+                id: row.id,
+                text: `${row.sourceText}\n${row.targetText}`,
+                vector: vectors[i] || [],
+                meta: {
+                    memoryId: row.memoryId,
+                    sourceLang,
+                    targetLang,
+                    tenantId: authCtx.tenantId || null,
+                    userId: authCtx.userId,
+                },
+            }));
 
             logger.log(
                 `[MEMORY_IMPORT] 准备写入 Postgres 向量索引: ${points.length}/${created.length} 条记录有有效向量`
             );
 
-            if (points.length) {
-                await upsertVectors({ collection: 'TranslationMemory', points });
-                logger.log(`[MEMORY_IMPORT] 成功写入 Postgres 向量索引: ${points.length} 条记录`);
-                await emitProgress({
-                    type: 'progress',
-                    currentBatch: totalBatches,
-                    totalBatches,
-                    progress: 95,
-                    stage: 'vector',
-                });
-            } else {
-                logger.warn(`[MEMORY_IMPORT] 警告: 没有有效向量可写入 Postgres 向量索引`);
-            }
+            await upsertVectors({ collection: 'TranslationMemory', points });
+            logger.log(`[MEMORY_IMPORT] 成功写入 Postgres 向量索引: ${points.length} 条记录`);
+            await emitProgress({
+                type: 'progress',
+                currentBatch: totalBatches,
+                totalBatches,
+                progress: 95,
+                stage: 'vector',
+            });
         } catch (error) {
             logger.error(`[MEMORY_IMPORT] Postgres 向量索引写入失败:`, error);
-            // 重新抛出错误，让调用者知道有问题
+            try {
+                await (prisma as any).translationMemoryEntry.deleteMany({
+                    where: {
+                        memoryId: targetMemoryId,
+                        id: { in: created.map((row: any) => row.id) },
+                    },
+                });
+            } catch (cleanupError) {
+                logger.error('[MEMORY_IMPORT] 回滚本次导入文本失败:', cleanupError);
+            }
             throw new Error(`向量索引写入失败: ${error}`);
         }
     }
@@ -279,10 +266,7 @@ export async function importMemoryAction(input: ImportInput) {
 }
 
 // 允许从客户端直接以 Server Action 方式调用（FormData）
-export async function importMemoryFromForm(
-    form: FormData,
-    onProgress?: ImportInput['onProgress']
-) {
+export async function importMemoryFromForm(form: FormData, onProgress?: ImportInput['onProgress']) {
     'use server';
     try {
         await requireUser();
@@ -621,7 +605,7 @@ export async function backfillMemoryVectorsAction(
         if (!hasEntry) return { success: false, error: '当前数据模型未启用 MemoryEntry' } as const;
         const memory = await requireOwnedMemory(memoryId, authCtx);
         const batchSize = Math.max(1, Math.min(200, opts?.batchSize || 100));
-        const max = Math.max(1, Math.min(20000, opts?.max || 5000));
+        const max = Math.max(1, Math.min(100000, opts?.max || 20000));
 
         // 分页遍历，避免一次性取太多
         let totalUpserted = 0;
@@ -635,20 +619,21 @@ export async function backfillMemoryVectorsAction(
                 sourceLang?: string | null;
                 targetLang?: string | null;
                 createdAt: Date;
-            }> = await (prisma as any).translationMemoryEntry.findMany({
-                where: { memoryId: memory.id },
-                select: {
-                    id: true,
-                    sourceText: true,
-                    targetText: true,
-                    sourceLang: true,
-                    targetLang: true,
-                    createdAt: true,
-                },
-                orderBy: { createdAt: 'asc' },
-                ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
-                take,
-            });
+            }> = await (prisma as any).$queryRaw`
+                SELECT
+                    e.id,
+                    e."sourceText",
+                    e."targetText",
+                    e."sourceLang",
+                    e."targetLang",
+                    e."createdAt"
+                FROM "TranslationMemoryEntry" e
+                WHERE e."memoryId" = ${memory.id}
+                  AND e.embedding IS NULL
+                  AND (${cursor}::text IS NULL OR e.id > ${cursor})
+                ORDER BY e.id ASC
+                LIMIT ${take}
+            `;
             if (!rows.length) break;
             cursor = rows[rows.length - 1]?.id || null;
 
@@ -661,43 +646,48 @@ export async function backfillMemoryVectorsAction(
                     `[BACKFILL] 生成第 ${totalUpserted + 1}-${totalUpserted + rows.length} 条记录的向量...`
                 );
                 vectors = await embedBatchAction(texts);
+                assertEmbeddingBatch(vectors, rows.length, '记忆向量回填');
                 logger.log(`[BACKFILL] 成功生成 ${vectors.length} 个向量`);
             } catch (error) {
                 logger.error(`[BACKFILL] 嵌入向量生成失败:`, error);
                 throw error;
             }
             try {
-                const points = rows
-                    .map((r, i) => ({
-                        id: r.id,
-                        text: texts[i] || '',
-                        vector: Array.isArray(vectors[i]) ? vectors[i]! : [],
-                        meta: {
-                            memoryId: memory.id,
-                            sourceLang: r.sourceLang,
-                            targetLang: r.targetLang,
-                            tenantId: authCtx.tenantId || null,
-                            userId: authCtx.userId,
-                        },
-                    }))
-                    .filter(p => Array.isArray(p.vector) && p.vector.length);
+                const points = rows.map((r, i) => ({
+                    id: r.id,
+                    text: texts[i] || '',
+                    vector: vectors[i]!,
+                    meta: {
+                        memoryId: memory.id,
+                        sourceLang: r.sourceLang,
+                        targetLang: r.targetLang,
+                        tenantId: authCtx.tenantId || null,
+                        userId: authCtx.userId,
+                    },
+                }));
 
                 logger.log(
                     `[BACKFILL] 准备写入 Postgres 向量索引: ${points.length}/${rows.length} 条记录有有效向量`
                 );
 
-                if (points.length) {
-                    await upsertVectors({ collection: 'TranslationMemory', points });
-                    logger.log(`[BACKFILL] 成功写入 Postgres 向量索引: ${points.length} 条记录`);
-                }
-                totalUpserted += rows.length;
+                await upsertVectors({ collection: 'TranslationMemory', points });
+                logger.log(`[BACKFILL] 成功写入 Postgres 向量索引: ${points.length} 条记录`);
+                totalUpserted += points.length;
             } catch (error) {
                 logger.error(`[BACKFILL] Postgres 向量索引写入失败:`, error);
                 throw error;
             }
             if (rows.length < take) break;
         }
-        return { success: true, data: { upserted: totalUpserted } } as const;
+        const remainingRows: Array<{ count: number }> = await (prisma as any).$queryRaw`
+            SELECT COUNT(*)::int AS count
+            FROM "TranslationMemoryEntry"
+            WHERE "memoryId" = ${memory.id} AND embedding IS NULL
+        `;
+        return {
+            success: true,
+            data: { upserted: totalUpserted, remaining: Number(remainingRows[0]?.count || 0) },
+        } as const;
     } catch (e: any) {
         return { success: false, error: e?.message || '重建向量失败' } as const;
     }

@@ -201,9 +201,8 @@
                             "导入后 TranslationMemoryEntry.embedding 为空"
                         ],
                         "solutions": [
-                            "运行翻译记忆向量补全动作",
-                            "重新导入翻译记忆文件",
-                            "验证 embedding 模型和 OPENAI_EMBED_MODEL 配置",
+                            "对目标记忆库启动缺失向量补全任务，不要重复导入已落库的文本",
+                            "验证 EMBEDDING_MODEL、EMBEDDING_API_PATH 和 EMBEDDING_DIMENSIONS=2048",
                             "用 SQL 检查 PostgreSQL vector 和 PGroonga 扩展"
                         ]
                     },
@@ -214,7 +213,8 @@
                             "搜索时返回维度不匹配错误"
                         ],
                         "solutions": [
-                            "检查嵌入模型配置，当前 schema 维度保持 1536",
+                            "检查嵌入配置，翻译记忆固定使用 2048 维向量",
+                            "确认数据库迁移已创建 halfvec(2048) 表达式 HNSW 索引",
                             "更换 embedding 模型前先做显式重嵌入迁移",
                             "验证向量生成代码和数据库 schema 一致"
                         ]

@@ -1,4 +1,4 @@
-import { type Job, Queue, Worker, type JobsOptions } from 'bullmq';
+import { Queue, Worker, type JobsOptions, type Processor } from 'bullmq';
 import IORedis from 'ioredis';
 
 if (typeof window !== 'undefined') {
@@ -28,12 +28,15 @@ export function getQueue(name: string) {
     return queues[name];
 }
 
-export function createWorker(
-    name: string,
-    processor: (job: Job) => Promise<void>,
+export function createWorker<DataType = any, ResultType = void, NameType extends string = string>(
+    name: NameType,
+    processor: Processor<DataType, ResultType, NameType>,
     concurrency = 10
 ) {
-    return new Worker(name, processor, { connection: getQueueConnection(), concurrency });
+    return new Worker<DataType, ResultType, NameType>(name, processor, {
+        connection: getQueueConnection(),
+        concurrency,
+    });
 }
 
 export const defaultJobOpts: JobsOptions = {

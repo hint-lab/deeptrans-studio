@@ -43,7 +43,7 @@ export function EditDictionaryDialog({
     dictionary,
     onDictionaryEdited,
 }: EditDictionaryDialogProps) {
-    const t = useTranslations('Dictionaries.EditDialog');
+    const t = useTranslations('Dashboard.Dictionaries.EditDialog');
     const tDomains = useTranslations('Common.domains');
     const [open, setOpen] = useState(false);
     const [editForm, setEditForm] = useState({

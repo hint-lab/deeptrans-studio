@@ -1,3 +1,9 @@
+import {
+    assertEmbeddingBatch,
+    assertEmbeddingVector,
+    resolveEmbeddingDimensions,
+} from '@/lib/embedding-contract';
+
 export type EmbeddingProviderConfig = {
     providerKey: string;
     model: string;
@@ -10,6 +16,25 @@ export type EmbeddingProviderConfig = {
 export function resolveEmbeddingConfig(
     pref?: Partial<EmbeddingProviderConfig>
 ): EmbeddingProviderConfig {
+    let dimensions: number;
+    try {
+        dimensions = resolveEmbeddingDimensions(process.env.EMBEDDING_DIMENSIONS);
+    } catch (error) {
+        throw new Error(
+            `Invalid EMBEDDING_DIMENSIONS environment value: ${error instanceof Error ? error.message : String(error)}`
+        );
+    }
+
+    if (pref?.dimensions !== undefined) {
+        try {
+            dimensions = resolveEmbeddingDimensions(pref.dimensions);
+        } catch (error) {
+            throw new Error(
+                `Invalid embedding preference dimensions: ${error instanceof Error ? error.message : String(error)}`
+            );
+        }
+    }
+
     if (pref?.providerKey && pref?.model) {
         return {
             providerKey: pref.providerKey,
@@ -17,23 +42,29 @@ export function resolveEmbeddingConfig(
             apiKey: pref.apiKey,
             baseUrl: pref.baseUrl,
             apiPath: pref.apiPath,
-            dimensions: pref.dimensions,
+            dimensions,
         };
     }
     return {
         providerKey: 'openai',
-        model: process.env.EMBEDDING_MODEL || process.env.OPENAI_EMBED_MODEL || 'text-embedding-3-small',
+        model:
+            process.env.EMBEDDING_MODEL ||
+            process.env.OPENAI_EMBED_MODEL ||
+            'text-embedding-3-small',
         apiKey: process.env.EMBEDDING_API_KEY || process.env.OPENAI_API_KEY,
         baseUrl: process.env.EMBEDDING_BASE_URL || process.env.OPENAI_BASE_URL,
         apiPath: process.env.EMBEDDING_API_PATH,
-        dimensions: process.env.EMBEDDING_DIMENSIONS ? Number(process.env.EMBEDDING_DIMENSIONS) : undefined,
+        dimensions,
     };
 }
 
 function getEmbeddingEndpoint(cfg: EmbeddingProviderConfig) {
     const baseUrl = (cfg.baseUrl || 'https://api.openai.com/v1').replace(/\/$/, '');
-    const apiPath = cfg.apiPath || (isMultimodalEmbedding(cfg) ? '/embeddings/multimodal' : '/embeddings');
-    return apiPath.startsWith('http') ? apiPath : `${baseUrl}${apiPath.startsWith('/') ? apiPath : `/${apiPath}`}`;
+    const apiPath =
+        cfg.apiPath || (isMultimodalEmbedding(cfg) ? '/embeddings/multimodal' : '/embeddings');
+    return apiPath.startsWith('http')
+        ? apiPath
+        : `${baseUrl}${apiPath.startsWith('/') ? apiPath : `/${apiPath}`}`;
 }
 
 function isMultimodalEmbedding(cfg: EmbeddingProviderConfig) {
@@ -43,16 +74,17 @@ function isMultimodalEmbedding(cfg: EmbeddingProviderConfig) {
 async function requestEmbedding(cfg: EmbeddingProviderConfig, text: string): Promise<number[]> {
     if (!cfg.apiKey) throw new Error('EMBEDDING_API_KEY 或 OPENAI_API_KEY 未配置');
     const multimodal = isMultimodalEmbedding(cfg);
+    const dimensions = resolveEmbeddingDimensions(cfg.dimensions);
     const body = multimodal
         ? {
               model: cfg.model,
               input: [{ type: 'text', text }],
-              ...(cfg.dimensions ? { dimensions: cfg.dimensions } : {}),
+              dimensions,
           }
         : {
               model: cfg.model,
               input: text,
-              ...(cfg.dimensions ? { dimensions: cfg.dimensions } : {}),
+              dimensions,
           };
     const res = await fetch(getEmbeddingEndpoint(cfg), {
         method: 'POST',
@@ -64,11 +96,49 @@ async function requestEmbedding(cfg: EmbeddingProviderConfig, text: string): Pro
     });
     const payload = await res.json().catch(() => null);
     if (!res.ok) {
-        throw new Error(payload?.error?.message || payload?.message || `Embedding request failed: ${res.status}`);
+        throw new Error(
+            payload?.error?.message || payload?.message || `Embedding request failed: ${res.status}`
+        );
     }
-    const embedding = multimodal ? payload?.data?.embedding : payload?.data?.[0]?.embedding || payload?.data?.embedding;
-    if (!Array.isArray(embedding)) throw new Error('Embedding response missing vector');
+    const embedding = multimodal
+        ? payload?.data?.embedding
+        : payload?.data?.[0]?.embedding || payload?.data?.embedding;
+    assertEmbeddingVector(embedding, `Embedding response for model ${JSON.stringify(cfg.model)}`);
     return embedding;
+}
+
+function isResponseItem(value: unknown): value is { index?: unknown; embedding?: unknown } {
+    return typeof value === 'object' && value !== null;
+}
+
+function extractBatchEmbeddings(payload: any, expectedCount: number, model: string): number[][] {
+    const context = `Embedding batch response for model ${JSON.stringify(model)}`;
+    const data: unknown = payload?.data;
+    if (!Array.isArray(data)) {
+        assertEmbeddingBatch(data, expectedCount, context);
+    }
+
+    const vectors = data.map(item => (isResponseItem(item) ? item.embedding : undefined));
+    assertEmbeddingBatch(vectors, expectedCount, context);
+
+    const ordered: unknown[] = Array.from({ length: expectedCount }, () => undefined);
+    const occupiedIndexes = new Set<number>();
+    data.forEach((item, responsePosition) => {
+        const rawIndex = isResponseItem(item) ? item.index : undefined;
+        const index = rawIndex === undefined || rawIndex === null ? responsePosition : rawIndex;
+        if (!Number.isSafeInteger(index) || Number(index) < 0 || Number(index) >= expectedCount) {
+            throw new Error(`${context}: invalid index ${JSON.stringify(rawIndex)}`);
+        }
+        const numericIndex = Number(index);
+        if (occupiedIndexes.has(numericIndex)) {
+            throw new Error(`${context}: duplicate index ${numericIndex}`);
+        }
+        occupiedIndexes.add(numericIndex);
+        ordered[numericIndex] = vectors[responsePosition];
+    });
+
+    assertEmbeddingBatch(ordered, expectedCount, context);
+    return ordered;
 }
 
 export async function getEmbeddingClient(pref?: Partial<EmbeddingProviderConfig>) {
@@ -89,9 +159,15 @@ export async function embedBatch(
     pref?: Partial<EmbeddingProviderConfig>
 ): Promise<number[][]> {
     const { cfg } = await getEmbeddingClient(pref);
+    if (!texts.length) return [];
     if (isMultimodalEmbedding(cfg)) {
         const vectors: number[][] = [];
         for (const text of texts) vectors.push(await requestEmbedding(cfg, text));
+        assertEmbeddingBatch(
+            vectors,
+            texts.length,
+            `Embedding batch for model ${JSON.stringify(cfg.model)}`
+        );
         return vectors;
     }
 
@@ -105,16 +181,14 @@ export async function embedBatch(
         body: JSON.stringify({
             model: cfg.model,
             input: texts,
-            ...(cfg.dimensions ? { dimensions: cfg.dimensions } : {}),
+            dimensions: resolveEmbeddingDimensions(cfg.dimensions),
         }),
     });
     const payload = await res.json().catch(() => null);
     if (!res.ok) {
-        throw new Error(payload?.error?.message || payload?.message || `Embedding request failed: ${res.status}`);
+        throw new Error(
+            payload?.error?.message || payload?.message || `Embedding request failed: ${res.status}`
+        );
     }
-    return (payload?.data || [])
-        .slice()
-        .sort((a: any, b: any) => (a.index ?? 0) - (b.index ?? 0))
-        .map((item: any) => item.embedding)
-        .filter(Array.isArray);
+    return extractBatchEmbeddings(payload, texts.length, cfg.model);
 }
