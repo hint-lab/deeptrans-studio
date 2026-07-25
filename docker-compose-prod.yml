@@ -89,11 +89,12 @@ services:
             - app_local
         labels:
             - 'traefik.enable=true'
-            - 'traefik.http.services.app.loadbalancer.server.port=3000'
-            - 'traefik.http.routers.app.rule=Host(`www.deeptrans.studio`) || Host(`deeptrans.studio`)'
-            - 'traefik.http.routers.app.entrypoints=websecure'
-            - 'traefik.http.routers.app.tls=true'
-            - 'traefik.http.routers.app.tls.certresolver=le'
+            - 'traefik.docker.network=${COMPOSE_PROJECT_NAME:-deeptrans-studio}_web'
+            - 'traefik.http.services.studio.loadbalancer.server.port=3000'
+            - 'traefik.http.routers.studio-secure.rule=Host(`www.deeptrans.studio`) || Host(`deeptrans.studio`)'
+            - 'traefik.http.routers.studio-secure.entrypoints=websecure'
+            - 'traefik.http.routers.studio-secure.tls=true'
+            - 'traefik.http.routers.studio-secure.tls.certresolver=le'
         restart: unless-stopped
 
     app_worker:
