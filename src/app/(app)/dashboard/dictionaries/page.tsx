@@ -55,7 +55,7 @@ export default function DictionariesPage() {
                 description: dictionary.description ?? '',
                 domain: dictionary.domain ?? 'general',
                 visibility,
-                cover: getDictionaryCover(dictionary.domain ?? 'general'),
+                entryCount: dictionary._count?.entries ?? 0,
                 canWrite: dictionary.canWrite,
             });
 
@@ -80,23 +80,6 @@ export default function DictionariesPage() {
         } finally {
             setLoading(false);
         }
-    };
-
-    // 根据领域获取词典封面
-    const getDictionaryCover = (domain: string): string => {
-        const coverMap: Record<string, string> = {
-            general: '/images/dictionaries/common.svg',
-            technology: '/images/dictionaries/tech.svg',
-            legal: '/images/dictionaries/legal.svg',
-            medical: '/images/dictionaries/medical.svg',
-            finance: '/images/dictionaries/finance.svg',
-            'artificial-intelligence': '/images/dictionaries/tech.svg',
-            marketing: '/images/dictionaries/common.svg',
-            engineering: '/images/dictionaries/tech.svg',
-            education: '/images/dictionaries/common.svg',
-            custom: '/images/dictionaries/default.svg',
-        };
-        return coverMap[domain] ?? '/images/dictionaries/default.svg';
     };
 
     useEffect(() => {
@@ -148,7 +131,6 @@ export default function DictionariesPage() {
                 ? {
                       ...dict,
                       ...updatedData,
-                      cover: getDictionaryCover(updatedData.domain ?? dict.domain),
                   }
                 : dict;
 
@@ -178,9 +160,9 @@ export default function DictionariesPage() {
                             <Skeleton className="h-9 w-28" />
                         </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-6 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-                        {Array.from({ length: 10 }).map((_, i) => (
-                            <Skeleton key={i} className="h-[280px] w-full" />
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                        {Array.from({ length: 6 }).map((_, i) => (
+                            <Skeleton key={i} className="h-[116px] w-full" />
                         ))}
                     </div>
                 </div>
@@ -200,7 +182,7 @@ export default function DictionariesPage() {
                 <DictionaryImportHelpDialog />
             </div>
 
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full space-y-6">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full space-y-4">
                 <div className="space-between flex items-center">
                     <TabsList>
                         <TabsTrigger value="public" className="relative">
@@ -230,7 +212,7 @@ export default function DictionariesPage() {
                     </div>
                     <Separator className="my-4" />
                     {publicDictionaries.length > 0 ? (
-                        <div className="grid grid-cols-2 gap-6 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                             {publicDictionaries.map(dictionary => (
                                 <DictionaryArtwork
                                     key={dictionary.id}
@@ -238,10 +220,7 @@ export default function DictionariesPage() {
                                         ...dictionary,
                                         description: dictionary.description ?? undefined,
                                     }}
-                                    className="w-full cursor-pointer hover:opacity-80"
-                                    aspectRatio="portrait"
-                                    width={200}
-                                    height={280}
+                                    className="h-full"
                                     onClick={() => handleDictionarySelect(dictionary)}
                                     onDelete={undefined}
                                     onEdit={undefined}
@@ -309,7 +288,7 @@ export default function DictionariesPage() {
                             </Button>
                         </div>
                     ) : privateDictionaries.length > 0 ? (
-                        <div className="grid grid-cols-2 gap-6 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                             {privateDictionaries.map(dictionary => (
                                 <DictionaryArtwork
                                     key={dictionary.id}
@@ -317,10 +296,7 @@ export default function DictionariesPage() {
                                         ...dictionary,
                                         description: dictionary.description ?? undefined,
                                     }}
-                                    className="w-full cursor-pointer hover:opacity-80"
-                                    aspectRatio="portrait"
-                                    width={200}
-                                    height={280}
+                                    className="h-full"
                                     onClick={() => handleDictionarySelect(dictionary)}
                                     onDelete={handleDictionaryDeleted}
                                     onEdit={handleDictionaryEdited}
@@ -393,7 +369,7 @@ export default function DictionariesPage() {
                             </Button>
                         </div>
                     ) : projectDictionaries.length > 0 ? (
-                        <div className="grid grid-cols-2 gap-6 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                             {projectDictionaries.map(dictionary => (
                                 <DictionaryArtwork
                                     key={dictionary.id}
@@ -401,10 +377,7 @@ export default function DictionariesPage() {
                                         ...dictionary,
                                         description: dictionary.description ?? undefined,
                                     }}
-                                    className="w-full cursor-pointer hover:opacity-80"
-                                    aspectRatio="portrait"
-                                    width={200}
-                                    height={280}
+                                    className="h-full"
                                     onClick={() => handleDictionarySelect(dictionary)}
                                     onDelete={
                                         dictionary.canWrite ? handleDictionaryDeleted : undefined

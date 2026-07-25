@@ -16,31 +16,41 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useDialog } from '@/hooks/useDialog';
 import { useChatbarContent, useChatbarStream } from '@/hooks/useRightPanel';
-import { CheckIcon, PaperPlaneIcon, PlusIcon, TrashIcon } from '@radix-ui/react-icons';
+import { useTranslationContent } from '@/hooks/useTranslation';
+import { CheckIcon, PaperPlaneIcon, TrashIcon } from '@radix-ui/react-icons';
 import MarkdownPreview from '@uiw/react-markdown-preview';
-import { Wand } from 'lucide-react';
+import { MessageSquarePlus, Wand } from 'lucide-react';
 import { useLocale, useTranslations } from 'next-intl';
+import { useParams } from 'next/navigation';
 import React from 'react';
 import { cn } from 'src/lib/utils';
+import { toast } from 'sonner';
 // Server Actions imports
 import { queryDictionaryEntriesByScopeAction } from '@/actions/dictionary';
 import { searchMemoryAction } from '@/actions/memories';
 import { evaluateDiscourseAction } from '@/actions/postedit';
-import { baselineTranslateAction, extractMonolingualTermsAction, lookupDictionaryAction } from '@/actions/pre-translate';
+import {
+    baselineTranslateAction,
+    extractMonolingualTermsAction,
+    lookupDictionaryAction,
+} from '@/actions/pre-translate';
 import { evaluateSyntaxAction } from '@/actions/quality-assure';
 import { createLogger } from '@/lib/logger';
-const logger = createLogger({
-    type: 'ide:chat',
-}, {
-    json: false,// 开启json格式输出
-    pretty: false, // 关闭开发环境美化输出
-    colors: true, // 仅当json：false时启用颜色输出可用
-    includeCaller: false, // 日志不包含调用者
-});
+const logger = createLogger(
+    {
+        type: 'ide:chat',
+    },
+    {
+        json: false, // 开启json格式输出
+        pretty: false, // 关闭开发环境美化输出
+        colors: true, // 仅当json：false时启用颜色输出可用
+        includeCaller: false, // 日志不包含调用者
+    }
+);
 // 这些将被翻译替换
 const agentConfigs = [
     { key: 'basicTranslation', avatar: '/avatars/01.png' },
@@ -84,9 +94,34 @@ export function CardsChat() {
     const locale = useLocale();
     const { isDialogOpen, toggleDialog } = useDialog();
     const [selectedAgents, setSelectedAgents] = React.useState<Agent[]>([]);
-    const { chatbarContent, updateContent, addMessage } = useChatbarContent();
+    const { chatbarContent, addMessage, resetContent } = useChatbarContent();
+    const { contentItemId, sourceText, targetText } = useTranslationContent();
+    const params = useParams();
     const [input, setInput] = React.useState('');
+    const inputRef = React.useRef<HTMLTextAreaElement>(null);
     const { handleStreamResponse } = useChatbarStream();
+
+    React.useEffect(() => {
+        const element = inputRef.current;
+        if (!element) return;
+        element.style.height = 'auto';
+        element.style.height = `${Math.min(Math.max(element.scrollHeight, 36), 160)}px`;
+    }, [input]);
+
+    const clearConversation = React.useCallback(
+        (notify = true) => {
+            resetContent();
+            setSelectedAgents([]);
+            setInput('');
+            if (notify) toast.success(t('clear'));
+        },
+        [resetContent, t]
+    );
+
+    const startNewConversation = React.useCallback(() => {
+        clearConversation(false);
+        toggleDialog();
+    }, [clearConversation, toggleDialog]);
 
     // 智能体处理函数
     const handleAgentResponse = async (agentKey: string, userInput: string) => {
@@ -193,12 +228,27 @@ export function CardsChat() {
                     <Tooltip>
                         <TooltipTrigger asChild>
                             <Button
+                                size="icon"
+                                variant="ghost"
+                                className="mr-1 h-6 w-6 text-foreground/60 hover:text-foreground"
+                                onClick={() => clearConversation()}
+                                disabled={chatbarContent.length === 0 && input.length === 0}
+                                aria-label={t('clear')}
+                            >
+                                <TrashIcon className="h-3 w-3" />
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent sideOffset={10}>{t('clear')}</TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button
                                 size="sm"
                                 variant="outline"
                                 className="h-6 px-2 text-[10px] hover:bg-accent"
-                                onClick={() => toggleDialog()}
+                                onClick={startNewConversation}
                             >
-                                <PlusIcon className="mr-1 h-3 w-3" />
+                                <MessageSquarePlus className="mr-1 h-3 w-3" />
                                 {t('newConversation')}
                             </Button>
                         </TooltipTrigger>
@@ -342,19 +392,33 @@ export function CardsChat() {
                                 await handleStreamResponse(
                                     {
                                         url: '/api/chat',
-                                        data: { prompt: userInput, locale: locale },
+                                        data: {
+                                            prompt: userInput,
+                                            locale,
+                                            history: chatbarContent,
+                                            context: {
+                                                projectId: Array.isArray(params?.id)
+                                                    ? params.id[0]
+                                                    : params?.id,
+                                                documentItemId: contentItemId,
+                                                sourceText,
+                                                targetText,
+                                            },
+                                        },
                                     },
                                     { initialMessage: t('processing') }
                                 );
-                            } catch { }
+                            } catch {}
                         }
                     }}
-                    className="flex w-full items-center gap-2"
+                    className="flex w-full items-end gap-2"
                 >
-                    <Input
+                    <Textarea
+                        ref={inputRef}
                         id="message"
                         placeholder={t('placeholder')}
-                        className="h-7 flex-1 border-border/50 text-xs focus:border-primary/50"
+                        rows={1}
+                        className="max-h-40 min-h-9 flex-1 resize-y border-border/50 px-2.5 py-2 text-xs leading-5 focus:border-primary/50"
                         autoComplete="off"
                         autoFocus
                         value={input}
@@ -362,7 +426,7 @@ export function CardsChat() {
                         onKeyDown={e => {
                             if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
                                 e.preventDefault();
-                                const form = (e.currentTarget as HTMLInputElement).form;
+                                const form = e.currentTarget.form;
                                 if (form) {
                                     form.requestSubmit();
                                 }
@@ -372,8 +436,9 @@ export function CardsChat() {
                     <Button
                         type="submit"
                         size="sm"
-                        className="h-7 px-2 text-xs"
+                        className="h-9 px-2 text-xs"
                         disabled={input.trim().length === 0}
+                        aria-label={t('send')}
                     >
                         <PaperPlaneIcon className="h-3 w-3" />
                     </Button>

@@ -1,7 +1,17 @@
 'use client';
 
-import { Edit3, PlusIcon, Trash2 } from 'lucide-react';
-import Image from 'next/image';
+import {
+    BookOpenText,
+    BriefcaseBusiness,
+    Cpu,
+    Edit3,
+    GraduationCap,
+    Landmark,
+    Scale,
+    Stethoscope,
+    Trash2,
+    Wrench,
+} from 'lucide-react';
 import { useState } from 'react';
 import { Button } from 'src/components/ui/button';
 import {
@@ -29,12 +39,10 @@ import {
     ContextMenuContent,
     ContextMenuItem,
     ContextMenuSeparator,
-    ContextMenuSub,
-    ContextMenuSubContent,
-    ContextMenuSubTrigger,
     ContextMenuTrigger,
 } from '@/components/ui/context-menu';
 import { createLogger } from '@/lib/logger';
+import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import { cn } from 'src/lib/utils';
 
@@ -46,27 +54,26 @@ interface Dictionary {
     domain: string;
     visibility?: 'PUBLIC' | 'PROJECT' | 'PRIVATE';
     isPublic?: boolean;
-    cover?: string; // 添加封面图片
     entryCount?: number;
     canWrite?: boolean;
     // 其他可选属性
 }
-const logger = createLogger({
-    type: 'dictionary:dictionary-artwork',
-}, {
-    json: false,// 开启json格式输出
-    pretty: false, // 关闭开发环境美化输出
-    colors: true, // 仅当json：false时启用颜色输出可用
-    includeCaller: false, // 日志不包含调用者
-});
+const logger = createLogger(
+    {
+        type: 'dictionary:dictionary-artwork',
+    },
+    {
+        json: false, // 开启json格式输出
+        pretty: false, // 关闭开发环境美化输出
+        colors: true, // 仅当json：false时启用颜色输出可用
+        includeCaller: false, // 日志不包含调用者
+    }
+);
 // 导出Dictionary类型供其他文件使用
 export type { Dictionary };
 
 interface DictionaryArtworkProps extends React.HTMLAttributes<HTMLDivElement> {
     dictionary: Dictionary;
-    aspectRatio?: 'portrait' | 'square';
-    width?: number;
-    height?: number;
     onClick?: () => void;
     onDelete?: (dictionaryId: string) => void;
     onEdit?: (dictionaryId: string, updatedData: Partial<Dictionary>) => void;
@@ -76,9 +83,6 @@ interface DictionaryArtworkProps extends React.HTMLAttributes<HTMLDivElement> {
 
 export function DictionaryArtwork({
     dictionary,
-    aspectRatio = 'portrait',
-    width,
-    height,
     className,
     onClick,
     onDelete,
@@ -87,6 +91,7 @@ export function DictionaryArtwork({
     showEditButton = false,
     ...props
 }: DictionaryArtworkProps) {
+    const t = useTranslations('Dashboard.Dictionaries');
     const [showDeleteDialog, setShowDeleteDialog] = useState(false);
     const [showEditDialog, setShowEditDialog] = useState(false);
     const [editForm, setEditForm] = useState({
@@ -95,6 +100,17 @@ export function DictionaryArtwork({
         domain: dictionary.domain,
     });
     const [loading, setLoading] = useState(false);
+    const domainIcons = {
+        technology: Cpu,
+        legal: Scale,
+        medical: Stethoscope,
+        finance: Landmark,
+        marketing: BriefcaseBusiness,
+        engineering: Wrench,
+        education: GraduationCap,
+        'artificial-intelligence': Cpu,
+    } as const;
+    const DomainIcon = domainIcons[dictionary.domain as keyof typeof domainIcons] ?? BookOpenText;
 
     const handleDelete = () => {
         setShowDeleteDialog(true);
@@ -120,7 +136,7 @@ export function DictionaryArtwork({
                 if (onDelete) {
                     onDelete(dictionary.id);
                 }
-                logger.info('词典删除成功！')
+                logger.info('词典删除成功！');
                 toast.success('词典删除成功！');
             } else {
                 toast.error(result.error ?? '删除词典失败');
@@ -136,7 +152,7 @@ export function DictionaryArtwork({
 
     const confirmEdit = async () => {
         if (!editForm.name.trim()) {
-            logger.warn('词典删除成功！')
+            logger.warn('词典删除成功！');
             toast.error('词库名称不能为空');
             return;
         }
@@ -150,7 +166,7 @@ export function DictionaryArtwork({
             });
 
             if (result.success && result.data) {
-                logger.info('词典信息更新成功！')
+                logger.info('词典信息更新成功！');
                 toast.success('词典信息更新成功！');
 
                 // 调用父组件的回调函数
@@ -184,88 +200,74 @@ export function DictionaryArtwork({
 
     return (
         <>
-            <div className={cn('space-y-3', className)} {...props}>
+            <div className={cn('h-full', className)} {...props}>
                 <ContextMenu>
-                    <ContextMenuTrigger>
-                        <div className="group relative">
-                            <div
-                                className="cursor-pointer overflow-hidden rounded-lg transition-all duration-200 hover:scale-105 hover:shadow-lg"
-                                onClick={onClick}
-                            >
-                                <div
-                                    className={cn(
-                                        'relative flex items-center justify-center border border-slate-200 bg-gradient-to-br from-slate-50 to-slate-100',
-                                        aspectRatio === 'portrait'
-                                            ? 'aspect-[3/4]'
-                                            : 'aspect-square'
-                                    )}
-                                >
-                                    {dictionary.cover ? (
-                                        <Image
-                                            src={dictionary.cover}
-                                            alt={dictionary.name}
-                                            fill
-                                            className="object-cover"
-                                            sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw, (max-width: 1280px) 25vw, 20vw"
-                                            priority={dictionary.cover === '/images/dictionaries/legal.svg'}
-                                        />
-                                    ) : (
-                                        <div className="p-4 text-center">
-                                            <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-slate-200">
-                                                <span className="text-2xl text-slate-500">📚</span>
-                                            </div>
-                                            <h4 className="mb-1 line-clamp-2 text-sm font-semibold text-slate-700">
-                                                {dictionary.name}
-                                            </h4>
-                                            <p className="text-xs text-slate-500">
-                                                {dictionary.domain}
-                                            </p>
-                                        </div>
-                                    )}
+                    <ContextMenuTrigger asChild>
+                        <div
+                            role="button"
+                            tabIndex={0}
+                            className="group relative flex min-h-[116px] cursor-pointer gap-3 rounded-lg border bg-card p-4 pr-12 text-left transition-colors hover:border-muted-foreground/30 hover:bg-muted/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            onClick={onClick}
+                            onKeyDown={event => {
+                                if (event.target !== event.currentTarget) return;
+                                if (event.key === 'Enter' || event.key === ' ') {
+                                    event.preventDefault();
+                                    onClick?.();
+                                }
+                            }}
+                        >
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border bg-muted/50">
+                                <DomainIcon className="h-5 w-5 text-muted-foreground" />
+                            </div>
 
-                                    {/* 条目数量徽章 */}
-                                    {dictionary.entryCount !== undefined && (
-                                        <div className="absolute left-2 top-2 rounded-full bg-blue-500 px-2 py-1 text-xs font-medium text-white">
-                                            {dictionary.entryCount}
-                                        </div>
-                                    )}
-
-                                    {/* 领域标签 */}
-                                    <div className="absolute bottom-2 left-2 rounded-md bg-white/90 px-2 py-1 text-xs font-medium text-slate-700 backdrop-blur-sm">
+                            <div className="min-w-0 flex-1">
+                                <h3 className="truncate text-sm font-semibold text-foreground">
+                                    {dictionary.name}
+                                </h3>
+                                <p className="mt-1 line-clamp-2 min-h-8 text-xs leading-4 text-muted-foreground">
+                                    {dictionary.description || dictionary.domain}
+                                </p>
+                                <div className="mt-2 flex items-center gap-2 text-[11px] text-muted-foreground">
+                                    <span className="rounded border bg-background px-1.5 py-0.5">
                                         {dictionary.domain}
-                                    </div>
+                                    </span>
+                                    {dictionary.entryCount !== undefined && (
+                                        <span>
+                                            {t('total')} {dictionary.entryCount.toLocaleString()}{' '}
+                                            {t('entries')}
+                                        </span>
+                                    )}
                                 </div>
                             </div>
 
-                            {/* 操作按钮组 */}
-                            <div className="absolute right-2 top-2 flex space-x-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-                                {/* 编辑按钮 */}
+                            <div className="absolute right-3 top-3 flex items-center gap-1 opacity-60 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
                                 {showEditButton && onEdit && (
                                     <Button
-                                        variant="secondary"
-                                        size="sm"
-                                        className="h-7 w-7 rounded-full p-0 shadow-lg hover:bg-slate-200"
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-7 w-7"
+                                        aria-label="编辑词库"
                                         onClick={e => {
                                             e.stopPropagation();
                                             handleEdit();
                                         }}
                                     >
-                                        <Edit3 className="h-3 w-3" />
+                                        <Edit3 className="h-3.5 w-3.5" />
                                     </Button>
                                 )}
 
-                                {/* 删除按钮 */}
                                 {showDeleteButton && onDelete && (
                                     <Button
-                                        variant="destructive"
-                                        size="sm"
-                                        className="h-7 w-7 rounded-full p-0 shadow-lg hover:bg-red-700"
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-7 w-7 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                                        aria-label="删除词库"
                                         onClick={e => {
                                             e.stopPropagation();
                                             handleDelete();
                                         }}
                                     >
-                                        <Trash2 className="h-3 w-3" />
+                                        <Trash2 className="h-3.5 w-3.5" />
                                     </Button>
                                 )}
                             </div>
@@ -273,23 +275,6 @@ export function DictionaryArtwork({
                     </ContextMenuTrigger>
                     <ContextMenuContent className="w-40">
                         <ContextMenuItem onClick={onClick}>查看词条</ContextMenuItem>
-                        <ContextMenuItem>添加到我的词库</ContextMenuItem>
-                        <ContextMenuSub>
-                            <ContextMenuSubTrigger>添加到项目</ContextMenuSubTrigger>
-                            <ContextMenuSubContent className="w-48">
-                                <ContextMenuItem>
-                                    <PlusIcon size={16} />
-                                    新建项目
-                                </ContextMenuItem>
-                                <ContextMenuSeparator />
-                            </ContextMenuSubContent>
-                        </ContextMenuSub>
-                        <ContextMenuSeparator />
-                        <ContextMenuItem>查看详情</ContextMenuItem>
-                        <ContextMenuItem>复制</ContextMenuItem>
-                        <ContextMenuSeparator />
-                        <ContextMenuItem>收藏</ContextMenuItem>
-                        <ContextMenuItem>分享</ContextMenuItem>
                         {showEditButton && onEdit && (
                             <>
                                 <ContextMenuSeparator />
@@ -313,12 +298,6 @@ export function DictionaryArtwork({
                         )}
                     </ContextMenuContent>
                 </ContextMenu>
-                <div className="space-y-1 text-sm">
-                    <h3 className="line-clamp-2 font-medium leading-none">{dictionary.name}</h3>
-                    <p className="line-clamp-1 text-xs text-muted-foreground">
-                        {dictionary.description ?? dictionary.domain}
-                    </p>
-                </div>
             </div>
 
             {/* 删除确认对话框 */}
