@@ -405,7 +405,7 @@ const StageBadgeBar: React.FC<StageBadgeBarProps> = ({
                     await completePreTranslationAction(operationItemId, preTranslateRunId);
                     syncLocalStatus(operationItemId, 'MT_REVIEW');
                     setOperationStage('MT_REVIEW');
-                    await saveRecord('MT_REVIEW', 'USER', 'SUCCESS');
+                    await saveRecord('MT_REVIEW', 'USER', 'STARTED');
                     break;
                 }
 
@@ -423,6 +423,10 @@ const StageBadgeBar: React.FC<StageBadgeBarProps> = ({
                         throw new Error('质检运行标识缺失，请刷新后重试');
                     }
                     syncLocalStatus(operationItemId, 'QA');
+                    // The durable MT_REVIEW -> QA claim proves the human
+                    // review has been accepted. Record that completion only
+                    // after the server transition, never on entering review.
+                    await saveRecord('MT_REVIEW', 'USER', 'SUCCESS');
                     setOperationStage('QA');
                     toast.info(t('toasts.qaStarted'), {
                         description: t('toasts.autoProcessInfo'),
@@ -439,12 +443,16 @@ const StageBadgeBar: React.FC<StageBadgeBarProps> = ({
                     await saveRecord('QA_REVIEW', 'USER', 'STARTED');
                     break;
                 }
-                case 'QA_REVIEW':
-                    setOperationStage('POST_EDIT');
+                case 'QA_REVIEW': {
                     await syncStatusUpdate(operationItemId, 'POST_EDIT');
+                    // A later automatic stage is only allowed after the human
+                    // QA review has accepted its findings.
+                    await saveRecord('QA_REVIEW', 'USER', 'SUCCESS');
+                    setOperationStage('POST_EDIT');
                     toast.info(t('toasts.postEditStarted'));
                     await runPostEdit();
                     break;
+                }
                 case 'POST_EDIT': {
                     // Persist the guarded review state before its audit event;
                     // on an audit write failure, restore the prior state so the
@@ -463,7 +471,7 @@ const StageBadgeBar: React.FC<StageBadgeBarProps> = ({
                         setPersistedTargetTranslationText(confirmedTarget);
                     }
                     try {
-                        await saveRecord('POST_EDIT_REVIEW', 'USER', 'SUCCESS');
+                        await saveRecord('POST_EDIT_REVIEW', 'USER', 'STARTED');
                     } catch (error) {
                         await syncStatusUpdate(operationItemId, 'POST_EDIT');
                         throw error;
@@ -514,6 +522,7 @@ const StageBadgeBar: React.FC<StageBadgeBarProps> = ({
                     }
                     syncLocalStatus(operationItemId, 'SIGN_OFF');
                     try {
+                        await saveRecord('POST_EDIT_REVIEW', 'USER', 'SUCCESS');
                         await saveRecord('SIGN_OFF', 'USER', 'SUCCESS');
                     } catch (error) {
                         try {

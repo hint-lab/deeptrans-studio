@@ -855,6 +855,15 @@ export function ActionSection() {
                 qaClaimed = true;
                 syncLocalStatusById(id, 'QA');
                 if (isCurrentItem()) setCurrentStage('QA' as any);
+                const mtReviewEvent = await recordGoToNextTranslationProcessEventAction(
+                    id,
+                    'MT_REVIEW',
+                    'HUMAN',
+                    'SUCCESS'
+                );
+                if (!mtReviewEvent.success) {
+                    logger.warn('预翻译复核已通过，但成功事件未记录');
+                }
                 setQARunning(true);
                 setQAStep('bi-term-eval');
 
@@ -1078,6 +1087,12 @@ export function ActionSection() {
                 try {
                     await recordGoToNextTranslationProcessEventAction(
                         item.id,
+                        'MT_REVIEW',
+                        'HUMAN',
+                        'SUCCESS'
+                    );
+                    await recordGoToNextTranslationProcessEventAction(
+                        item.id,
                         'QA',
                         'AGENT',
                         'SUCCESS'
@@ -1186,6 +1201,16 @@ export function ActionSection() {
                         // without its required timeline event.
                         const content = await getContentByIdAction(it.id);
                         await signOffPostEditReviewAction(it.id, buildBatchSignoffInput(content));
+                        const reviewEvent = await recordGoToNextTranslationProcessEventAction(
+                            it.id,
+                            'POST_EDIT_REVIEW',
+                            'HUMAN',
+                            'SUCCESS'
+                        );
+                        if (!reviewEvent.success) {
+                            await updateDocItemStatusAction(it.id, 'POST_EDIT_REVIEW');
+                            throw new Error(reviewEvent.error || '译后复核审计记录未保存');
+                        }
                         const event = await recordGoToNextTranslationProcessEventAction(
                             it.id,
                             'SIGN_OFF',
@@ -1653,6 +1678,16 @@ export function ActionSection() {
             enteredPostEdit = true;
             syncLocalStatusById(itemId, 'POST_EDIT');
             if (isCurrentItem()) setCurrentStage('POST_EDIT' as any);
+
+            const qaReviewEvent = await recordGoToNextTranslationProcessEventAction(
+                itemId,
+                'QA_REVIEW',
+                'HUMAN',
+                'SUCCESS'
+            );
+            if (!qaReviewEvent.success) {
+                logger.warn('质检复核已通过，但成功事件未记录');
+            }
 
             const started = await recordGoToNextTranslationProcessEventAction(
                 itemId,

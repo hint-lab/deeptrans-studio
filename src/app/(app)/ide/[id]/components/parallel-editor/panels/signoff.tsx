@@ -45,10 +45,10 @@ type BuildSignoffTimelineOptions = {
 /**
  * Reconciles persisted process events with the document's current stage.
  *
- * The current stage can fill an absent event in an earlier stage, but it is
- * not evidence that an explicitly recorded result (especially a failure) was
- * successful. Event data therefore wins over inferred status; only true idle
- * gaps are backfilled.
+ * The current document status is the live workflow truth. A prior STARTED
+ * audit event means an event was never closed, not that work is still running,
+ * once the document has safely progressed beyond that stage. Explicit failures
+ * remain visible and are never rewritten by this display reconciliation.
  */
 export function buildSignoffTimeline(
     events: readonly SignoffEventItem[],
@@ -85,19 +85,40 @@ export function buildSignoffTimeline(
         const previous = results.get(stage)!;
 
         if (index < currentIndex) {
-            // A later current status proves only that a missing stage was passed.
-            // It must not rewrite an actual FAILED or STARTED process event.
-            if (previous.status === 'IDLE') {
-                results.set(stage, { ...previous, status: 'SUCCESS', actor: 'System' });
+            // NOT_STARTED is the pre-work state, not a completed workflow
+            // step. It must never read as a successful system action.
+            if (stage === 'NOT_STARTED') {
+                results.set(stage, { status: 'IDLE', actor: '—' });
+                return;
+            }
+
+            // A later durable status proves that an earlier stage passed. This
+            // also repairs legacy review events that were recorded as STARTED
+            // but never given a separate terminal event.
+            if (previous.status === 'IDLE' || previous.status === 'STARTED') {
+                results.set(stage, {
+                    ...previous,
+                    status: 'SUCCESS',
+                    actor: previous.actor === '—' ? 'System' : previous.actor,
+                });
             }
             return;
         }
 
         if (index === currentIndex) {
-            if (previous.status !== 'SUCCESS' && previous.status !== 'FAILED') {
+            if (stage === 'NOT_STARTED') {
+                results.set(stage, { status: 'IDLE', actor: '—' });
+                return;
+            }
+
+            if (previous.status !== 'FAILED') {
                 results.set(stage, {
                     ...previous,
-                    status: stage === 'COMPLETED' ? 'SUCCESS' : 'STARTED',
+                    // SIGN_OFF represents a completed human signature waiting
+                    // for final completion. Every other current stage is live
+                    // work or a review waiting for a decision.
+                    status:
+                        stage === 'SIGN_OFF' || stage === 'COMPLETED' ? 'SUCCESS' : 'STARTED',
                     actor: previous.actor !== '—' ? previous.actor : 'System',
                 });
             }
