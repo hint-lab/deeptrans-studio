@@ -49,3 +49,31 @@ test('keeps a verified empty project distinct from a loading failure', async () 
         /document store unavailable/
     );
 });
+
+test('uses a plain-text navigation label for a rich-text source segment', async () => {
+    const sourceText = '<p>第二条 在中华人民共和国境内实施学前教育，适用本法。</p>';
+    const tabs = await buildExplorerTabsForProject(
+        {
+            id: 'project-html-label',
+            name: 'HTML label project',
+            documents: [{ id: 'document-html-label', originalName: 'law.docx' }],
+        },
+        {
+            ...buildOptions,
+            getDocumentItems: async () =>
+                [
+                    {
+                        id: 'item-html-label',
+                        sourceText,
+                        status: 'NOT_STARTED',
+                        type: 'PARAGRAPH',
+                        order: 7,
+                    },
+                ] as any,
+        }
+    );
+
+    const item = tabs.documentTabs[0]?.items[0];
+    assert.equal(item?.name, '第二条 在中华人民共和国境内实施学前教育，适用本法。');
+    assert.equal(item?.sourceText, sourceText);
+});
