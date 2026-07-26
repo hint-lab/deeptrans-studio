@@ -5,10 +5,9 @@ interface BottomPanelState {
 }
 
 const initialState: BottomPanelState = {
-    // Review panels open when a segment reaches a human decision point. Keep
-    // the optional workflow/Prompt panel closed while a document is simply
-    // being read or prepared for automatic translation.
-    isOpen: false,
+    // The translation workbench is part of the editor, not an optional status
+    // card. Keep it visible by default; users can still close it explicitly.
+    isOpen: true,
 };
 
 export const bottomPanelSlice = createSlice({

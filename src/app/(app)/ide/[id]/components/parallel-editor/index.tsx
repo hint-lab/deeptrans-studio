@@ -43,7 +43,6 @@ import {
     canLeaveCurrentPostEditDraft,
     POST_EDIT_DRAFT_DISCARD_MESSAGE,
 } from '@/lib/post-edit-draft-navigation';
-import { getStageWorkbenchKind } from '@/lib/stage-workbench';
 import { cn } from '@/lib/utils';
 import type { TranslationStage } from '@/store/features/translationSlice';
 import {
@@ -63,7 +62,11 @@ import { getContentByIdAction } from 'src/actions/document-item'; // 假设已�
 import Hello from './hello-page';
 import RichTextEditor from './rich-text/editor';
 import StageBadgeBar from './stage-badge';
-import { TranslationProcessPanel } from './translation-process-panel';
+import {
+    getStageWorkflowPanelTab,
+    TranslationProcessPanel,
+    type TranslationProcessTab,
+} from './translation-process-panel';
 const logger = createLogger(
     {
         type: 'ide:parallel-editor',
@@ -124,7 +127,7 @@ export default function ParallelEditor({ className }: { className?: string }) {
     const { activeDocumentItem, setActiveDocumentItem } = useActiveDocumentItem();
     const { isBottomPanelOpen, toggleBottomPanel, setBottomPanelOpen } = useBottomPanel();
     const { currentStage, setCurrentStage } = useTranslationState();
-    const [workflowOpen, setWorkflowOpen] = useState(false);
+    const [panelTab, setPanelTab] = useState<TranslationProcessTab>('pre-flow');
     const { sourceLanguage, targetLanguage } = useTranslationLanguage();
     const [stackLayout, setStackLayout] = useState<'vertical' | 'horizontal'>('vertical');
     const { explorerTabs } = useExplorerTabs();
@@ -157,36 +160,10 @@ export default function ParallelEditor({ className }: { className?: string }) {
     const sourceTextRef = useRef(String(sourceText || ''));
     const targetTextRef = useRef(String(targetText || ''));
     const currentStageRef = useRef(currentStage);
-    const panelStageRef = useRef<{ itemId: string; stage: TranslationStage } | null>(null);
     activeItemIdRef.current = String(activeDocumentItem?.id || '');
     sourceTextRef.current = String(sourceText || '');
     targetTextRef.current = String(targetText || '');
     currentStageRef.current = currentStage;
-
-    // Keep the lower workbench closed initially, but do not close it again
-    // when the user explicitly opens a workflow/Prompt view during an
-    // automatic stage. Review still opens it as a useful default.
-    useEffect(() => {
-        const itemId = String(activeDocumentItem?.id || '');
-        if (!itemId) {
-            panelStageRef.current = null;
-            return;
-        }
-
-        const previous = panelStageRef.current;
-        const stageChanged = previous?.itemId !== itemId || previous.stage !== currentStage;
-        if (!stageChanged) return;
-
-        const isAutomatic = getStageWorkbenchKind(currentStage) === 'automatic';
-        const previousWasAutomatic =
-            !previous || getStageWorkbenchKind(previous.stage) === 'automatic';
-
-        if (!isAutomatic && previousWasAutomatic) {
-            setBottomPanelOpen(true);
-        }
-
-        panelStageRef.current = { itemId, stage: currentStage };
-    }, [activeDocumentItem?.id, currentStage, setBottomPanelOpen]);
 
     const runTranslate = async (
         options: {
@@ -761,7 +738,8 @@ export default function ParallelEditor({ className }: { className?: string }) {
                                     clearQAOutputs={clearQAOutputs}
                                     clearPostEditOutputs={clearPostEditOutputs}
                                     onOpenWorkflow={() => {
-                                        setWorkflowOpen(true);
+                                        const workflowTab = getStageWorkflowPanelTab(currentStage);
+                                        if (workflowTab) setPanelTab(workflowTab);
                                         setBottomPanelOpen(true);
                                     }}
                                     saveRecord={async (stage, actor, status) => {
@@ -973,11 +951,8 @@ export default function ParallelEditor({ className }: { className?: string }) {
                             <ResizableHandle className="h-1 bg-secondary" />
                             <ResizablePanel defaultSize={40} minSize={20} maxSize={60}>
                                 <TranslationProcessPanel
-                                    workflowOpen={workflowOpen}
-                                    onWorkflowOpenChange={open => {
-                                        setWorkflowOpen(open);
-                                        if (open) setBottomPanelOpen(true);
-                                    }}
+                                    panelTab={panelTab}
+                                    onPanelTabChange={setPanelTab}
                                 />
                             </ResizablePanel>
                         </>
