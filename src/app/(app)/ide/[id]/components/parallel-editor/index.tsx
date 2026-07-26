@@ -59,7 +59,7 @@ import { useParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { getContentByIdAction } from 'src/actions/document-item'; // 假设已创建数据获取方法
-import Hello from './hello-page';
+import TranslationGuideButton from './hello-page';
 import RichTextEditor from './rich-text/editor';
 import StageBadgeBar from './stage-badge';
 import {
@@ -720,7 +720,9 @@ export default function ParallelEditor({ className }: { className?: string }) {
             {activeDocumentItem.id === null ||
             activeDocumentItem.id === undefined ||
             activeDocumentItem.id === '' ? (
-                <Hello />
+                <div className="relative size-full">
+                    <TranslationGuideButton className="absolute right-3 top-3" />
+                </div>
             ) : (
                 <ResizablePanelGroup direction="vertical" className="size-full">
                     <ResizablePanel defaultSize={60} minSize={30}>

@@ -1994,6 +1994,7 @@
             }
         },
         "hello": {
+            "guide": "Work guide",
             "title": "Select a segment to translate",
             "subtitle": "Start from the document outline on the left",
             "description": "After opening a segment, confirm its current stage at the top and use Start pre-translation to move forward.",

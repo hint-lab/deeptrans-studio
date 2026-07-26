@@ -1,70 +1,75 @@
-import { ChevronRight, Languages } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { cn } from '@/lib/utils';
+import { HelpCircle } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
-export default function Hello() {
+export default function TranslationGuideButton({ className }: { className?: string }) {
     const t = useTranslations('IDE.hello');
     const steps = ['select', 'confirm', 'advance'] as const;
 
     return (
-        <main className="flex min-h-full items-center justify-center px-5 py-10 text-foreground">
-            <section
-                className="w-full max-w-xl rounded-xl border border-border/80 bg-card p-6 shadow-sm"
-                aria-labelledby="parallel-editor-welcome-title"
-                aria-describedby="parallel-editor-welcome-description"
-            >
-                <div className="flex items-start gap-4">
-                    <div className="flex size-10 shrink-0 items-center justify-center rounded-lg border bg-muted/70 text-primary">
-                        <Languages className="size-5" aria-hidden="true" />
-                    </div>
-                    <div className="min-w-0">
-                        <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-                            DeepTrans Studio
-                        </p>
-                        <h1
-                            id="parallel-editor-welcome-title"
-                            className="mt-1 text-xl font-semibold tracking-tight"
-                        >
-                            {t('title')}
-                        </h1>
-                        <p className="mt-1 text-sm font-medium text-foreground/80">
-                            {t('subtitle')}
-                        </p>
-                    </div>
-                </div>
-                <p
-                    id="parallel-editor-welcome-description"
-                    className="mt-5 text-sm leading-6 text-muted-foreground"
+        <Popover>
+            <PopoverTrigger asChild>
+                <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className={cn(
+                        'size-7 shrink-0 rounded-sm p-0 text-muted-foreground hover:text-foreground',
+                        className
+                    )}
+                    aria-label={t('guide')}
+                    title={t('guide')}
                 >
-                    {t('description')}
-                </p>
-
-                <ol className="mt-6 divide-y border-y" aria-label={t('title')}>
+                    <HelpCircle className="size-4" aria-hidden="true" />
+                </Button>
+            </PopoverTrigger>
+            <PopoverContent
+                align="end"
+                side="bottom"
+                className="w-80 max-w-[calc(100vw-2rem)] p-0"
+                aria-labelledby="parallel-editor-guide-title"
+                aria-describedby="parallel-editor-guide-description"
+            >
+                <div className="border-b px-4 py-3.5">
+                    <p className="text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
+                        {t('guide')}
+                    </p>
+                    <h2
+                        id="parallel-editor-guide-title"
+                        className="mt-1 text-sm font-semibold text-foreground"
+                    >
+                        {t('title')}
+                    </h2>
+                    <p
+                        id="parallel-editor-guide-description"
+                        className="mt-1 text-xs leading-5 text-muted-foreground"
+                    >
+                        {t('description')}
+                    </p>
+                </div>
+                <ol className="divide-y" aria-label={t('title')}>
                     {steps.map((step, index) => (
-                        <li key={step} className="flex items-start gap-3 py-3 first:pt-3 last:pb-3">
+                        <li key={step} className="flex items-start gap-3 px-4 py-3">
                             <span
                                 className="flex size-5 shrink-0 items-center justify-center rounded-full border bg-muted text-[10px] font-semibold text-muted-foreground"
                                 aria-hidden="true"
                             >
                                 {index + 1}
                             </span>
-                            <div className="min-w-0 flex-1">
-                                <p className="text-sm font-medium text-foreground">
+                            <div className="min-w-0">
+                                <p className="text-xs font-medium text-foreground">
                                     {t(`steps.${step}.title`)}
                                 </p>
                                 <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
                                     {t(`steps.${step}.description`)}
                                 </p>
                             </div>
-                            {index < steps.length - 1 && (
-                                <ChevronRight
-                                    className="mt-0.5 size-4 shrink-0 text-muted-foreground/50"
-                                    aria-hidden="true"
-                                />
-                            )}
                         </li>
                     ))}
                 </ol>
-            </section>
-        </main>
+            </PopoverContent>
+        </Popover>
     );
 }
