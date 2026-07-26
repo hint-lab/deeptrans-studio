@@ -1,37 +1,34 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { guardMessage, guardStatus, requireOwnedDocumentItem } from '@/lib/guards';
+import { NextResponse } from 'next/server';
+import { GuardError, requireOwnedDocumentItem, requireUser } from '@/lib/guards';
+import {
+    DOCUMENT_SOURCE_RETRY_MESSAGE,
+    getReadableDocumentSourceBufferForOwner,
+} from '@/server/uploaded-object';
 
-export async function GET(req: NextRequest, context: any) {
+export async function GET(
+    _request: Request,
+    context: { params: Promise<{ itemId: string }> }
+) {
     try {
-        const { itemId } = (await context?.params) || {};
+        const { itemId } = await context.params;
         if (!itemId) return NextResponse.json({ error: 'Missing itemId' }, { status: 400 });
-        const item = await requireOwnedDocumentItem(itemId);
+        const authCtx = await requireUser();
+        const item = await requireOwnedDocumentItem(itemId, authCtx);
         if (!item || !item.document)
             return NextResponse.json({ error: 'Not found' }, { status: 404 });
         const doc: any = item.document;
-        let url: string | null = doc.url || null;
-        if (!url) return NextResponse.json({ error: 'No preview url' }, { status: 404 });
-
-        // Normalize to absolute and avoid localhost in client context
-        const reqOrigin = req.nextUrl.origin;
-
-        try {
-            const parsed = new URL(url, reqOrigin);
-            // If points to localhost, rewrite to current origin with same path
-            const isLocal = ['localhost', '127.0.0.1'].includes(parsed.hostname);
-            const base = process.env.NEXT_PUBLIC_BASE_URL || reqOrigin;
-            const out = new URL(
-                parsed.pathname + parsed.search + parsed.hash,
-                isLocal ? base : parsed.origin
-            );
-            return NextResponse.redirect(out.toString(), 302);
-        } catch {
-            // Fallback: treat as relative path
-            const base = process.env.NEXT_PUBLIC_BASE_URL || reqOrigin;
-            const out = new URL(url.startsWith('/') ? url : `/${url}`, base);
-            return NextResponse.redirect(out.toString(), 302);
-        }
+        const body = await getReadableDocumentSourceBufferForOwner(doc.name, authCtx);
+        return new NextResponse(body, {
+            headers: {
+                'Content-Type': doc.mimeType || 'application/octet-stream',
+                'Content-Length': String(body.byteLength),
+                'Cache-Control': 'private, no-store',
+                'X-Content-Type-Options': 'nosniff',
+            },
+        });
     } catch (e) {
-        return NextResponse.json({ error: guardMessage(e) }, { status: guardStatus(e) });
+        const status = e instanceof GuardError ? e.status : 503;
+        const message = e instanceof GuardError ? e.message : DOCUMENT_SOURCE_RETRY_MESSAGE;
+        return NextResponse.json({ error: message }, { status });
     }
 }

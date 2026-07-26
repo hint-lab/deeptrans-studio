@@ -5,13 +5,16 @@ import test from 'node:test';
 
 const source = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8');
 
-test('document preview signs the stored object server-side and keeps the display name separate', () => {
-    const action = source('src/actions/document.ts');
+test('document preview streams the owner-scoped object through a same-origin route', () => {
     const preview = source('src/app/(app)/ide/[id]/components/preview.tsx');
+    const route = source('src/app/api/document/preview/[itemId]/route.ts');
+    const uploadedObject = source('src/server/uploaded-object.ts');
 
-    assert.match(action, /getReadableDocumentSourceUrlForOwner\(doc\.name, authCtx\)/);
-    assert.match(action, /fileUrl,/);
-    assert.match(action, /name: doc\.originalName \|\| doc\.name/);
     assert.doesNotMatch(preview, /getFileUrlAction/);
-    assert.match(preview, /info\.fileUrl/);
+    assert.doesNotMatch(preview, /fetchDocumentPreviewByDocIdAction/);
+    assert.match(preview, /\/api\/document\/preview\/\$\{encodeURIComponent\(previewItemId\)\}/);
+    assert.match(route, /requireOwnedDocumentItem\(itemId, authCtx\)/);
+    assert.match(route, /getReadableDocumentSourceBufferForOwner\(doc\.name, authCtx\)/);
+    assert.doesNotMatch(route, /NextResponse\.redirect/);
+    assert.match(uploadedObject, /getReadableUploadedObjectBufferForOwner\(fileName, authCtx\)/);
 });

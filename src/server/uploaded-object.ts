@@ -79,3 +79,30 @@ export async function getReadableDocumentSourceUrlForOwner(
         throw new GuardError(503, DOCUMENT_SOURCE_RETRY_MESSAGE);
     }
 }
+
+/**
+ * Read a document source on the server for a same-origin preview response.
+ * The browser must not fetch an object-store URL directly: deployments may
+ * use private buckets or object storage without browser CORS access.
+ */
+export async function getReadableDocumentSourceBufferForOwner(
+    documentFileName: unknown,
+    providedAuthCtx?: AuthContext
+) {
+    const authCtx = providedAuthCtx ?? (await requireUser());
+    const fileName = typeof documentFileName === 'string' ? documentFileName.trim() : '';
+
+    if (!parseOwnedUploadedObjectKey(fileName, authCtx.userId)) {
+        throw new GuardError(409, DOCUMENT_SOURCE_UNAVAILABLE_MESSAGE);
+    }
+
+    try {
+        return await getReadableUploadedObjectBufferForOwner(fileName, authCtx);
+    } catch (error) {
+        if (error instanceof GuardError) {
+            if (error.status === 401) throw error;
+            throw new GuardError(409, DOCUMENT_SOURCE_UNAVAILABLE_MESSAGE);
+        }
+        throw new GuardError(503, DOCUMENT_SOURCE_RETRY_MESSAGE);
+    }
+}

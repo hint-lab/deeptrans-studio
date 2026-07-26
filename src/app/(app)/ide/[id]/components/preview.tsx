@@ -1,6 +1,5 @@
 'use client';
 
-import { fetchDocumentPreviewByDocIdAction } from '@/actions/document';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useActiveDocumentItem } from '@/hooks/useActiveDocumentItem';
@@ -103,6 +102,8 @@ const PreviewCard: React.FC = () => {
     const aid = (activeDocumentItem as any)?.id;
     const currentTab = tabs.find((t: any) => (t.items ?? []).some((it: any) => it.id === aid));
     const docId = (currentTab as any)?.id || '';
+    const previewItemId = typeof aid === 'string' && aid ? aid : '';
+    const documentName = String((currentTab as any)?.name || 'document');
     const previewScope = getPreviewRequestScope(projectId, docId);
     const failedDependencies = getFailedPreviewDependencies(fileType, dependencyStates);
     const dependenciesReady = arePreviewDependenciesReady(fileType, dependencyStates);
@@ -222,17 +223,10 @@ const PreviewCard: React.FC = () => {
             setDependencyStates({ ...INITIAL_PREVIEW_DEPENDENCY_STATES });
             containerRef.current?.replaceChildren();
             try {
-                const info = await fetchDocumentPreviewByDocIdAction(docId);
+                if (!previewItemId) throw new Error('Missing preview item ID');
+                const fetchUrl = `/api/document/preview/${encodeURIComponent(previewItemId)}`;
                 if (!isCurrentRequest()) return;
-                if (!info?.name || !info.fileUrl) throw new Error('Missing preview file URL');
-                const fetchUrl = info.fileUrl;
-                if (!isCurrentRequest()) return;
-                logger.info('Fetched owner-scoped preview URL');
-                if (!fetchUrl) {
-                    setError(t('previewError'));
-                    setLoading(false);
-                    return;
-                }
+                logger.info('Fetching same-origin document preview');
 
                 const response = await fetch(fetchUrl, { signal: downloadController.signal });
                 if (!response.ok) throw new Error(`Download failed: ${response.status}`);
@@ -268,9 +262,7 @@ const PreviewCard: React.FC = () => {
                     else if (magic === 0x504b0304) detectedType = 'docx';
                     else {
                         const fileName = (
-                            activeDocumentItem?.name ||
-                            info?.name ||
-                            ''
+                            documentName || activeDocumentItem?.name || ''
                         ).toLowerCase();
                         if (fileName.endsWith('.pdf')) detectedType = 'pdf';
                         else if (fileName.endsWith('.docx') || fileName.endsWith('.doc'))
@@ -281,7 +273,7 @@ const PreviewCard: React.FC = () => {
 
                 activeObjectUrl = URL.createObjectURL(blob);
                 setUrl(activeObjectUrl);
-                setFileName(String(info?.name || activeDocumentItem?.name || 'document'));
+                setFileName(documentName || String(activeDocumentItem?.name || 'document'));
                 setFileType(detectedType);
                 if (detectedType === 'unknown') setLoading(false);
             } catch (e) {
@@ -301,7 +293,7 @@ const PreviewCard: React.FC = () => {
             downloadController.abort();
             if (activeObjectUrl) URL.revokeObjectURL(activeObjectUrl);
         };
-    }, [docId, previewScope, t]);
+    }, [docId, documentName, previewItemId, previewScope, t]);
 
     // 2. 核心渲染分发器
     useEffect(() => {
