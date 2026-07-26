@@ -1,0 +1,20 @@
+[package]
+name = "deeptrans-studio-desktop"
+version = "0.6.0"
+description = "DeepTrans Studio desktop client"
+authors = ["DeepTrans Studio"]
+license = "MIT"
+repository = "https://github.com/hint-lab/deeptrans-studio"
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+name = "deeptrans_studio_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"

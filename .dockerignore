@@ -2,6 +2,7 @@ volumes/
 node_modules/
 dist/
 .next/
+src-tauri/
 .git/
 .gitignore
 .env

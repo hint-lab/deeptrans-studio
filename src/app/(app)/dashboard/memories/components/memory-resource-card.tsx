@@ -49,7 +49,7 @@ export function MemoryResourceCard({
     return (
         <article
             className={cn(
-                'group relative rounded-md border border-l-[3px] border-l-primary/70 bg-card shadow-sm transition-[border-color,background-color,box-shadow] hover:border-muted-foreground/35 hover:bg-muted/20 hover:shadow-md',
+                'group relative rounded-md border bg-card shadow-sm transition-[border-color,background-color,box-shadow] hover:border-muted-foreground/35 hover:bg-muted/20 hover:shadow-md',
                 isGrid ? 'min-h-[108px]' : 'min-h-[76px]'
             )}
         >

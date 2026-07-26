@@ -29,11 +29,10 @@ test('new-project controls retain their labels and discard stale upload state on
     assert.match(source, /max-h-\[calc\(100dvh-2rem\)\] overflow-y-auto/);
 });
 
-test('project overview keeps the primary project action reachable on narrow screens', () => {
+test('project overview keeps the compact project header layout', () => {
     const source = readDashboardSource('projects', 'page.tsx');
 
-    assert.match(source, /flex flex-col gap-3 sm:flex-row/);
-    assert.match(source, /w-full sm:w-36/);
-    assert.match(source, /\{t\('description'\)\}/);
-    assert.doesNotMatch(source, /w-26/);
+    assert.match(source, /flex items-center justify-between gap-3/);
+    assert.match(source, /<div className="w-28">/);
+    assert.doesNotMatch(source, /\{t\('description'\)\}/);
 });

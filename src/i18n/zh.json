@@ -1,10 +1,10 @@
 {
     "Home": {
         "greeting": "你好！",
-        "start": "开始使用",
-        "docs": "翻译学院",
-        "start_desc": "适合于专业翻译的简单好用AI工具，让文档翻译不再难",
-        "docs_desc": "了解更多使用方法，就在这里，操作简单又上头",
+        "start": "工作平台",
+        "docs": "文档入口",
+        "start_desc": "进入工作平台，继续处理翻译项目。",
+        "docs_desc": "查看使用说明、工作流程和常见问题。",
         "copyright": "Copyright © {year} H!NT LAB, SHU"
     },
     "Docs": {

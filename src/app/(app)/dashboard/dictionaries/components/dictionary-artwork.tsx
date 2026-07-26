@@ -264,11 +264,10 @@ export function DictionaryArtwork({
                     <ContextMenuTrigger asChild>
                         <div
                             className={cn(
-                                'group relative flex h-[96px] gap-3 rounded-md border border-l-[3px] bg-card p-3 text-left shadow-sm transition-[border-color,background-color,box-shadow] hover:border-muted-foreground/35 hover:bg-muted/25 hover:shadow-md',
+                                'group relative flex h-[96px] gap-3 rounded-md border bg-card p-3 text-left shadow-sm transition-[border-color,background-color,box-shadow] hover:border-muted-foreground/35 hover:bg-muted/25 hover:shadow-md',
                                 onClick && 'cursor-pointer',
                                 hasInlineActions && 'pr-12'
                             )}
-                            style={{ borderLeftColor: domainAccent }}
                         >
                             {onClick && (
                                 <button

@@ -10,6 +10,7 @@ import { ThemeProvider as NextThemeProvider } from 'next-themes';
 // 导入TooltipProvider
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { createLogger } from '@/lib/logger';
+import { DesktopClientBridge } from '@/components/desktop-client-bridge';
 // 设置页面元数据
 export const metadata: Metadata = {
     title: 'DeepTrans Studio App',
@@ -27,14 +28,17 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     const locale = await getLocale();
     const messages = await getMessages();
     // --- 1. 日志记录设置 ---
-    const logger = createLogger({
-        type: 'layout:root',
-    }, {
-        json: false,// 开启json格式输出
-        pretty: false, // 关闭开发环境美化输出
-        colors: true, // 仅当json：false时启用颜色输出可用
-        includeCaller: false, // 日志不包含调用者
-    });
+    const logger = createLogger(
+        {
+            type: 'layout:root',
+        },
+        {
+            json: false, // 开启json格式输出
+            pretty: false, // 关闭开发环境美化输出
+            colors: true, // 仅当json：false时启用颜色输出可用
+            includeCaller: false, // 日志不包含调用者
+        }
+    );
     logger.debug(
         'Server Page session过期时间:',
         session?.expires ? new Date(session.expires).toLocaleString() : '未设置'
@@ -46,7 +50,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                     <NextIntlClientProvider messages={messages} locale={locale}>
                         <NextThemeProvider attribute="class" defaultTheme="system" enableSystem>
                             {/* 使用时需要包裹在TooltipProvider中 */}
-                            <TooltipProvider>{children}</TooltipProvider>
+                            <TooltipProvider>
+                                <DesktopClientBridge />
+                                {children}
+                            </TooltipProvider>
                         </NextThemeProvider>
                         <Toaster />
                     </NextIntlClientProvider>

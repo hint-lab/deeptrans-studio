@@ -1,10 +1,10 @@
 {
     "Home": {
         "greeting": "Hi there!",
-        "start": "Get Started",
-        "docs": "Docs",
-        "start_desc": "A simple, powerful AI tool for professional translation.",
-        "docs_desc": "Learn how to use it here. Simple and delightful.",
+        "start": "Workbench",
+        "docs": "Documentation",
+        "start_desc": "Open the workbench and continue your translation project.",
+        "docs_desc": "Read guides, workflow notes, and common questions.",
         "copyright": "Copyright © {year} H!NT LAB, SHU"
     },
     "Docs": {

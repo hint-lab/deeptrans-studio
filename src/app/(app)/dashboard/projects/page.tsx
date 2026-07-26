@@ -109,24 +109,19 @@ const ProjectListPage = () => {
 
     return (
         <>
-            <header className="ml-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                    <h2 className="text-2xl font-semibold tracking-tight text-foreground">
-                        {t('title')}
-                    </h2>
-                    <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-                        {t('description')}
-                    </p>
-                </div>
-                <div className="flex flex-wrap items-center gap-3">
+            <header className="ml-2 flex items-center justify-between gap-3">
+                <h2 className="text-2xl font-semibold tracking-tight text-foreground">
+                    {t('title')}
+                </h2>
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     <p
-                        className="flex items-center gap-2 text-xs text-muted-foreground"
+                        className="flex items-center gap-2"
                         aria-live="polite"
                     >
                         <FolderIcon size="16" aria-hidden="true" />
                         {countLabel}
                     </p>
-                    <div className="w-full sm:w-36">
+                    <div className="w-28">
                         <CreateProjectDialog
                             onCreated={() => {
                                 if (currentPage !== 1) {

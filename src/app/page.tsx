@@ -1,165 +1,65 @@
 import Link from 'next/link';
+import type { NextPage } from 'next';
 import LocaleSwitcher from '@/components/locale-switcher';
-import { ArrowRight, BookOpen, Workflow } from 'lucide-react';
-import { getLocale } from 'next-intl/server';
+import { useTranslations } from 'next-intl';
+import { ArrowRight } from 'lucide-react';
 
-type Entry = {
-    title: string;
-    description: string;
-    action: string;
-    href: string;
-    label: string;
-};
-
-type LandingCopy = {
-    title: string;
-    description: string;
-    entries: [Entry, Entry];
-    footer: string;
-};
-
-function copyFor(locale: string, year: number): LandingCopy {
-    if (locale === 'en') {
-        return {
-            title: 'Start your translation work here.',
-            description:
-                'Open the workbench to continue a project, or read the docs first if you want to get familiar with the system.',
-            entries: [
-                {
-                    title: 'Workbench',
-                    description: 'Manage projects, translations, terminology, and review work.',
-                    action: 'Open workbench',
-                    href: '/auth/login',
-                    label: 'WORK',
-                },
-                {
-                    title: 'Documentation',
-                    description: 'Find guides, workflow notes, and answers to common questions.',
-                    action: 'Read documentation',
-                    href: '/docs',
-                    label: 'READ',
-                },
-            ],
-            footer: `© ${year} H!NT LAB · SHU`,
-        };
-    }
-
-    return {
-        title: '从这里开始做翻译。',
-        description: '进入工作平台继续处理项目；如果想先了解功能，就去看文档。',
-        entries: [
-            {
-                title: '工作平台',
-                description: '处理项目、译文、术语和审校工作。',
-                action: '进入工作平台',
-                href: '/auth/login',
-                label: '工作',
-            },
-            {
-                title: '文档入口',
-                description: '查看使用说明、工作流程和常见问题。',
-                action: '查看文档',
-                href: '/docs',
-                label: '文档',
-            },
-        ],
-        footer: `© ${year} H!NT LAB · SHU`,
-    };
-}
-
-export default async function Home() {
-    const locale = await getLocale();
-    const copy = copyFor(locale, new Date().getFullYear());
-
+function HomeContent({ year }: { year: number }) {
+    const t = useTranslations('Home');
     return (
-        <main className="min-h-screen overflow-hidden bg-[#edf0f5] text-[#182236]">
-            <div
-                aria-hidden="true"
-                className="pointer-events-none fixed inset-0 opacity-60 [background-image:linear-gradient(rgba(92,108,136,0.08)_1px,transparent_1px),linear-gradient(90deg,rgba(92,108,136,0.08)_1px,transparent_1px)] [background-size:32px_32px]"
-            />
-            <div
-                aria-hidden="true"
-                className="pointer-events-none fixed -left-28 top-24 h-72 w-72 rounded-full bg-[#d8dcff]/65 blur-3xl"
-            />
-            <div
-                aria-hidden="true"
-                className="pointer-events-none fixed -bottom-32 right-0 h-80 w-80 rounded-full bg-[#d7e8ec]/70 blur-3xl"
-            />
-
-            <div className="relative mx-auto flex min-h-screen w-full max-w-6xl flex-col px-5 sm:px-8 lg:px-10">
-                <header className="flex items-center justify-between border-b border-[#cfd6e2] py-5 sm:py-6">
-                    <Link href="/" className="flex items-center" aria-label="DeepTrans Studio">
-                        <img
-                            src="/logo.svg"
-                            alt="DeepTrans Studio"
-                            className="h-auto w-[158px] sm:w-[176px]"
-                        />
-                    </Link>
-                    <div className="rounded-md border border-[#cfd6e2] bg-white/75 shadow-sm backdrop-blur">
-                        <LocaleSwitcher />
-                    </div>
-                </header>
-
-                <section className="flex flex-1 items-center py-14 sm:py-20 lg:py-24">
-                    <div className="w-full">
-                        <div className="max-w-2xl">
-                            <p className="text-xs font-semibold tracking-[0.16em] text-[#5d6880]">
-                                DEEPTRANS STUDIO
-                            </p>
-                            <h1 className="mt-4 max-w-[12ch] text-4xl font-semibold tracking-[-0.055em] text-[#182236] sm:text-5xl lg:text-6xl lg:leading-[1.05]">
-                                {copy.title}
-                            </h1>
-                            <p className="mt-5 max-w-xl text-base leading-8 text-[#536078] sm:text-lg">
-                                {copy.description}
-                            </p>
-                        </div>
-
-                        <div className="mt-11 grid gap-4 md:grid-cols-2 md:gap-5">
-                            {copy.entries.map((entry, index) => {
-                                const Icon = index === 0 ? Workflow : BookOpen;
-
-                                return (
-                                    <Link
-                                        key={entry.href}
-                                        href={entry.href}
-                                        className="group relative flex min-h-64 flex-col overflow-hidden rounded-xl border border-[#c9d1df] bg-[#fbfcfe] p-6 shadow-[0_14px_35px_rgba(36,50,78,0.08)] transition duration-200 hover:-translate-y-1 hover:border-[#8796b7] hover:shadow-[0_20px_45px_rgba(36,50,78,0.14)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4064d8] focus-visible:ring-offset-4"
-                                    >
-                                        <div className="flex items-start justify-between gap-4">
-                                            <div className="flex h-11 w-11 items-center justify-center rounded-lg border border-[#ccd5ed] bg-[#edf1ff] text-[#405ec2]">
-                                                <Icon aria-hidden="true" className="h-5 w-5" strokeWidth={1.9} />
-                                            </div>
-                                            <span className="border-b border-[#c9d1df] pb-1 text-[11px] font-semibold tracking-[0.14em] text-[#6a768d]">
-                                                {entry.label}
-                                            </span>
-                                        </div>
-
-                                        <div className="mt-9">
-                                            <h2 className="text-2xl font-semibold tracking-[-0.035em] text-[#202b40]">
-                                                {entry.title}
-                                            </h2>
-                                            <p className="mt-3 max-w-sm text-sm leading-6 text-[#5b6880]">
-                                                {entry.description}
-                                            </p>
-                                        </div>
-
-                                        <div className="mt-auto flex items-center gap-2 pt-9 text-sm font-semibold text-[#2d4fc5]">
-                                            <span>{entry.action}</span>
-                                            <ArrowRight
-                                                aria-hidden="true"
-                                                className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1"
-                                            />
-                                        </div>
-                                    </Link>
-                                );
-                            })}
-                        </div>
-                    </div>
-                </section>
-
-                <footer className="border-t border-[#cfd6e2] py-5 text-xs text-[#69758b]">
-                    {copy.footer}
-                </footer>
+        <main className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-gradient-to-br from-[#0f1020] via-[#11122a] to-[#0b0c1a] text-white">
+            {/* 语言切换器 */}
+            <div className="fixed right-4 top-4 z-50">
+                <LocaleSwitcher variant="dark-bg" />
             </div>
+
+            {/* 背景装饰 - 高级发光光晕 */}
+            <div className="pointer-events-none absolute -top-[20%] -left-[10%] h-[70vh] w-[70vw] rounded-full bg-[radial-gradient(circle,_var(--tw-gradient-stops))] from-indigo-600/20 via-purple-600/5 to-transparent blur-[120px] animate-pulse" style={{ animationDuration: '4s' }} />
+            <div className="pointer-events-none absolute -bottom-[20%] -right-[10%] h-[60vh] w-[60vw] rounded-full bg-[radial-gradient(circle,_var(--tw-gradient-stops))] from-fuchsia-600/20 via-violet-600/5 to-transparent blur-[120px] animate-pulse" style={{ animationDuration: '5s' }} />
+            <div className="pointer-events-none absolute top-[20%] left-[20%] h-[50vh] w-[50vw] rounded-full bg-[radial-gradient(circle,_var(--tw-gradient-stops))] from-blue-600/10 via-transparent to-transparent blur-[100px] animate-pulse" style={{ animationDuration: '6s' }} />
+            <div className="container relative z-10 flex flex-col items-center justify-center gap-12 px-4 py-16">
+                <div className="flex flex-col gap-4 md:gap-8">
+                    <h2 className="text-xl font-extrabold tracking-tight sm:text-[3rem]">
+                        {t('greeting')}
+                    </h2>
+                </div>
+                <h1 className="gradient-text text-5xl font-extrabold tracking-tight sm:text-[5rem]">
+                    DeepTrans <span className="text-[hsl(218, 91.80%, 66.50%)]"> Studio</span>
+                </h1>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-8">
+                    <Link
+                        className="flex max-w-xs flex-col gap-4 rounded-xl bg-white/10 p-4 hover:bg-white/20"
+                        href="./auth/login"
+                    >
+                        <h3 className="text-2xl font-bold">{t('start')}</h3>
+                        <div className="text-lg">{t('start_desc')}</div>
+                        <div className="flex flex-row-reverse text-lg">
+                            <ArrowRight size={16} />
+                        </div>
+                    </Link>
+                    <Link
+                        className="flex max-w-xs flex-col gap-4 rounded-xl bg-white/10 p-4 hover:bg-white/20"
+                        href="./docs"
+                    >
+                        <h3 className="text-2xl font-bold">{t('docs')}</h3>
+                        <div className="text-lg">{t('docs_desc')}</div>
+                        <div className="flex flex-row-reverse text-lg">
+                            <ArrowRight size={16} />
+                        </div>
+                    </Link>
+                </div>
+                <div className="flex flex-col items-center gap-2" />
+            </div>
+            <footer className="fixed bottom-0 z-10 w-full py-2 text-center text-sm text-white/70">
+                {t('copyright', { year })}
+                <br />
+            </footer>
         </main>
     );
 }
+
+const Home: NextPage = async () => {
+    const year = new Date().getFullYear();
+    return <HomeContent year={year} />;
+};
+export default Home;

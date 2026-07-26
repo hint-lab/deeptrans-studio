@@ -1,0 +1,159 @@
+name: Desktop packages
+
+on:
+    workflow_dispatch:
+    push:
+        tags:
+            - 'desktop-v*'
+
+permissions:
+    contents: read
+
+concurrency:
+    group: desktop-packages-${{ github.ref }}
+    cancel-in-progress: true
+
+jobs:
+    macos-universal:
+        name: macOS universal DMG
+        runs-on: macos-latest
+        timeout-minutes: 45
+
+        steps:
+            - name: Check out source
+              uses: actions/checkout@v6
+
+            - name: Set up Node.js
+              uses: actions/setup-node@v6
+              with:
+                  node-version: 22
+
+            - name: Enable Yarn
+              run: corepack enable
+
+            - name: Install JavaScript dependencies
+              run: yarn install --frozen-lockfile
+
+            - name: Set up Rust
+              uses: dtolnay/rust-toolchain@stable
+              with:
+                  targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+            - name: Cache Rust build
+              uses: Swatinem/rust-cache@v2
+              with:
+                  workspaces: src-tauri -> target
+
+            - name: Build universal DMG
+              uses: tauri-apps/tauri-action@v1
+              env:
+                  APPLE_SIGNING_IDENTITY: '-'
+              with:
+                  tauriScript: yarn tauri
+                  args: --target universal-apple-darwin --bundles dmg
+
+            - name: Validate DMG and universal binary
+              shell: bash
+              run: |
+                  set -euo pipefail
+                  bundle_root="src-tauri/target/universal-apple-darwin/release/bundle"
+                  dmg_path="$(find "$bundle_root/dmg" -type f -name '*.dmg' -print -quit)"
+                  app_path="$(find "$bundle_root/macos" -type d -name '*.app' -print -quit)"
+                  test -n "$dmg_path"
+                  test -n "$app_path"
+                  test "$(stat -f%z "$dmg_path")" -gt 1000000
+                  hdiutil verify "$dmg_path"
+                  codesign --verify --deep --strict "$app_path"
+                  executable_name="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app_path/Contents/Info.plist")"
+                  architectures="$(lipo -archs "$app_path/Contents/MacOS/$executable_name")"
+                  [[ "$architectures" == *arm64* ]]
+                  [[ "$architectures" == *x86_64* ]]
+                  shasum -a 256 "$dmg_path" | tee "$dmg_path.sha256"
+
+            - name: Upload macOS package
+              uses: actions/upload-artifact@v6
+              with:
+                  name: DeepTrans-Studio-macOS-universal-dmg
+                  path: |
+                      src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+                      src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.sha256
+                  if-no-files-found: error
+                  compression-level: 0
+                  retention-days: 14
+
+    windows-x64:
+        name: Windows x64 Setup.exe
+        runs-on: windows-latest
+        timeout-minutes: 45
+
+        steps:
+            - name: Check out source
+              uses: actions/checkout@v6
+
+            - name: Set up Node.js
+              uses: actions/setup-node@v6
+              with:
+                  node-version: 22
+
+            - name: Enable Yarn
+              run: corepack enable
+
+            - name: Install JavaScript dependencies
+              run: yarn install --frozen-lockfile
+
+            - name: Set up Rust
+              uses: dtolnay/rust-toolchain@stable
+              with:
+                  targets: x86_64-pc-windows-msvc
+
+            - name: Cache Rust build
+              uses: Swatinem/rust-cache@v2
+              with:
+                  workspaces: src-tauri -> target
+
+            - name: Build unsigned NSIS installer
+              uses: tauri-apps/tauri-action@v1
+              with:
+                  tauriScript: yarn tauri
+                  args: --target x86_64-pc-windows-msvc --bundles nsis --no-sign
+
+            - name: Validate and smoke-install NSIS package
+              shell: pwsh
+              run: |
+                  $installerRoot = "src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis"
+                  $installers = @(Get-ChildItem -Path $installerRoot -Filter "*-setup.exe" -File)
+                  if ($installers.Count -ne 1) { throw "Expected exactly one NSIS Setup.exe" }
+
+                  $installer = $installers[0]
+                  if ($installer.Length -lt 1MB) { throw "Installer is unexpectedly small" }
+
+                  $signature = Get-AuthenticodeSignature $installer.FullName
+                  if ($signature.Status -ne "NotSigned") { throw "Expected an unsigned installer" }
+
+                  $installRoot = Join-Path $env:RUNNER_TEMP "deeptrans-studio-smoke"
+                  $install = Start-Process -FilePath $installer.FullName -ArgumentList "/S", "/D=$installRoot" -Wait -PassThru
+                  if ($install.ExitCode -ne 0) { throw "Silent install failed with exit code $($install.ExitCode)" }
+
+                  $installedApps = @(Get-ChildItem -Path $installRoot -Filter "*.exe" -File | Where-Object { $_.Name -notmatch "uninstall" })
+                  if ($installedApps.Count -lt 1) { throw "Silent install did not produce an application executable" }
+
+                  $application = $installedApps | Sort-Object Length -Descending | Select-Object -First 1
+                  $process = Start-Process -FilePath $application.FullName -PassThru
+                  Start-Sleep -Seconds 5
+                  if ($process.HasExited) { throw "Installed desktop application exited during smoke test" }
+                  Stop-Process -Id $process.Id -Force
+
+                  $hash = Get-FileHash $installer.FullName -Algorithm SHA256
+                  "$($hash.Hash.ToLower())  $($installer.Name)" | Set-Content "$($installer.FullName).sha256"
+                  Write-Output $hash
+
+            - name: Upload Windows package
+              uses: actions/upload-artifact@v6
+              with:
+                  name: DeepTrans-Studio-Windows-x64-NSIS
+                  path: |
+                      src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*-setup.exe
+                      src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.sha256
+                  if-no-files-found: error
+                  compression-level: 0
+                  retention-days: 14
