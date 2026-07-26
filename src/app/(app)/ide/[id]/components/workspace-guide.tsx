@@ -121,7 +121,7 @@ function WorkspaceGuideOverlay({
     const t = useTranslations('IDE.workspaceGuide');
     const [targetRect, setTargetRect] = useState<GuideTargetRect | null>(null);
     const guideRef = useRef<HTMLElement>(null);
-    const step = GUIDE_STEPS[stepIndex];
+    const step = GUIDE_STEPS[stepIndex] ?? GUIDE_STEPS[0];
     const isFirstStep = stepIndex === 0;
     const isFinalStep = stepIndex === GUIDE_STEPS.length - 1;
     const nextDisabled = isFirstStep && !hasActiveSegment;
