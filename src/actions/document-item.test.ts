@@ -156,7 +156,7 @@ test('does not let a second tab repeat MT or claim a stale row', async () => {
             },
             createRunId: () => 'run-a',
         }),
-        /原文已变化/
+        /原文已更新/
     );
     assert.equal(staleSourceWrites, 0);
 });

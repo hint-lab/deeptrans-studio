@@ -27,7 +27,6 @@ import {
     ChevronRight,
     CircleDashed,
     CircleOff,
-    FileText,
     Loader2,
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
@@ -112,29 +111,29 @@ function AutomaticStageBody({
     workflowPanelId: string;
     children?: ReactNode;
 }) {
-    const tStage = useTranslations('IDE.translationStages');
     const tGuidance = useTranslations('IDE.stageGuidance');
     const presentation = getAutomaticStagePresentation(stage);
     const isError = presentation.statusKey === 'ERROR';
-    const isCanceled = presentation.statusKey === 'CANCELED';
-    const status = tStage(presentation.statusKey);
     const action = tGuidance(`actions.${guidance.action}`);
-    const instruction = tGuidance(`instructions.${guidance.instruction}`);
+    const instruction =
+        stage === 'NOT_STARTED'
+            ? tGuidance('topActionHint', { action })
+            : tGuidance(`instructions.${guidance.instruction}`);
 
     return (
         <section
             className={cn(
-                'mx-auto flex w-full max-w-2xl flex-col gap-4 rounded-lg border bg-card p-5 shadow-sm',
+                'mx-auto flex w-full max-w-xl flex-wrap items-center gap-3 rounded-md border bg-card/70 px-3 py-2.5',
                 isError && 'border-destructive/35 bg-destructive/5',
-                presentation.isRecoverable && 'gap-3 border-amber-500/35 bg-amber-500/5 p-4'
+                presentation.isRecoverable && 'border-amber-500/35 bg-amber-500/5'
             )}
             aria-live="polite"
             data-recoverable={presentation.isRecoverable || undefined}
         >
-            <div className="flex items-start gap-3">
+            <div className="flex min-w-0 flex-1 items-start gap-2.5">
                 <div
                     className={cn(
-                        'mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md border bg-background',
+                        'mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md border bg-background',
                         isError && 'border-destructive/35 bg-destructive/5',
                         presentation.isRecoverable && 'border-amber-500/35 bg-amber-500/10'
                     )}
@@ -142,61 +141,40 @@ function AutomaticStageBody({
                     <StageIcon presentation={presentation} />
                 </div>
                 <div className="min-w-0 flex-1">
-                    <div className="flex min-w-0 items-center gap-1.5">
-                        <FileText
-                            className="size-3.5 shrink-0 text-muted-foreground"
-                            aria-hidden="true"
-                        />
+                    <div className="flex min-w-0 items-center gap-1.5 text-[11px]">
                         <span className="shrink-0 text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
                             {segmentLabel}
                         </span>
                         <span className="truncate text-xs font-medium" title={documentLabel}>
                             {documentLabel}
                         </span>
-                    </div>
-                    <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
-                        <h2 className="text-sm font-semibold tracking-tight">
-                            {tGuidance('currentStage', { stage: stageLabel })}
-                        </h2>
-                        {!isCanceled && (
-                            <span className="text-xs text-muted-foreground">{status}</span>
-                        )}
+                        <span className="shrink-0 text-muted-foreground">{stageLabel}</span>
                     </div>
                     <p
-                        className="mt-1 text-xs leading-5 text-muted-foreground"
+                        className="mt-0.5 text-xs leading-5 text-muted-foreground"
                         role="status"
                         aria-live="polite"
                     >
                         {instruction}
                     </p>
-                    {presentation.showProcessingHint && (
-                        <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                            {tStage('status.processing')}
-                        </p>
-                    )}
                 </div>
             </div>
 
-            <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3">
-                <span className="text-xs font-medium text-foreground/80">
-                    {tGuidance('nextAction', { action })}
-                </span>
-                {workflowAvailable && workflowLabel && (
-                    <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-8 gap-1.5 rounded-sm text-xs"
-                        aria-controls={workflowPanelId}
-                        aria-expanded={workflowOpen}
-                        onClick={onToggleWorkflow}
-                    >
-                        <span>{workflowLabel}</span>
-                        <ChevronRight className="size-3.5" aria-hidden="true" />
-                    </Button>
-                )}
-            </div>
-            {children}
+            {workflowAvailable && workflowLabel && (
+                <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 shrink-0 gap-1 rounded-sm px-2 text-xs text-muted-foreground hover:text-foreground"
+                    aria-controls={workflowPanelId}
+                    aria-expanded={workflowOpen}
+                    onClick={onToggleWorkflow}
+                >
+                    <span>{workflowLabel}</span>
+                    <ChevronRight className="size-3.5" aria-hidden="true" />
+                </Button>
+            )}
+            {children && <div className="w-full border-t pt-2">{children}</div>}
         </section>
     );
 }

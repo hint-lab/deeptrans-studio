@@ -39,3 +39,25 @@ const richTextEditorSaveFailures = new Map<string, Exclude<RichTextEditorSaveFai
 export function resolveRichTextEditorSaveFailure(error: unknown): RichTextEditorSaveFailure {
     return richTextEditorSaveFailures.get(errorMessage(error)) ?? null;
 }
+
+const preTranslationStartFailures = new Set([
+    '原文有未保存修改，请先保存原文后再启动预翻译',
+    '当前分段原文已更新，请刷新后再启动预翻译',
+    // Keep the prior public wording readable for an already-open browser tab
+    // while the server action is being rolled forward.
+    '当前分段原文已变化，请保存并刷新后再启动预翻译',
+    '当前分段已被其他操作启动，请刷新后重试',
+    '当前分段已被其他操作更新，请刷新后重试',
+    '原文内容为空，无法进行预翻译',
+    '当前分段仍在加载，请加载完成后再启动预翻译',
+]);
+
+/**
+ * Pre-translation can only reveal a small, intentionally authored set of
+ * concurrency and draft states. Provider, database, and transport failures
+ * remain behind the ordinary generic message.
+ */
+export function resolvePreTranslationStartFailure(error: unknown) {
+    const candidate = errorMessage(error);
+    return preTranslationStartFailures.has(candidate) ? candidate : null;
+}

@@ -19,6 +19,9 @@ interface TranslationState {
     targetLanguage: string;
     contentItemId: string;
     sourceText: string;
+    // The last source text confirmed by a server read or write. It remains
+    // separate from `sourceText`, which can be an unsaved TipTap draft.
+    persistedSourceText: string;
     targetText: string;
     // The last target text confirmed by a guarded server write. It remains
     // separate from `targetText`, which may be an unsaved TipTap draft.
@@ -31,6 +34,7 @@ const initialState: TranslationState = {
     targetLanguage: 'auto',
     contentItemId: '',
     sourceText: '',
+    persistedSourceText: '',
     targetText: '',
     persistedTargetText: '',
 };
@@ -54,6 +58,7 @@ export const translationSlice = createSlice({
         clearTranslationContent: state => {
             state.contentItemId = '';
             state.sourceText = '';
+            state.persistedSourceText = '';
             state.targetText = '';
             state.persistedTargetText = '';
         },
@@ -63,11 +68,15 @@ export const translationSlice = createSlice({
         ) => {
             state.contentItemId = action.payload.itemId;
             state.sourceText = action.payload.sourceText;
+            state.persistedSourceText = action.payload.sourceText;
             state.targetText = action.payload.targetText || '';
             state.persistedTargetText = action.payload.targetText || '';
         },
         setSourceText: (state, action: PayloadAction<string>) => {
             state.sourceText = action.payload;
+        },
+        setPersistedSourceText: (state, action: PayloadAction<string>) => {
+            state.persistedSourceText = action.payload;
         },
         setTargetText: (state, action: PayloadAction<string>) => {
             state.targetText = action.payload;
@@ -85,6 +94,7 @@ export const {
     clearTranslationContent,
     setTranslationContent,
     setSourceText,
+    setPersistedSourceText,
     setTargetText,
     setPersistedTargetText,
 } = translationSlice.actions;

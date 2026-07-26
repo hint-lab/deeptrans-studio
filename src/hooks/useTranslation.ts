@@ -10,6 +10,7 @@ import {
     setTargetLanguage,
     clearTranslationContent,
     setTranslationContent,
+    setPersistedSourceText,
     setPersistedTargetText,
 } from '@/store/features/translationSlice';
 
@@ -31,6 +32,9 @@ export const useTranslationContent = () => {
     const sourceText = useAppSelector(
         state => (state.translation as { sourceText: string })?.sourceText ?? ''
     );
+    const persistedSourceText = useAppSelector(
+        state => (state.translation as { persistedSourceText: string })?.persistedSourceText ?? ''
+    );
     const targetText = useAppSelector(
         state => (state.translation as { targetText: string })?.targetText ?? ''
     );
@@ -38,6 +42,8 @@ export const useTranslationContent = () => {
         state => (state.translation as { persistedTargetText: string })?.persistedTargetText ?? ''
     );
     const setSourceTranslationText = (sourceText: string) => dispatch(setSourceText(sourceText));
+    const setPersistedSourceTranslationText = (sourceText: string) =>
+        dispatch(setPersistedSourceText(sourceText));
     const setTargetTranslationText = (targetText: string) => dispatch(setTargetText(targetText));
     const setPersistedTargetTranslationText = (targetText: string) =>
         dispatch(setPersistedTargetText(targetText));
@@ -47,11 +53,13 @@ export const useTranslationContent = () => {
     return {
         contentItemId,
         sourceText,
+        persistedSourceText,
         targetText,
         persistedTargetText,
         clearTranslationContent: clearContent,
         setTranslationContent: setContent,
         setSourceTranslationText,
+        setPersistedSourceTranslationText,
         setTargetTranslationText,
         setPersistedTargetTranslationText,
     };

@@ -1965,6 +1965,7 @@
             "workbenchLabel": "Translation workbench: {stage}",
             "workflowProgress": "Translation workflow progress",
             "loadingSegment": "Loading the current segment…",
+            "topActionHint": "Use {action} in the top bar.",
             "actions": {
                 "startPreTranslation": "Start pre-translation",
                 "waitForPreTranslation": "Wait for pre-translation",

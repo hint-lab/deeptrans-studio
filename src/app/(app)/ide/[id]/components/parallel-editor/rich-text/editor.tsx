@@ -44,6 +44,7 @@ const RichTextEditor = ({
         contentItemId,
         sourceText,
         persistedTargetText,
+        setPersistedSourceTranslationText,
         setPersistedTargetTranslationText,
         setSourceTranslationText,
         setTargetTranslationText,
@@ -156,15 +157,23 @@ const RichTextEditor = ({
                 toast.success(t('saveRawSuccess'));
                 try {
                     const fresh = await getContentByIdAction(editorId);
-                    const next = fresh?.sourceText ?? visibleContent;
+                    const next = String(fresh?.sourceText ?? visibleContent);
+                    lastLocalContentRef.current = next;
                     setSourceTranslationText(next);
+                    setPersistedSourceTranslationText(next);
                     try {
-                        editor?.commands.setContent(next);
+                        editor?.commands.setContent(next, { emitUpdate: false });
+                        editor?.view.dom.setAttribute('data-deeptrans-editor-dirty', 'false');
                     } catch {}
                 } catch {
-                    // 回退到本地内容
+                    // The write already succeeded. If its confirmation read is
+                    // unavailable, keep the successful source as the next
+                    // guarded snapshot instead of treating it as a draft.
                     try {
+                        lastLocalContentRef.current = visibleContent;
                         setSourceTranslationText(visibleContent);
+                        setPersistedSourceTranslationText(visibleContent);
+                        editor?.view.dom.setAttribute('data-deeptrans-editor-dirty', 'false');
                     } catch {}
                 }
             } else if (job === 'translation') {

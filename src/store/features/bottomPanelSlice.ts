@@ -5,7 +5,10 @@ interface BottomPanelState {
 }
 
 const initialState: BottomPanelState = {
-    isOpen: true, // 默认面板开启
+    // Review panels open when a segment reaches a human decision point. Keep
+    // the optional workflow/Prompt panel closed while a document is simply
+    // being read or prepared for automatic translation.
+    isOpen: false,
 };
 
 export const bottomPanelSlice = createSlice({

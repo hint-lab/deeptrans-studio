@@ -43,7 +43,9 @@ import {
     canLeaveCurrentPostEditDraft,
     POST_EDIT_DRAFT_DISCARD_MESSAGE,
 } from '@/lib/post-edit-draft-navigation';
+import { getStageWorkbenchKind } from '@/lib/stage-workbench';
 import { cn } from '@/lib/utils';
+import type { TranslationStage } from '@/store/features/translationSlice';
 import {
     ChevronLeft,
     ChevronRight,
@@ -120,7 +122,7 @@ export default function ParallelEditor({ className }: { className?: string }) {
     } = useTranslationContent();
     const [error, setError] = useState<string | null>(null);
     const { activeDocumentItem, setActiveDocumentItem } = useActiveDocumentItem();
-    const { isBottomPanelOpen, toggleBottomPanel } = useBottomPanel();
+    const { isBottomPanelOpen, toggleBottomPanel, setBottomPanelOpen } = useBottomPanel();
     const { currentStage, setCurrentStage } = useTranslationState();
     const { sourceLanguage, targetLanguage } = useTranslationLanguage();
     const [stackLayout, setStackLayout] = useState<'vertical' | 'horizontal'>('vertical');
@@ -154,13 +156,46 @@ export default function ParallelEditor({ className }: { className?: string }) {
     const sourceTextRef = useRef(String(sourceText || ''));
     const targetTextRef = useRef(String(targetText || ''));
     const currentStageRef = useRef(currentStage);
+    const panelStageRef = useRef<{ itemId: string; stage: TranslationStage } | null>(null);
     activeItemIdRef.current = String(activeDocumentItem?.id || '');
     sourceTextRef.current = String(sourceText || '');
     targetTextRef.current = String(targetText || '');
     currentStageRef.current = currentStage;
 
+    // The lower workbench is for review and optional workflow/Prompt
+    // inspection, not a second way to start translation. Close it whenever a
+    // new automatic stage is opened; show it again only once human review is
+    // ready. A user can still open it deliberately with the panel button.
+    useEffect(() => {
+        const itemId = String(activeDocumentItem?.id || '');
+        if (!itemId) {
+            panelStageRef.current = null;
+            return;
+        }
+
+        const previous = panelStageRef.current;
+        const stageChanged = previous?.itemId !== itemId || previous.stage !== currentStage;
+        if (!stageChanged) return;
+
+        const isAutomatic = getStageWorkbenchKind(currentStage) === 'automatic';
+        const previousWasAutomatic =
+            !previous || getStageWorkbenchKind(previous.stage) === 'automatic';
+
+        if (isAutomatic) {
+            setBottomPanelOpen(false);
+        } else if (previousWasAutomatic) {
+            setBottomPanelOpen(true);
+        }
+
+        panelStageRef.current = { itemId, stage: currentStage };
+    }, [activeDocumentItem?.id, currentStage, setBottomPanelOpen]);
+
     const runTranslate = async (
-        options: { expectedTargetText?: string; preTranslateRunId?: string } = {}
+        options: {
+            expectedSourceText?: string;
+            expectedTargetText?: string;
+            preTranslateRunId?: string;
+        } = {}
     ) => {
         if (!activeDocumentItem?.id) return;
         const itemId = String(activeDocumentItem.id);
@@ -171,7 +206,7 @@ export default function ParallelEditor({ className }: { className?: string }) {
         // A generated baseline is only a provisional preview. Once formal MT
         // starts, any late baseline response must no longer be allowed to write.
         baselineRequestRef.current += 1;
-        const inputText = String(sourceText || '');
+        const inputText = String(options.expectedSourceText ?? sourceText ?? '');
         const isCurrentItem = () =>
             activeItemIdRef.current === itemId && sourceTextRef.current === inputText;
         try {
@@ -818,7 +853,7 @@ export default function ParallelEditor({ className }: { className?: string }) {
                                                             placeholder={t('editSourceHere')}
                                                             initialContent={sourceText}
                                                             readOnly={
-                                                                !(currentStage === 'NOT_STARTED')
+                                                                currentStage !== 'NOT_STARTED' || isRunning
                                                             }
                                                         />
                                                     )}

@@ -2,8 +2,10 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import test from 'node:test';
+
 import {
     resolveChatClientErrorMessage,
+    resolvePreTranslationStartFailure,
     resolveRichTextEditorSaveFailure,
 } from './ide-client-error';
 import { chatStatus } from './chat-status';
@@ -105,4 +107,23 @@ test('IDE chat, explorer, and editor route failures through stable UI messages',
     assert.doesNotMatch(explorer, /toast\.error\(error instanceof Error \? error\.message/);
     assert.match(editor, /resolveRichTextEditorSaveFailure/);
     assert.doesNotMatch(editor, /String\(e\)/);
+});
+
+test('only exposes authored pre-translation start failures', () => {
+    assert.equal(
+        resolvePreTranslationStartFailure(
+            new Error('原文有未保存修改，请先保存原文后再启动预翻译')
+        ),
+        '原文有未保存修改，请先保存原文后再启动预翻译'
+    );
+    assert.equal(
+        resolvePreTranslationStartFailure(
+            new Error('当前分段原文已更新，请刷新后再启动预翻译')
+        ),
+        '当前分段原文已更新，请刷新后再启动预翻译'
+    );
+    assert.equal(
+        resolvePreTranslationStartFailure(new Error('provider request failed: private detail')),
+        null
+    );
 });

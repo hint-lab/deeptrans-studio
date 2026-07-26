@@ -1965,6 +1965,7 @@
             "workbenchLabel": "翻译工作台：{stage}",
             "workflowProgress": "翻译流程进度",
             "loadingSegment": "正在加载当前分段…",
+            "topActionHint": "请在上方点击“{action}”。",
             "actions": {
                 "startPreTranslation": "启动预翻译",
                 "waitForPreTranslation": "等待预翻译完成",

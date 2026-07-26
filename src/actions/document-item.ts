@@ -252,7 +252,7 @@ export async function startPreTranslationWithDeps(
         throw actionableActionError('原文内容为空，无法进行预翻译');
     }
     if (currentSourceText !== String(expectedSourceText || '')) {
-        throw actionableActionError('当前分段原文已变化，请保存并刷新后再启动预翻译');
+        throw actionableActionError('当前分段原文已更新，请刷新后再启动预翻译');
     }
     const runId = String(deps.createRunId ? deps.createRunId() : randomUUID()).trim();
     if (!runId) {

@@ -25,6 +25,7 @@ import { useExplorerTabs } from '@/hooks/useExplorerTabs';
 import { useRunningState } from '@/hooks/useRunning';
 import { useTranslationContent, useTranslationState } from '@/hooks/useTranslation';
 import { createLogger } from '@/lib/logger';
+import { resolvePreTranslationStartFailure } from '@/lib/ide-client-error';
 import { resolvePostEditReviewDraft } from '@/lib/post-edit-review-draft-client';
 import { getTranslationStageGuidance } from '@/lib/translation-stage-guidance';
 import { getTranslationStageRejectionPlan } from '@/lib/translation-stage-rejection-plan';
@@ -49,6 +50,7 @@ const logger = createLogger(
 export type StageBadgeBarProps = {
     contentReady: boolean;
     runTranslate: (options?: {
+        expectedSourceText?: string;
         expectedTargetText?: string;
         preTranslateRunId?: string;
     }) => Promise<void>;
@@ -101,6 +103,7 @@ const StageBadgeBar: React.FC<StageBadgeBarProps> = ({
     const {
         contentItemId,
         sourceText,
+        persistedSourceText,
         targetText,
         persistedTargetText,
         setPersistedTargetTranslationText,
@@ -112,10 +115,12 @@ const StageBadgeBar: React.FC<StageBadgeBarProps> = ({
     activeDocumentItemRef.current = activeDocumentItem;
     const contentItemIdRef = useRef(contentItemId);
     const sourceTextRef = useRef(sourceText);
+    const persistedSourceTextRef = useRef(persistedSourceText);
     const targetTextRef = useRef(targetText);
     const persistedTargetTextRef = useRef(persistedTargetText);
     contentItemIdRef.current = contentItemId;
     sourceTextRef.current = sourceText;
+    persistedSourceTextRef.current = persistedSourceText;
     targetTextRef.current = targetText;
     persistedTargetTextRef.current = persistedTargetText;
 
@@ -306,9 +311,14 @@ const StageBadgeBar: React.FC<StageBadgeBarProps> = ({
                     // Claim the executable MT stage before calling the model.
                     // Do not use the generic status action here: it permits a
                     // repeated MT write, which lets stale tabs run in parallel.
+                    const currentSourceText = String(sourceTextRef.current || '');
+                    const savedSourceText = String(persistedSourceTextRef.current || '');
+                    if (currentSourceText !== savedSourceText) {
+                        throw new Error('原文有未保存修改，请先保存原文后再启动预翻译');
+                    }
                     const claimed = await startPreTranslationAction(
                         operationItemId,
-                        String(sourceText || '')
+                        savedSourceText
                     );
                     const preTranslateRunId = String(
                         (claimed as any)?.preTranslateRunId || ''
@@ -323,6 +333,7 @@ const StageBadgeBar: React.FC<StageBadgeBarProps> = ({
                         duration: 4000,
                     });
                     await runTranslate({
+                        expectedSourceText: String((claimed as any)?.sourceText || savedSourceText),
                         expectedTargetText: String((claimed as any)?.targetText || ''),
                         preTranslateRunId,
                     });
@@ -511,8 +522,12 @@ const StageBadgeBar: React.FC<StageBadgeBarProps> = ({
                 // the visual stage instead of leaving a false local success.
                 setOperationStage(stage);
             }
-            toast.error(t('toasts.operationFailed'), {
-                description: t('toasts.operationFailedDescription'),
+            const preTranslationFailure =
+                stage === 'NOT_STARTED' ? resolvePreTranslationStartFailure(error) : null;
+            toast.error(preTranslationFailure || t('toasts.operationFailed'), {
+                description: preTranslationFailure
+                    ? undefined
+                    : t('toasts.operationFailedDescription'),
             });
             setIsRunning(false);
         }

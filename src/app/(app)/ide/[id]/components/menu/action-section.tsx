@@ -59,6 +59,7 @@ import { BATCH_CLIENT_MESSAGES, resolveBatchClientErrorMessage } from '@/lib/bat
 import { partitionBatchQAWorkflowItems } from '@/lib/batch-qa-stage-eligibility';
 import { buildBatchSignoffInput } from '@/lib/batch-signoff-input';
 import { createLogger } from '@/lib/logger';
+import { resolvePreTranslationStartFailure } from '@/lib/ide-client-error';
 import { runCancelableSequence } from '@/lib/batch-signoff-sequence';
 import { normalizeKeyboardKey, shouldHandleIDEGlobalShortcut } from '@/lib/keyboard-key';
 import { calculateOneClickWorkflowProgress } from '@/lib/one-click-workflow-progress';
@@ -105,8 +106,13 @@ export function ActionSection() {
     const locale = useLocale();
     const { sourceLanguage, targetLanguage } = useTranslationLanguage();
 
-    const { contentItemId, sourceText, targetText, setTargetTranslationText } =
-        useTranslationContent();
+    const {
+        contentItemId,
+        sourceText,
+        persistedSourceText,
+        targetText,
+        setTargetTranslationText,
+    } = useTranslationContent();
     const targetEditor = useTargetEditor();
     const { explorerTabs, setExplorerTabs } = useExplorerTabs();
     const [batchProgress, setBatchProgress] = useState<number | undefined>(undefined);
@@ -423,7 +429,11 @@ export function ActionSection() {
             }
 
             // 检查文本内容
-            const currentText = sourceText;
+            const currentText = String(persistedSourceText || '');
+            if (String(sourceText || '') !== currentText) {
+                toast.error('原文有未保存修改，请先保存原文后再启动预翻译');
+                return;
+            }
             if (!currentText.trim()) {
                 toast.error('原文内容为空，无法进行预翻译');
                 return;
@@ -559,10 +569,13 @@ export function ActionSection() {
             }
         } catch (error) {
             logger.error('翻译失败:', error);
+            const startFailure = resultPersisted
+                ? null
+                : resolvePreTranslationStartFailure(error);
             toast.error(
                 resultPersisted
                     ? '预翻译结果已保存，但未能安全进入复核。请刷新后确认分段状态。'
-                    : '翻译失败：请检查网络连接或稍后再试'
+                    : startFailure || '翻译失败：请检查网络连接或稍后再试'
             );
             logError('翻译失败，请检查网络连接或稍后重试');
         } finally {
