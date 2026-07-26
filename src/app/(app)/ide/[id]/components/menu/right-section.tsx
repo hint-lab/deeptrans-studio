@@ -5,6 +5,7 @@ import { ThemeToggle } from './components/theme-toggle';
 import { NotificationButton } from './components/notification-button';
 import { UserNavDropDown } from './components/user-nav-dropdown';
 import LocaleSwitcher from '@/components/locale-switcher';
+import { WorkspaceGuideTrigger } from '../workspace-guide';
 
 export function RightSection() {
     const { theme, setTheme } = useTheme();
@@ -17,6 +18,7 @@ export function RightSection() {
     return (
         <div className="flex items-center text-foreground">
             {/* 阶段按钮已移至阶段徽章右侧，此处移除以避免重复 */}
+            <WorkspaceGuideTrigger />
             <LocaleSwitcher iconOnly={true} />
             <ThemeToggle theme={theme} setTheme={setTheme} mounted={mounted} />
             <NotificationButton />

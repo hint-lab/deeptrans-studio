@@ -35,7 +35,6 @@ import { Check, ChevronRight, FileText, Loader2, Play, Undo2, Workflow } from 'l
 import { useTranslations } from 'next-intl';
 import React, { useEffect, useRef } from 'react';
 import { toast } from 'sonner';
-import TranslationGuideButton from './hello-page';
 
 const logger = createLogger(
     {
@@ -651,7 +650,10 @@ const StageBadgeBar: React.FC<StageBadgeBarProps> = ({
             data-current-stage={currentStage}
         >
             <div className="flex min-h-12 w-full items-center gap-2">
-                <div className="flex min-w-0 flex-1 items-center gap-2">
+                <div
+                    className="flex min-w-0 flex-1 items-center gap-2"
+                    data-workspace-guide-target="stage-overview"
+                >
                     <div className="flex size-7 shrink-0 items-center justify-center rounded-md border bg-muted/50 text-muted-foreground">
                         <FileText className="size-3.5" aria-hidden="true" />
                     </div>
@@ -695,8 +697,10 @@ const StageBadgeBar: React.FC<StageBadgeBarProps> = ({
                     {renderVisualStepper()}
                 </ol>
 
-                <div className="ml-auto flex shrink-0 items-center gap-2">
-                    <TranslationGuideButton />
+                <div
+                    className="ml-auto flex shrink-0 items-center gap-2"
+                    data-workspace-guide-target="stage-actions"
+                >
                     {getStageWorkbenchWorkflowKey(currentStage) && (
                         <Button
                             variant="ghost"

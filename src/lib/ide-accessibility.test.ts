@@ -60,7 +60,7 @@ test('help panel uses scoped requests and exposes actionable loading and retry s
 test('translation workspace names the current segment, stage, and next action', () => {
     const stageBadge = readIDEComponent('parallel-editor', 'stage-badge.tsx');
     const workbench = readIDEComponent('parallel-editor', 'panels', 'stage-workbench.tsx');
-    const hello = readIDEComponent('parallel-editor', 'hello-page.tsx');
+    const workspaceGuide = readIDEComponent('workspace-guide.tsx');
 
     assert.match(stageBadge, /getTranslationStageGuidance/);
     assert.match(stageBadge, /data-current-stage=\{currentStage\}/);
@@ -73,9 +73,11 @@ test('translation workspace names the current segment, stage, and next action', 
     assert.match(workbench, /aria-expanded=\{workflowOpen\}/);
     assert.match(workbench, /aria-controls=\{workflowPanelId\}/);
     assert.match(workbench, /tGuidance\('nextAction'/);
-    assert.match(hello, /const steps = \['select', 'confirm', 'advance'\] as const;/);
-    assert.match(hello, /<ol className="mt-6 divide-y border-y"/);
-    assert.doesNotMatch(hello, /\u{1F60B}/u);
+    assert.match(workspaceGuide, /#ide-explorer-panel/);
+    assert.match(workspaceGuide, /data-workspace-guide-target="stage-overview"/);
+    assert.match(workspaceGuide, /data-workspace-guide-target="stage-actions"/);
+    assert.match(workspaceGuide, /Lightbulb/);
+    assert.doesNotMatch(workspaceGuide, /aria-modal="true"/);
 });
 
 test('workflow diagrams are a truthful read-only status trace', () => {

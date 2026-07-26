@@ -16,6 +16,7 @@ import { Menu } from './components/menu';
 import ParallelEditor from './components/parallel-editor';
 import PreviewCard from './components/preview';
 import RightSidebar from './components/right-sidebar';
+import { WorkspaceGuideProvider } from './components/workspace-guide';
 
 function IDELayout({ children }: { children: React.ReactNode }) {
     const params = useParams();
@@ -33,7 +34,8 @@ function IDELayout({ children }: { children: React.ReactNode }) {
     }, [isSidebarOpen]);
 
     return (
-        <div className="fixed inset-0 bg-secondary">
+        <WorkspaceGuideProvider>
+            <div className="fixed inset-0 bg-secondary">
             <ProtectedSessionGuard />
             {/* Menu */}
             <div className="z-60 fixed left-0 right-0 top-0 h-10 pr-10">
@@ -109,7 +111,8 @@ function IDELayout({ children }: { children: React.ReactNode }) {
             <div className="fixed inset-y-0 right-0 z-40 hidden w-8 rounded-t-md bg-background xl:block">
                 <RightSidebar />
             </div>
-        </div>
+            </div>
+        </WorkspaceGuideProvider>
     );
 }
 export default IDELayout;

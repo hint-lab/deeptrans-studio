@@ -2017,6 +2017,29 @@
             "goToFile": "Go to File",
             "showSettings": "Show Settings"
         },
+        "workspaceGuide": {
+            "trigger": "Work guide",
+            "progress": "Step {current} of {total}",
+            "skip": "Skip",
+            "back": "Back",
+            "next": "Next",
+            "finish": "Done",
+            "selectFirst": "Open a segment from the document outline first.",
+            "steps": {
+                "select": {
+                    "title": "Select a segment from the outline",
+                    "description": "Use the outline on the left to open the segment you need to translate."
+                },
+                "stage": {
+                    "title": "Confirm the current stage",
+                    "description": "The top bar shows the selected segment and its current workflow state."
+                },
+                "advance": {
+                    "title": "Use the primary action to continue",
+                    "description": "When the segment is not started, select Start pre-translation; later stages continue from the same action area."
+                }
+            }
+        },
         "translationPanel": {
             "preWorkflow": "MT Workflow",
             "mtReview": "MT Review",

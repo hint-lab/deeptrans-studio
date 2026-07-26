@@ -2017,6 +2017,29 @@
             "goToFile": "前往文件",
             "showSettings": "展示设置"
         },
+        "workspaceGuide": {
+            "trigger": "操作引导",
+            "progress": "第 {current} / {total} 步",
+            "skip": "跳过",
+            "back": "上一步",
+            "next": "下一步",
+            "finish": "完成",
+            "selectFirst": "请先从左侧目录打开一个待译分段。",
+            "steps": {
+                "select": {
+                    "title": "从目录选择分段",
+                    "description": "左侧目录管理当前文档；先打开需要处理的待译分段。"
+                },
+                "stage": {
+                    "title": "确认当前阶段",
+                    "description": "顶部会显示当前分段和流程状态，先确认它正在等待哪一步。"
+                },
+                "advance": {
+                    "title": "用主操作推进",
+                    "description": "状态为“未开始”时，点击“启动预翻译”；其余阶段也从这里继续推进。"
+                }
+            }
+        },
         "translationPanel": {
             "preWorkflow": "预翻译工作流",
             "mtReview": "预翻译复核面板",
