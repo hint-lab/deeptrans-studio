@@ -615,8 +615,8 @@ const StageBadgeBar: React.FC<StageBadgeBarProps> = ({
                     : 'px-2 py-[2px] rounded-full whitespace-nowrap border text-[10px] transition-all duration-200 bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-foreground/70';
             const activeRing = isActive
                 ? isReview
-                    ? ' ring-2 ring-orange-400/35'
-                    : ' ring-2 ring-indigo-400/35'
+                    ? ' ring-2 ring-inset ring-orange-200 dark:ring-orange-100'
+                    : ' ring-2 ring-inset ring-indigo-200 dark:ring-indigo-100'
                 : '';
 
             return (
