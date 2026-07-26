@@ -14,6 +14,7 @@ import {
     requireWritableProject,
     type AuthContext,
 } from '@/lib/guards';
+import { resolveOwnedProjectMemoryBindings } from '@/lib/project-memory-bindings';
 
 async function partitionAllowed<T>(
     ids: string[],
@@ -69,11 +70,19 @@ export async function updateProjectDictionaryBindingsAction(
 
 export async function getProjectMemoryBindingsAction(projectId: string) {
     if (!projectId) return { success: false, error: '缺少 projectId' } as const;
-    await requireWritableProject(projectId);
+    const authCtx = await requireUser();
+    await requireWritableProject(projectId, authCtx);
     const rows = await listProjectMemoryBindingsDB(projectId);
-    const list = Array.isArray(rows) ? rows : [];
-    const ids = list.map((r: any) => r.memoryId);
-    return { success: true, data: ids } as const;
+    const resolved = resolveOwnedProjectMemoryBindings(rows, authCtx.userId);
+    if (!resolved) return { success: false, error: '无法加载项目记忆库绑定，请重试' } as const;
+
+    // Never send a foreign memory id to the browser. It cannot be selected or
+    // used by this account, but the count lets the owner repair a legacy link.
+    return {
+        success: true,
+        data: resolved.memoryIds,
+        inaccessibleBindingCount: resolved.inaccessibleBindingCount,
+    } as const;
 }
 
 export async function updateProjectMemoryBindingsAction(projectId: string, memoryIds: string[]) {
@@ -84,10 +93,11 @@ export async function updateProjectMemoryBindingsAction(projectId: string, memor
         ? Array.from(new Set(memoryIds.map(id => String(id || '').trim()).filter(Boolean)))
         : [];
     await Promise.all(ids.map(id => requireOwnedMemory(id, authCtx)));
-    const existing = await listProjectMemoryBindingsDB(project.id);
-    const existingIds = (Array.isArray(existing) ? existing : []).map((r: any) => r.memoryId);
-    const { denied: preserveIds } = await partitionAllowed(existingIds, requireOwnedMemory, authCtx);
-    await updateProjectMemoryBindingsDB(project.id, ids, preserveIds);
+    // Translation memories are private to their owner. Saving the project's
+    // explicit selection therefore removes legacy foreign bindings instead of
+    // silently preserving an invisible, unusable link forever.
+    const updated = await updateProjectMemoryBindingsDB(project.id, ids);
+    if (!updated) return { success: false, error: '保存项目记忆库绑定失败，请重试' } as const;
     try {
         revalidatePath('/dashboard');
     } catch {}

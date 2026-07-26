@@ -28,6 +28,10 @@ import { Separator } from '@/components/ui/separator';
 import { LANGUAGES } from '@/constants/languages';
 import { createLogger } from '@/lib/logger';
 import {
+    requireSelectedDictionaryEntries,
+    SelectedDictionaryEntriesLoadError,
+} from '@/lib/selected-dictionary-entries';
+import {
     ArrowRightLeft,
     Copy,
     FileText,
@@ -119,10 +123,22 @@ export default function InstantTranslatePage() {
 
     // 添加防抖定时器引用
     const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
-    // 添加请求取消引用
-    const abortControllerRef = useRef<AbortController | null>(null);
-    // 添加请求序号，防止竞态
+    // A Server Action cannot be aborted from the browser, so each request is
+    // fenced by a monotonically increasing ID instead.
     const requestIdRef = useRef(0);
+    const activeTranslationRequestRef = useRef<number | null>(null);
+
+    const invalidateTranslation = useCallback(() => {
+        if (debounceTimerRef.current) {
+            clearTimeout(debounceTimerRef.current);
+            debounceTimerRef.current = null;
+        }
+        requestIdRef.current += 1;
+        activeTranslationRequestRef.current = null;
+        setIsTranslationQueued(false);
+        setIsTranslating(false);
+        setTranslatedText('');
+    }, []);
 
     // 计算动态延时（根据文本长度）
     const getDebounceDelay = (text: string) => {
@@ -135,14 +151,25 @@ export default function InstantTranslatePage() {
     const getSelectedDictionaryEntries = async (): Promise<DictEntry[]> => {
         if (selectedDictionaries.length === 0) return [];
 
-        try {
-            const allEntries: DictEntry[] = [];
+        const allEntries: DictEntry[] = [];
 
-            // 为每个选中的词典获取条目
-            for (const dictId of selectedDictionaries) {
-                // 如果已经加载过条目，直接使用
-                if (dictionaryEntriesById[dictId]) {
-                    const entries = dictionaryEntriesById[dictId];
+        // 为每个选中的词典获取条目。用户明确选择词库后，读取失败不能
+        // 降级为空术语表继续翻译，否则结果会伪装成“已使用词库”。
+        for (const dictId of selectedDictionaries) {
+            // 如果已经加载过条目，直接使用
+            if (dictionaryEntriesById[dictId]) {
+                const entries = dictionaryEntriesById[dictId];
+                allEntries.push(
+                    ...entries.map(entry => ({
+                        term: entry.sourceText,
+                        translation: entry.targetText,
+                        notes: entry.notes || undefined,
+                    }))
+                );
+            } else {
+                try {
+                    const res = await fetchDictionaryEntriesAction(dictId);
+                    const entries = requireSelectedDictionaryEntries<DictionaryEntryItem>(res);
                     allEntries.push(
                         ...entries.map(entry => ({
                             term: entry.sourceText,
@@ -150,27 +177,15 @@ export default function InstantTranslatePage() {
                             notes: entry.notes || undefined,
                         }))
                     );
-                } else {
-                    // 如果没有加载过，先加载
-                    const res = await fetchDictionaryEntriesAction(dictId);
-                    if (res.success && res.data) {
-                        const entries = res.data as unknown as DictionaryEntryItem[];
-                        allEntries.push(
-                            ...entries.map(entry => ({
-                                term: entry.sourceText,
-                                translation: entry.targetText,
-                                notes: entry.notes || undefined,
-                            }))
-                        );
-                    }
+                } catch (error) {
+                    logger.error('获取所选词典条目失败:', error);
+                    if (error instanceof SelectedDictionaryEntriesLoadError) throw error;
+                    throw new SelectedDictionaryEntriesLoadError();
                 }
             }
-
-            return allEntries;
-        } catch (error) {
-            logger.error('获取词典条目失败:', error);
-            return [];
         }
+
+        return allEntries;
     };
 
     const getLanguageLabel = (key: string) => {
@@ -203,8 +218,13 @@ export default function InstantTranslatePage() {
                     return;
                 }
 
+                // Ignore duplicate clicks/timers for the same still-current
+                // payload. A changed payload first invalidates this request.
+                if (activeTranslationRequestRef.current !== null) return;
+
                 // 记录当前请求序号
                 const localRequestId = ++requestIdRef.current;
+                activeTranslationRequestRef.current = localRequestId;
 
                 setIsTranslationQueued(false);
                 setIsTranslating(true);
@@ -217,18 +237,28 @@ export default function InstantTranslatePage() {
                         source,
                         target,
                         dictEntries, // 传递术语库条目
-                        { prompt: `使用${style}风格翻译` }
+                        { style }
                     );
+                    if (!String(result || '').trim()) {
+                        throw new Error(t('translationFailed'));
+                    }
 
                     // 仅处理最新的请求结果，避免旧请求覆盖
                     if (localRequestId === requestIdRef.current) {
                         setTranslatedText(result);
                     }
                 } catch (error: unknown) {
+                    if (localRequestId !== requestIdRef.current) return;
                     logger.error('翻译错误:', error);
-                    toast.error(t('translationFailed'), { description: t('retryLater') });
+                    toast.error(
+                        error instanceof SelectedDictionaryEntriesLoadError
+                            ? t('loadEntriesFailed')
+                            : t('translationFailed'),
+                        { description: t('retryLater') }
+                    );
                 } finally {
                     if (localRequestId === requestIdRef.current) {
+                        activeTranslationRequestRef.current = null;
                         setIsTranslating(false);
                     }
                 }
@@ -244,10 +274,12 @@ export default function InstantTranslatePage() {
 
     // 自动翻译
     useEffect(() => {
+        // Configuration changes must invalidate an in-flight response before
+        // the next debounce starts; otherwise an old translation can briefly
+        // appear under the new text or language pair.
+        invalidateTranslation();
         if (autoTranslate && sourceText && targetLanguage !== 'auto') {
             debouncedTranslate(sourceText, sourceLanguage, targetLanguage, translationStyle);
-        } else if (!sourceText) {
-            setTranslatedText('');
         }
     }, [
         sourceText,
@@ -256,6 +288,7 @@ export default function InstantTranslatePage() {
         autoTranslate,
         translationStyle,
         debouncedTranslate,
+        invalidateTranslation,
     ]);
 
     // 组件卸载时清理
@@ -264,9 +297,8 @@ export default function InstantTranslatePage() {
             if (debounceTimerRef.current) {
                 clearTimeout(debounceTimerRef.current);
             }
-            if (abortControllerRef.current) {
-                abortControllerRef.current.abort();
-            }
+            requestIdRef.current += 1;
+            activeTranslationRequestRef.current = null;
         };
     }, []);
 
@@ -330,6 +362,7 @@ export default function InstantTranslatePage() {
 
     // 使用/取消使用某词典
     const onToggleUseDictionary = (dictionaryId: string) => {
+        invalidateTranslation();
         setSelectedDictionaries(prev =>
             prev.includes(dictionaryId)
                 ? prev.filter(id => id !== dictionaryId)
@@ -339,19 +372,28 @@ export default function InstantTranslatePage() {
 
     // 手动翻译
     const handleManualTranslate = async () => {
-        if (!sourceText.trim()) {
+        if (activeTranslationRequestRef.current !== null) return;
+
+        const text = sourceText;
+        const source = sourceLanguage;
+        const target = targetLanguage;
+        const style = translationStyle;
+
+        if (!text.trim()) {
             toast.error(t('pleaseEnterText'));
             return;
         }
 
         // 验证目标语言
-        if (targetLanguage === 'auto') {
+        if (target === 'auto') {
             toast.error('请选择目标语言', { description: '目标语言不能设置为自动检测' });
             return;
         }
 
+        invalidateTranslation();
         // 记录当前请求序号
         const localRequestId = ++requestIdRef.current;
+        activeTranslationRequestRef.current = localRequestId;
 
         setIsTranslationQueued(false);
         setIsTranslating(true);
@@ -360,29 +402,69 @@ export default function InstantTranslatePage() {
             const dictEntries = await getSelectedDictionaryEntries();
 
             const result: string = await textTranslate(
-                sourceText,
-                sourceLanguage,
-                targetLanguage,
+                text,
+                source,
+                target,
                 dictEntries, // 传递术语库条目
-                { prompt: `使用${translationStyle}风格翻译` }
+                { style }
             );
+            if (!String(result || '').trim()) {
+                throw new Error(t('translationFailed'));
+            }
 
             if (localRequestId === requestIdRef.current) {
                 setTranslatedText(result);
             }
         } catch (error: unknown) {
+            if (localRequestId !== requestIdRef.current) return;
             logger.error('翻译错误:', error);
-            toast.error('翻译失败', { description: '请稍后重试' });
+            toast.error(
+                error instanceof SelectedDictionaryEntriesLoadError
+                    ? t('loadEntriesFailed')
+                    : t('translationFailed'),
+                { description: t('retryLater') }
+            );
         } finally {
             if (localRequestId === requestIdRef.current) {
+                activeTranslationRequestRef.current = null;
                 setIsTranslating(false);
             }
         }
     };
 
+    const handleSourceTextChange = (value: string) => {
+        invalidateTranslation();
+        setSourceText(value);
+    };
+
+    const handleSourceLanguageChange = (value: string) => {
+        if (value === sourceLanguage) return;
+        invalidateTranslation();
+        setSourceLanguage(value);
+    };
+
+    const handleTargetLanguageChange = (value: string) => {
+        if (value === targetLanguage) return;
+        invalidateTranslation();
+        setTargetLanguage(value);
+    };
+
+    const handleTranslationStyleChange = (value: string) => {
+        if (value === translationStyle) return;
+        invalidateTranslation();
+        setTranslationStyle(value);
+    };
+
+    const handleAutoTranslateChange = (value: boolean) => {
+        if (value === autoTranslate) return;
+        invalidateTranslation();
+        setAutoTranslate(value);
+    };
+
     // 交换语言
     const swapLanguages = () => {
         if (sourceLanguage !== 'auto') {
+            invalidateTranslation();
             // 确保交换后的目标语言不是auto
             const newTargetLanguage = sourceLanguage;
             const newSourceLanguage = targetLanguage;
@@ -471,7 +553,7 @@ export default function InstantTranslatePage() {
                         <Label className="text-xs text-gray-500">{t('sourceLanguage')}</Label>
                         <Select
                             value={sourceLanguage}
-                            onValueChange={value => setSourceLanguage(value)}
+                            onValueChange={handleSourceLanguageChange}
                         >
                             <SelectTrigger className="h-11 w-full border-gray-300 bg-white text-base text-gray-900 dark:border-gray-600 dark:bg-gray-800 dark:text-white">
                                 <SelectValue placeholder={t('selectSourceLanguage')} />
@@ -504,7 +586,7 @@ export default function InstantTranslatePage() {
                         <Label className="text-xs text-gray-500">{t('targetLanguage')}</Label>
                         <Select
                             value={targetLanguage}
-                            onValueChange={value => setTargetLanguage(value)}
+                            onValueChange={handleTargetLanguageChange}
                         >
                             <SelectTrigger className="h-11 w-full border-gray-300 bg-white text-base text-gray-900 dark:border-gray-600 dark:bg-gray-800 dark:text-white">
                                 <SelectValue placeholder={t('selectTargetLanguage')} />
@@ -532,7 +614,7 @@ export default function InstantTranslatePage() {
                         <Label className="text-xs text-gray-500">{t('translationStyle')}</Label>
                         <Select
                             value={translationStyle}
-                            onValueChange={value => setTranslationStyle(value)}
+                            onValueChange={handleTranslationStyleChange}
                         >
                             <SelectTrigger className="h-11 w-36 border-gray-300 bg-white text-base text-gray-900 dark:border-gray-600 dark:bg-gray-800 dark:text-white">
                                 <SelectValue placeholder={t('translationStyle')} />
@@ -888,7 +970,7 @@ export default function InstantTranslatePage() {
                         <Switch
                             id="auto-translate"
                             checked={autoTranslate}
-                            onCheckedChange={setAutoTranslate}
+                            onCheckedChange={handleAutoTranslateChange}
                         />
                         <Label htmlFor="auto-translate">{t('autoTranslate')}</Label>
                     </div>
@@ -944,7 +1026,7 @@ export default function InstantTranslatePage() {
                     <div className="p-4">
                         <Textarea
                             value={sourceText}
-                            onChange={e => setSourceText(e.target.value)}
+                            onChange={e => handleSourceTextChange(e.target.value)}
                             placeholder={t('enterTextPlaceholder')}
                             className="h-[420px] resize-none border-0 text-lg shadow-none focus-visible:ring-0"
                         />

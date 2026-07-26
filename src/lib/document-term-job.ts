@@ -3,7 +3,7 @@ import type { DocumentTermExtractOptions } from '@/types/documentTermExtractOpti
 export const DOCUMENT_TERMS_START_ERROR = '术语提取任务启动失败，请重试';
 export const DOCUMENT_TERMS_RUN_ERROR = '术语提取失败，请重试';
 
-export type DocumentTermsStatus = 'idle' | 'running' | 'completed' | 'failed';
+export type DocumentTermsStatus = 'idle' | 'running' | 'completed' | 'failed' | 'canceled';
 
 /**
  * BullMQ reserves `:` in custom job IDs. Project-scoped batch IDs deliberately
@@ -42,8 +42,10 @@ export function normalizeDocumentTermJobOptions(value: unknown): DocumentTermExt
 export function resolveDocumentTermsStatus(
     totalValue: unknown,
     doneValue: unknown,
-    failedValue: unknown
+    failedValue: unknown,
+    canceledValue?: unknown
 ): DocumentTermsStatus {
+    if (Number(canceledValue) > 0) return 'canceled';
     if (Number(failedValue) > 0) return 'failed';
 
     const total = Number(totalValue) || 0;

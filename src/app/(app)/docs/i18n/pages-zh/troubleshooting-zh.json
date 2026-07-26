@@ -8,7 +8,7 @@
         },
         "introduction": {
             "title": "故障排查指南",
-            "description": "本文档帮助您诊断和解决 DeepTrans Studio 使用过程中可能遇到的常见问题。如果问题仍未解决，请查看日志或提交 Issue。"
+            "description": "首次本地安装应按受保护顺序执行：创建 .env.local、运行 npm run local:setup、再运行 npm run local:check、npm run dev，以及需要时的 npm run worker。local:setup 会自行启动受管依赖；local:up 仅用于恢复时重启已初始化的本地配置。不要改用裸 Compose、Prisma、PostgreSQL 或 Valkey 命令。成功启动本地环境不等于端到端流程已经验证；仍需实际测试所需流程。若问题仍未解决，请保留受保护命令的输出后提交 Issue。"
         },
         "categories": [
             {
@@ -31,11 +31,7 @@
                     },
                     {
                         "title": "Yarn 安装依赖失败",
-                        "Problems": [
-                            "yarn install 执行失败",
-                            "依赖包下载超时",
-                            "权限错误"
-                        ],
+                        "Problems": ["yarn install 执行失败", "依赖包下载超时", "权限错误"],
                         "solutions": [
                             "检查网络连接，可能需要配置代理",
                             "清除缓存：`yarn cache clean`",
@@ -44,18 +40,18 @@
                         ]
                     },
                     {
-                        "title": "Docker Compose 服务启动失败",
+                        "title": "受管本地初始化失败",
                         "Problems": [
-                            "docker compose up 报错",
-                            "容器无法启动",
-                            "端口被占用"
+                            "npm run local:setup 报错",
+                            "受保护的本地依赖服务无法启动",
+                            "受管本地端口被占用"
                         ],
                         "solutions": [
-                            "检查 Docker 和 Docker Compose 是否正确安装",
-                            "检查端口占用：`lsof -i :5432`（PostgreSQL）、`lsof -i :6379`（Valkey）",
-                            "查看容器日志：`docker compose logs [service-name]`",
-                            "尝试重启服务：`docker compose restart [service-name]`",
-                            "清理并重新创建：`docker compose down -v && docker compose up -d`"
+                            "确认 .env.local 从 .env.local.example 创建且 AUTH_SECRET 已替换；local:setup 会在启动容器前报告配置错误。",
+                            "确认 Docker Desktop 正在运行，但不要直接执行项目 Compose 命令。",
+                            "检查是否有无关进程占用受管回环端口 55432、56379、59002 或 59003。",
+                            "修正原因后再次运行 `npm run local:setup`；成功后运行 `npm run local:check`。",
+                            "不要执行删卷或裸 Compose 清理命令。生产故障请使用生产运行手册，而不是本地启动器。"
                         ]
                     },
                     {
@@ -66,11 +62,11 @@
                             "API 调用返回认证错误"
                         ],
                         "solutions": [
-                            "检查 .env.local 文件是否存在且格式正确",
-                            "确认 DATABASE_URL 格式：`postgresql://user:password@host:port/database`",
-                            "确认 REDIS_URL 格式：`redis://host:port`",
-                            "检查 AUTH_SECRET 是否已设置（运行 `openssl rand -base64 32` 生成）",
-                            "重启开发服务器使环境变量生效"
+                            "从 .env.local.example 创建 .env.local；不要复用 .env 或 .env.production。",
+                            "首次配置先运行 `npm run local:setup`，成功后再运行 `npm run local:check`，不要手动验证数据库或 Valkey URL。",
+                            "在 .env.local 中把 AUTH_SECRET 替换为随机的本地值。",
+                            "LOCAL_ALLOW_REMOTE_AI=no 时远程模型功能预期不可用；只有使用本地开发凭据时才有意启用。",
+                            "修改本地配置后，通过 `npm run dev` 或 `npm run worker` 重启。"
                         ]
                     }
                 ]
@@ -87,39 +83,36 @@
                             "数据库查询超时"
                         ],
                         "solutions": [
-                            "检查 PostgreSQL 服务是否运行：`docker compose ps db`",
-                            "验证 DATABASE_URL 环境变量是否正确",
-                            "测试数据库连接：`psql $DATABASE_URL`",
-                            "检查数据库是否已创建：`psql -l`",
-                            "查看数据库日志：`docker compose logs db`"
+                            "首次配置运行 `npm run local:setup`；它会启动受管依赖、应用本地 schema 并创建演示数据。",
+                            "setup 成功后运行 `npm run local:check`，确认数据库是受管的 deeptrans_local 实例。",
+                            "已初始化的配置若依赖停止，使用 `npm run local:up` 重启而非直接执行 Compose 命令，然后运行 `npm run local:check`。",
+                            "阅读受保护命令的输出，不要用 psql 或其他 shell 客户端直接连接。",
+                            "生产数据库排查必须使用已批准的生产流程，不能用本地命令替代。"
                         ]
                     },
                     {
-                        "title": "Prisma 迁移失败",
+                        "title": "本地迁移或初始化失败",
                         "Problems": [
-                            "yarn prisma migrate deploy 执行失败",
+                            "npm run local:setup 执行失败",
                             "数据库架构不匹配",
                             "迁移文件冲突"
                         ],
                         "solutions": [
-                            "检查数据库连接是否正常",
-                            "查看迁移历史：`yarn prisma migrate status`",
-                            "重置数据库（开发环境）：`yarn prisma migrate reset`",
-                            "手动应用迁移：`yarn prisma migrate deploy`",
-                            "重新生成 Prisma Client：`yarn prisma generate`"
+                            "重新运行 `npm run local:setup`；它负责完整的首次初始化路径并会自行启动依赖。",
+                            "setup 成功后运行 `npm run local:check` 验证隔离配置与迁移状态。",
+                            "不要对 shell 提供的 DATABASE_URL 运行原始 Prisma migrate、deploy 或 reset。",
+                            "保留受保护命令的错误输出用于诊断，不要手工修改迁移状态。",
+                            "只有本地初始化成功后才使用 `npm run dev` 启动应用。"
                         ]
                     },
                     {
-                        "title": "Prisma Studio 无法打开",
-                        "Problems": [
-                            "yarn prisma studio 命令无响应",
-                            "浏览器无法访问 Prisma Studio"
-                        ],
+                        "title": "本地数据查看不可用",
+                        "Problems": ["本地应用已启动，但预期数据缺失", "直接数据库查看工具不可用"],
                         "solutions": [
-                            "检查数据库连接",
-                            "确认端口 5555 未被占用",
-                            "尝试使用其他端口：`yarn prisma studio --port 5556`",
-                            "检查防火墙设置"
+                            "运行 `npm run local:check` 确认受管本地数据库和迁移状态。",
+                            "通过受支持的应用页面查看项目和记忆库数据。",
+                            "不要用任意环境 URL 启动 Prisma Studio 或其他直接客户端。",
+                            "生产环境如需检查，应通过已批准的生产访问流程升级处理。"
                         ]
                     }
                 ]
@@ -136,11 +129,11 @@
                             "Worker 无法消费任务"
                         ],
                         "solutions": [
-                            "检查 Valkey 服务是否运行：`docker compose ps valkey`",
-                            "验证 REDIS_URL 环境变量",
-                            "测试 Valkey 连接：`redis-cli -u $REDIS_URL ping`",
-                            "查看 Valkey 日志：`docker compose logs valkey`",
-                            "检查 Valkey 内存使用：`redis-cli info memory`"
+                            "运行 `npm run local:check` 验证受管的本地 Valkey 服务。",
+                            "本地依赖未运行时使用 `npm run local:up`。",
+                            "检查通过后，用 `npm run worker` 启动或重启受保护的 Worker。",
+                            "不要用 redis-cli 测试、清空或查看 shell 提供的 Redis URL。",
+                            "通过 Worker 输出和应用任务状态诊断队列。"
                         ]
                     },
                     {
@@ -151,11 +144,11 @@
                             "Worker 处理速度跟不上"
                         ],
                         "solutions": [
-                            "检查 Worker 服务是否正常运行",
-                            "增加 Worker 实例数量",
-                            "查看队列状态：`yarn queue:ui`（如果配置了 Bull Board）",
-                            "检查 Valkey 内存使用情况",
-                            "清理失败的任务：`redis-cli FLUSHDB`（谨慎使用）"
+                            "确认受保护的 Worker 正在通过 `npm run worker` 运行。",
+                            "先运行 `npm run local:check`，再判断是否为队列或 Valkey 故障。",
+                            "在应用内查看受影响任务的工作流和任务历史。",
+                            "不要使用 FLUSHDB 或其他广泛 Redis 命令清空 Valkey；它可能删除无关状态。",
+                            "持续失败时保留 Worker 输出，并连同任务标识升级排查。"
                         ]
                     },
                     {
@@ -166,11 +159,11 @@
                             "任务状态一直为 PENDING"
                         ],
                         "solutions": [
-                            "查看 Worker 日志：`docker compose logs app_worker`",
+                            "查看 `npm run worker` 的终端输出。",
                             "检查任务数据格式是否正确",
                             "验证 PostgreSQL/pgvector/PGroonga、Valkey、对象存储、MinerU PDF 解析以及 API 密钥是否正常",
                             "检查 API 密钥和配置是否正确",
-                            "查看 Valkey 中的失败任务：`redis-cli KEYS 'bull:*:failed'`"
+                            "使用应用内任务历史；不要在 shell 中直接查询 Valkey key。"
                         ]
                     }
                 ]
@@ -187,11 +180,11 @@
                             "PostgreSQL 向量扩展不可用"
                         ],
                         "solutions": [
-                            "检查 PostgreSQL 是否运行：`docker compose ps db`",
-                            "验证 DATABASE_URL 和 vector 扩展迁移",
-                            "查看数据库日志：`docker compose logs db`",
-                            "检查 `CREATE EXTENSION vector` 迁移是否已执行",
-                            "使用 Prisma Studio 或 SQL 检查 TranslationMemoryEntry embedding"
+                            "运行 `npm run local:setup`，应用本地 schema 并创建所需扩展。",
+                            "setup 成功后运行 `npm run local:check`，验证受管 PostgreSQL 实例和迁移状态。",
+                            "验证本地配置，不要手工改写 DATABASE_URL 或扩展状态。",
+                            "查看受保护应用或 Worker 对失败工作流的输出。",
+                            "不要在本地 shell 中用直接 SQL 查看或修改 embedding。"
                         ]
                     },
                     {
@@ -201,17 +194,15 @@
                             "导入后 TranslationMemoryEntry.embedding 为空"
                         ],
                         "solutions": [
-                            "对目标记忆库启动缺失向量补全任务，不要重复导入已落库的文本",
-                            "验证 EMBEDDING_MODEL、EMBEDDING_API_PATH 和 EMBEDDING_DIMENSIONS=2048",
-                            "用 SQL 检查 PostgreSQL vector 和 PGroonga 扩展"
+                            "对目标记忆库启动缺失向量补全任务，不要重复导入已落库的文本。",
+                            "LOCAL_ALLOW_REMOTE_AI=no 时，模型驱动的向量嵌入预期不可用。",
+                            "若有意启用嵌入，只在 .env.local 中设置服务商配置，并运行 `npm run local:check` 验证。",
+                            "不要用直接 SQL 改变扩展或向量状态。"
                         ]
                     },
                     {
                         "title": "向量维度不匹配",
-                        "Problems": [
-                            "向量写入失败，提示维度错误",
-                            "搜索时返回维度不匹配错误"
-                        ],
+                        "Problems": ["向量写入失败，提示维度错误", "搜索时返回维度不匹配错误"],
                         "solutions": [
                             "检查嵌入配置，翻译记忆固定使用 2048 维向量",
                             "确认数据库迁移已创建 halfvec(2048) 表达式 HNSW 索引",
@@ -233,7 +224,7 @@
                             "解析任务一直处于 PENDING 状态"
                         ],
                         "solutions": [
-                            "检查应用日志：`docker compose logs app`",
+                            "查看 `npm run dev` 的终端输出；队列解析还应查看 `npm run worker` 输出。",
                             "确认 MINERU_API_MODE 为 agent、standard 或 precise",
                             "agent 模式请确认 MINERU_AGENT_BASE_URL 可访问",
                             "standard/precise 模式请配置 MINERU_API_TOKEN 并确认 MINERU_API_BASE_URL 可访问",
@@ -243,10 +234,7 @@
                     },
                     {
                         "title": "PDF 解析超时",
-                        "Problems": [
-                            "大文件解析时间过长",
-                            "解析任务超时失败"
-                        ],
+                        "Problems": ["大文件解析时间过长", "解析任务超时失败"],
                         "solutions": [
                             "当前上传限制为 10MB；更大的 PDF 请先压缩或拆分后上传",
                             "解析任务较慢时增加 MINERU_TIMEOUT_MS 或 MINERU_POLL_INTERVAL_MS",
@@ -262,11 +250,7 @@
                 "issues": [
                     {
                         "title": "对象存储连接失败",
-                        "Problems": [
-                            "文件上传失败",
-                            "文档预览无法加载",
-                            "存储操作报错"
-                        ],
+                        "Problems": ["文件上传失败", "文档预览无法加载", "存储操作报错"],
                         "solutions": [
                             "确认 STORAGE_TYPE 为 minio 或 cos",
                             "使用 MinIO 时，检查 STORAGE_ENDPOINT、STORAGE_ACCESS_KEY、STORAGE_SECRET_KEY 和 STORAGE_BUCKET",
@@ -276,13 +260,9 @@
                     },
                     {
                         "title": "文件上传失败",
-                        "Problems": [
-                            "文档上传后无法保存",
-                            "上传进度卡住",
-                            "存储空间不足错误"
-                        ],
+                        "Problems": ["文档上传后无法保存", "上传进度卡住", "存储空间不足错误"],
                         "solutions": [
-                            "本地 MinIO 检查磁盘空间和 Docker 卷权限",
+                            "受管本地 MinIO 检查磁盘空间和本地启动器输出",
                             "腾讯云 COS 检查 bucket 配额、地域、密钥和 CORS/权限策略",
                             "检查文件大小限制",
                             "验证 STORAGE_TYPE 和对象存储配置"
@@ -297,25 +277,22 @@
                     {
                         "title": "Worker 无法启动",
                         "Problems": [
-                            "docker compose up worker 失败",
-                            "本地 yarn worker 报错",
+                            "npm run worker 报错",
+                            "受保护的本地 Worker 报错",
                             "Worker 进程立即退出"
                         ],
                         "solutions": [
-                            "检查环境变量配置",
-                            "验证 Valkey 连接",
-                            "查看 Worker 日志：`docker compose logs app_worker`",
+                            "运行 `npm run local:check` 验证本地配置和依赖。",
+                            "通过检查验证受管的 Valkey 服务。",
+                            "查看 `npm run worker` 的终端输出。",
                             "检查 Node.js 版本",
                             "验证依赖是否正确安装",
-                            "检查构建产物：`yarn build:worker`"
+                            "使用 `npm run build:worker` 检查构建产物"
                         ]
                     },
                     {
                         "title": "Worker 不处理任务",
-                        "Problems": [
-                            "任务一直处于 PENDING 状态",
-                            "队列中有任务但 Worker 不消费"
-                        ],
+                        "Problems": ["任务一直处于 PENDING 状态", "队列中有任务但 Worker 不消费"],
                         "solutions": [
                             "检查 Worker 是否正常运行",
                             "验证队列名称配置是否正确",
@@ -332,11 +309,7 @@
                 "issues": [
                     {
                         "title": "页面加载缓慢",
-                        "Problems": [
-                            "页面响应时间长",
-                            "首次加载很慢",
-                            "API 请求超时"
-                        ],
+                        "Problems": ["页面响应时间长", "首次加载很慢", "API 请求超时"],
                         "solutions": [
                             "检查数据库查询性能，使用 Prisma Studio 分析",
                             "优化数据库索引",
@@ -347,11 +320,7 @@
                     },
                     {
                         "title": "认证失败",
-                        "Problems": [
-                            "登录后立即退出",
-                            "Session 无法保持",
-                            "API 请求返回 401"
-                        ],
+                        "Problems": ["登录后立即退出", "Session 无法保持", "API 请求返回 401"],
                         "solutions": [
                             "检查 AUTH_SECRET 是否已设置",
                             "验证 NEXTAUTH_URL 配置是否正确",
@@ -362,11 +331,7 @@
                     },
                     {
                         "title": "API 路由错误",
-                        "Problems": [
-                            "API 请求返回 404",
-                            "Server Actions 执行失败",
-                            "路由无法访问"
-                        ],
+                        "Problems": ["API 请求返回 404", "Server Actions 执行失败", "路由无法访问"],
                         "solutions": [
                             "检查路由文件是否存在",
                             "验证 API 路径是否正确",
@@ -384,40 +349,40 @@
             "tips": [
                 {
                     "title": "查看日志",
-                    "description": "查看各服务的日志信息",
+                    "description": "使用受保护的本地进程输出；生产日志属于生产运行手册",
                     "commands": [
-                        "docker compose logs [service-name] -f",
-                        "docker compose logs --tail=100 [service-name]",
-                        "查看 Next.js 控制台输出",
+                        "npm run dev",
+                        "npm run worker",
+                        "查看受保护进程输出",
                         "查看浏览器开发者工具 Console"
                     ]
                 },
                 {
                     "title": "检查服务状态",
-                    "description": "验证各个服务是否正常运行",
+                    "description": "验证本地服务确为受管的隔离依赖",
                     "commands": [
-                        "docker compose ps",
-                        "docker compose top",
-                        "检查端口占用：lsof -i :PORT",
-                        "测试服务连接：curl http://localhost:PORT"
+                        "npm run local:check",
+                        "npm run local:up",
+                        "检查端口占用：lsof -i :55432、:56379、:59002 或 :59003",
+                        "不要在 shell 中探测任意数据库或缓存 URL"
                     ]
                 },
                 {
                     "title": "数据库调试",
-                    "description": "使用 Prisma Studio 查看和调试数据库",
+                    "description": "查看应用状态前先验证受管的本地数据库",
                     "commands": [
-                        "yarn prisma studio",
-                        "yarn prisma migrate status",
-                        "psql $DATABASE_URL（直接连接数据库）"
+                        "npm run local:check",
+                        "npm run local:setup",
+                        "通过受支持的应用页面查看本地数据"
                     ]
                 },
                 {
                     "title": "队列调试",
-                    "description": "监控和调试 BullMQ 队列",
+                    "description": "通过受保护 Worker 和应用工作流历史查看队列状态",
                     "commands": [
-                        "yarn queue:ui（如果配置了 Bull Board）",
-                        "redis-cli KEYS 'bull:*'",
-                        "redis-cli GET 'bull:queue:job:ID'"
+                        "npm run worker",
+                        "查看应用内任务和工作流历史",
+                        "不要对 shell 提供的 URL 运行 redis-cli FLUSHDB、KEYS 或 GET"
                     ]
                 }
             ]

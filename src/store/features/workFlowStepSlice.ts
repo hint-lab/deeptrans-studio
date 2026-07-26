@@ -1,4 +1,5 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
+import type { PostEditOutcome, PostEditOutcomeByItem } from '@/lib/post-edit-query-outcome';
 
 export type TranslatePhase =
     | 'mono-term-extract'
@@ -8,6 +9,14 @@ export type TranslatePhase =
     | 'all';
 export type QAPhase = 'bi-term-eval' | 'syntax-eval' | 'syntex-embed-trans' | 'all';
 export type PostEditPhase = 'discourse-query' | 'discourse-eval' | 'discourse-embed-trans' | 'all';
+
+export type PostEditOutputs = {
+    /** The only segment allowed to render these otherwise-global fields. */
+    itemId: string;
+    memos?: any[];
+    discourse?: any;
+    result?: any;
+};
 
 export interface WorkflowState {
     baselineTranslation?: string;
@@ -34,9 +43,15 @@ export interface WorkflowState {
     qualityAssureSyntaxEmbedded?: string;
     qaDislikedPairs?: Record<string, boolean>;
     // post edit data
+    posteditItemId?: string;
     posteditMemos?: any[];
     posteditDiscourse?: any;
     posteditResult?: any;
+    /**
+     * Outcome is intentionally keyed by document item. A retrieval failure for
+     * one segment must never make another segment look empty or unstarted.
+     */
+    posteditOutcomes: PostEditOutcomeByItem;
     // final persisted flags (optional)
     finalized?: boolean;
 }
@@ -61,9 +76,11 @@ const initialState: WorkflowState = {
     qualityAssureSyntaxTranslation: undefined,
     qualityAssureSyntaxEmbedded: undefined,
     qaDislikedPairs: undefined,
+    posteditItemId: undefined,
     posteditMemos: undefined,
     posteditDiscourse: undefined,
     posteditResult: undefined,
+    posteditOutcomes: {},
     finalized: false,
 };
 
@@ -152,9 +169,7 @@ export const workFlowStepSlice = createSlice({
 
         setQAOutputs(
             state,
-            action: PayloadAction<
-                { itemId?: string; biTerm?: any; syntax?: any; discourse?: any } | undefined
-            >
+            action: PayloadAction<{ itemId?: string; biTerm?: any; syntax?: any } | undefined>
         ) {
             const partial = action.payload;
             if (!partial) {
@@ -163,7 +178,6 @@ export const workFlowStepSlice = createSlice({
                 state.qualityAssureSyntax = undefined;
                 state.qualityAssureSyntaxEmbedded = undefined;
                 state.qaDislikedPairs = undefined;
-                state.posteditDiscourse = undefined;
                 return;
             }
             if (partial.itemId && partial.itemId !== state.qualityAssureItemId) {
@@ -175,7 +189,6 @@ export const workFlowStepSlice = createSlice({
             if (partial.itemId) state.qualityAssureItemId = partial.itemId;
             if ('biTerm' in partial) state.qualityAssureBiTerm = partial.biTerm;
             if ('syntax' in partial) state.qualityAssureSyntax = partial.syntax;
-            if ('discourse' in partial) state.posteditDiscourse = partial.discourse;
         },
         setQASyntaxTranslation(state, action: PayloadAction<string | undefined>) {
             state.qualityAssureSyntaxTranslation = action.payload;
@@ -191,18 +204,37 @@ export const workFlowStepSlice = createSlice({
 
         setPosteditOutputs(
             state,
-            action: PayloadAction<{ memos?: any[]; discourse?: any; result?: any } | undefined>
+            action: PayloadAction<PostEditOutputs | undefined>
         ) {
             const partial = action.payload;
             if (!partial) {
+                state.posteditItemId = undefined;
                 state.posteditMemos = undefined;
                 state.posteditDiscourse = undefined;
                 state.posteditResult = undefined;
                 return;
             }
+            if (partial.itemId !== state.posteditItemId) {
+                state.posteditMemos = undefined;
+                state.posteditDiscourse = undefined;
+                state.posteditResult = undefined;
+            }
+            state.posteditItemId = partial.itemId;
             if ('memos' in partial) state.posteditMemos = partial.memos;
             if ('discourse' in partial) state.posteditDiscourse = partial.discourse;
             if ('result' in partial) state.posteditResult = partial.result;
+        },
+
+        setPosteditOutcome(state, action: PayloadAction<PostEditOutcome>) {
+            const outcome = action.payload;
+            if (!outcome?.itemId) return;
+            state.posteditOutcomes[outcome.itemId] = outcome;
+        },
+
+        clearPosteditOutcome(state, action: PayloadAction<string>) {
+            const itemId = action.payload;
+            if (!itemId) return;
+            delete state.posteditOutcomes[itemId];
         },
 
         setPosteditFinalized(state, action: PayloadAction<boolean>) {
@@ -221,9 +253,11 @@ export const workFlowStepSlice = createSlice({
             state.qualityAssureSyntaxTranslation = action.payload.qualityAssureSyntaxTranslation;
             state.qualityAssureSyntaxEmbedded = action.payload.qualityAssureSyntaxEmbedded;
             state.qaDislikedPairs = action.payload.qaDislikedPairs;
+            state.posteditItemId = action.payload.posteditItemId;
             state.posteditMemos = action.payload.posteditMemos;
             state.posteditDiscourse = action.payload.posteditDiscourse;
             state.posteditResult = action.payload.posteditResult;
+            state.posteditOutcomes = action.payload.posteditOutcomes || {};
             state.finalized = action.payload.finalized;
         },
     },
@@ -245,6 +279,8 @@ export const {
     setQASyntaxEmbedded,
     setQADislikedPairs,
     setPosteditOutputs,
+    setPosteditOutcome,
+    clearPosteditOutcome,
     setPosteditFinalized,
     setBaselineTranslation,
     setAllOutputs,

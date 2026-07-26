@@ -128,18 +128,18 @@ export default async function GettingStartedPage() {
 
 ## 已支持的页面
 
-✅ 首页 (page.tsx)
-✅ 快速开始 (getting-started/page.tsx)
-✅ 核心概念 (concepts/page.tsx)
-✅ 工作流 (workflows/page.tsx)
-✅ 安装配置 (installation/page.tsx)
-✅ 界面指南 (ui/page.tsx)
-✅ API参考 (server-actions/page.tsx)
-✅ 状态管理 (state/page.tsx)
-✅ AI智能代理 (ai/page.tsx)
-✅ 数据库设计 (database/page.tsx)
-✅ 故障排查 (troubleshooting/page.tsx)
-✅ 常见问题 (faq/page.tsx)
+- [x] 首页 (page.tsx)
+- [x] 快速开始 (getting-started/page.tsx)
+- [x] 核心概念 (concepts/page.tsx)
+- [x] 工作流 (workflows/page.tsx)
+- [x] 安装配置 (installation/page.tsx)
+- [x] 界面指南 (ui/page.tsx)
+- [x] API参考 (server-actions/page.tsx)
+- [x] 状态管理 (state/page.tsx)
+- [x] AI智能代理 (ai/page.tsx)
+- [x] 数据库设计 (database/page.tsx)
+- [x] 故障排查 (troubleshooting/page.tsx)
+- [x] 常见问题 (faq/page.tsx)
 
 ## 添加新的翻译
 

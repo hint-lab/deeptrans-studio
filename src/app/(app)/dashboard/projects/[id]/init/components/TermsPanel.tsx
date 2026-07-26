@@ -8,6 +8,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { Loader2, Settings2 } from 'lucide-react';
+import type { DocumentTermsCancelState } from '@/lib/document-term-cancellation';
 import { useTranslations } from 'next-intl';
 import { useMemo, useState } from 'react';
 
@@ -32,7 +33,12 @@ export type TermsPanelProps = {
     setAutoApplyTerms?: (value: boolean) => void;
     termPct: number;
     starting: boolean;
+    canceled?: boolean;
+    canCancel?: boolean;
+    cancellationState?: DocumentTermsCancelState;
     onPreview: () => void;
+    onCancel?: () => void;
+    onRetry?: () => void;
     onViewDictionary?: () => void;
     onApply?: () => Promise<void>;
     applying?: boolean;
@@ -63,7 +69,12 @@ export default function TermsPanel(props: TermsPanelProps) {
         setAutoApplyTerms,
         termPct,
         starting,
+        canceled,
+        canCancel,
+        cancellationState,
         onPreview,
+        onCancel,
+        onRetry,
         onViewDictionary,
         onApply,
         applying,
@@ -309,6 +320,51 @@ export default function TermsPanel(props: TermsPanelProps) {
                                 {termPct}%
                             </div>
                         </div>
+
+                        {canceled && (
+                            <div
+                                role="status"
+                                className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900/70 dark:bg-amber-950/30 dark:text-amber-100"
+                            >
+                                <div>
+                                    <div className="font-medium">{t('termsStopped')}</div>
+                                    <div className="mt-0.5 text-[11px] text-amber-800/80 dark:text-amber-200/80">
+                                        {t('termsStoppedDescription')}
+                                    </div>
+                                </div>
+                                {onRetry && (
+                                    <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={onRetry}
+                                        disabled={starting || !!applying}
+                                    >
+                                        {t('retryTerms')}
+                                    </Button>
+                                )}
+                            </div>
+                        )}
+
+                        {canCancel && onCancel && !canceled && (
+                            <div className="flex justify-end">
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={onCancel}
+                                    disabled={
+                                        starting ||
+                                        !!applying ||
+                                        cancellationState === 'requested' ||
+                                        cancellationState === 'requesting'
+                                    }
+                                >
+                                    {cancellationState === 'requested' ||
+                                    cancellationState === 'requesting'
+                                        ? t('termsStopping')
+                                        : t('modalStop')}
+                                </Button>
+                            </div>
+                        )}
 
                         {!isFinalResult && termPreviewError && (
                             <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">

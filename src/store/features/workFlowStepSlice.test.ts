@@ -5,6 +5,9 @@ import reducer, {
     setQAOutputs,
     setQADislikedPairs,
     setQASyntaxEmbedded,
+    setPosteditOutputs,
+    setPosteditOutcome,
+    clearPosteditOutcome,
 } from './workFlowStepSlice';
 
 test('pre-translation outputs are scoped to one document item', () => {
@@ -67,4 +70,48 @@ test('clearing QA outputs clears the item owner and every item-bound field', () 
     assert.equal(state.qualityAssureBiTerm, undefined);
     assert.equal(state.qualityAssureSyntax, undefined);
     assert.equal(state.qualityAssureSyntaxEmbedded, undefined);
+});
+
+test('post-edit outcomes remain item-scoped and can be cleared without affecting another segment', () => {
+    let state = reducer(
+        undefined,
+        setPosteditOutcome({
+            itemId: 'article-1',
+            status: 'error',
+            phase: 'query',
+            message: '检索服务暂不可用，请稍后重试',
+        })
+    );
+    state = reducer(state, setPosteditOutcome({ itemId: 'article-2', status: 'success-empty' }));
+
+    assert.equal(state.posteditOutcomes['article-1']?.status, 'error');
+    assert.equal(state.posteditOutcomes['article-2']?.status, 'success-empty');
+
+    state = reducer(state, clearPosteditOutcome('article-1'));
+
+    assert.equal(state.posteditOutcomes['article-1'], undefined);
+    assert.equal(state.posteditOutcomes['article-2']?.status, 'success-empty');
+});
+
+test('post-edit output data is owned by one segment and is cleared on owner change', () => {
+    let state = reducer(
+        undefined,
+        setPosteditOutputs({
+            itemId: 'article-1',
+            memos: [{ id: 'reference-1' }],
+            discourse: { overallScore: 0.8 },
+            result: 'Article 1 rewrite',
+        })
+    );
+
+    state = reducer(state, setPosteditOutputs({ itemId: 'article-2', memos: [] }));
+
+    assert.equal(state.posteditItemId, 'article-2');
+    assert.deepEqual(state.posteditMemos, []);
+    assert.equal(state.posteditDiscourse, undefined);
+    assert.equal(state.posteditResult, undefined);
+
+    state = reducer(state, setPosteditOutputs(undefined));
+    assert.equal(state.posteditItemId, undefined);
+    assert.equal(state.posteditMemos, undefined);
 });

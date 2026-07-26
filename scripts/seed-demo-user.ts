@@ -34,14 +34,15 @@ async function main() {
     const tenantId = await ensureDemoTenant(existingUser.id);
     console.log('✅ 测试账户已存在');
     console.log('   邮箱: test@example.com');
-    console.log('   密码: 123456');
+    console.log('   固定验证码: 123456');
     console.log('   用户ID:', existingUser.id);
     console.log('   租户ID:', tenantId);
     return;
   }
 
   // 创建测试账户
-  // 密码: 123456
+  // The local demo authenticates with the fixed verification code 123456.
+  // Keep the legacy password field populated for compatibility with existing data.
   const hashedPassword = await bcrypt.hash('123456', 10);
 
   const user = await prisma.user.create({
@@ -56,7 +57,7 @@ async function main() {
 
   console.log('✅ 测试账户创建成功!');
   console.log('   邮箱: test@example.com');
-  console.log('   密码: 123456');
+  console.log('   固定验证码: 123456');
   console.log('   用户ID:', user.id);
   console.log('   租户ID:', await ensureDemoTenant(user.id));
 }

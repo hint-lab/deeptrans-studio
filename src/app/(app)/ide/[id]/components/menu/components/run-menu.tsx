@@ -10,18 +10,11 @@ import { useTranslations } from 'next-intl';
 interface RunMenuProps {
     isRunning: boolean;
     currentStage: TranslationStage | null;
-    setIsRunning: (isRunning: boolean) => void;
-    onTranslationAction: (isRunning: boolean) => void;
+    onTranslationAction: () => void;
     mounted: boolean;
 }
 
-export function RunMenu({
-    isRunning,
-    currentStage,
-    setIsRunning,
-    onTranslationAction,
-    mounted,
-}: RunMenuProps) {
+export function RunMenu({ isRunning, currentStage, onTranslationAction, mounted }: RunMenuProps) {
     const tStage = useTranslations('IDE.translationStages');
     const Icon = isRunning ? Icons.spinner : Play;
     const buttonText = isRunning
@@ -29,12 +22,11 @@ export function RunMenu({
             ? getTranslationStageLabel(currentStage, tStage)
             : ''
         : '';
+    const idleButtonLabel = tStage('oneClickCompletion');
+    const accessibleButtonLabel = buttonText || idleButtonLabel;
 
     const handleClick = () => {
-        if (!isRunning) {
-            setIsRunning(true);
-        }
-        onTranslationAction(isRunning);
+        onTranslationAction();
     };
 
     return (
@@ -45,7 +37,7 @@ export function RunMenu({
                         variant={isRunning ? 'secondary' : 'default'}
                         size="sm"
                         onClick={handleClick}
-                        aria-label={buttonText}
+                        aria-label={accessibleButtonLabel}
                         disabled={isRunning}
                         className={cn(
                             'relative w-8 transform gap-0 overflow-hidden px-2 transition-all duration-300 md:w-24 md:gap-2 md:px-3',
@@ -77,10 +69,11 @@ export function RunMenu({
                 </TooltipTrigger>
                 <TooltipContent side="bottom" align="start">
                     <p className="text-sm font-medium">
-                        {tStage('oneClickCompletion') || '一键完成'}
+                        {tStage('oneClickCompletion') || '自动运行至质检复核'}
                     </p>
                     <p className="mt-1 text-xs text-muted-foreground">
-                        {tStage('oneClickCompletionDesc') || '从当前分段开始，自动完成所有后续流程'}
+                        {tStage('oneClickCompletionDesc') ||
+                            '自动执行可安全完成的步骤，并在质检复核处停下'}
                     </p>
                 </TooltipContent>
             </Tooltip>

@@ -1,8 +1,18 @@
-import { createEmailVerificationCode } from '@/db/verificationCode';
-import { findUserByEmailDB } from '@/db/user';
-import { DEMO_CODE, DEMO_EMAIL, ensureDemoUser, isDemoAccount } from '@/lib/demo-user';
+import {
+    clearEmailVerificationCodeIfMatches,
+    createEmailVerificationCode,
+    normalizeEmailForVerification,
+    releaseEmailVerificationSend,
+    reserveEmailVerificationSend,
+} from '@/db/verificationCode';
+import { findUserByNormalizedEmailDB } from '@/db/user';
+import { ensureDemoUser, isDemoAccount } from '@/lib/demo-user';
 import { createLogger } from '@/lib/logger';
-import { sendVerificationEmail } from '@/lib/mail';
+import {
+    getSafeMailFailure,
+    isVerificationRecipientAccepted,
+    sendVerificationEmail,
+} from '@/lib/mail';
 import { NextRequest, NextResponse } from 'next/server';
 export const runtime = 'nodejs';
 const logger = createLogger(
@@ -19,11 +29,19 @@ const logger = createLogger(
 export async function POST(request: NextRequest) {
     try {
         const form = await request.formData();
-        const email = String(form.get('email') || '').trim();
+        const email = normalizeEmailForVerification(String(form.get('email') || ''));
         const purpose = String(form.get('purpose') || 'login');
-        if (!email) return NextResponse.json({ error: 'Email is required' }, { status: 400 });
+        if (!email) {
+            return NextResponse.json(
+                { code: 'EMAIL_REQUIRED', error: '请输入邮箱' },
+                { status: 400 }
+            );
+        }
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-            return NextResponse.json({ error: '邮箱格式不正确' }, { status: 400 });
+            return NextResponse.json(
+                { code: 'EMAIL_INVALID', error: '邮箱格式不正确' },
+                { status: 400 }
+            );
         }
 
         if (isDemoAccount(email)) {
@@ -31,29 +49,21 @@ export async function POST(request: NextRequest) {
             logger.info('Demo account verification bypassed');
             return NextResponse.json({
                 success: true,
-                code: DEMO_CODE,
-                accepted: [DEMO_EMAIL],
                 message: '测试账号使用固定验证码，无需发送邮件',
             });
         }
 
         if (process.env.IS_DEMO === 'yes') {
-            if (email !== DEMO_EMAIL) {
-                return NextResponse.json(
-                    { error: `演示环境仅允许使用 ${DEMO_EMAIL} / ${DEMO_CODE} 登录` },
-                    { status: 403 }
-                );
-            }
-            await ensureDemoUser();
-            return NextResponse.json({
-                success: true,
-                code: DEMO_CODE,
-                accepted: [DEMO_EMAIL],
-                message: '演示账号使用固定验证码',
-            });
+            return NextResponse.json(
+                {
+                    code: 'DEMO_ACCOUNT_ONLY',
+                    error: '演示环境仅允许使用测试账号登录',
+                },
+                { status: 403 }
+            );
         }
 
-        const existingUser = await findUserByEmailDB(email);
+        const existingUser = await findUserByNormalizedEmailDB(email);
         if (purpose === 'login' && !existingUser) {
             return NextResponse.json(
                 {
@@ -75,38 +85,99 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const isDev = process.env.NODE_ENV === 'development';
-        const code = isDev ? '123456' : String(Math.floor(100000 + Math.random() * 900000));
+        const reservation = await reserveEmailVerificationSend(email);
+        if (!reservation.allowed) {
+            if ('unavailable' in reservation) {
+                logger.error('Verification-email cooldown storage unavailable');
+                return NextResponse.json(
+                    {
+                        code: 'EMAIL_CODE_STORAGE_UNAVAILABLE',
+                        error: '验证码服务暂不可用，请稍后重试',
+                    },
+                    { status: 503 }
+                );
+            }
 
-        // 存储验证码
-        const r = await createEmailVerificationCode(email, code);
-        if (!r.success) {
             return NextResponse.json(
-                { error: r.error || 'Failed to create verification code' },
-                { status: 500 }
+                {
+                    code: 'EMAIL_COOLDOWN',
+                    error: `验证码已发送，请 ${reservation.retryAfterSeconds} 秒后再试`,
+                    retryAfterSeconds: reservation.retryAfterSeconds,
+                },
+                {
+                    status: 429,
+                    headers: { 'Retry-After': String(reservation.retryAfterSeconds) },
+                }
             );
         }
 
-        // 返回发送结果
-        const info = await sendVerificationEmail(email, code);
-        if (!info || !info.accepted || info.accepted.length === 0) {
-            return NextResponse.json({ error: 'Failed to send email' }, { status: 500 });
-        }
-        // 返回发送结果
-        logger.info('Verification email sent', {
-            acceptedCount: (info as any)?.accepted?.length || 0,
-        });
+        let delivered = false;
+        let issuedCode: string | undefined;
+        let clearIssuedCode = false;
+        try {
+            const isDev = process.env.NODE_ENV === 'development';
+            const code = isDev ? '123456' : String(Math.floor(100000 + Math.random() * 900000));
 
-        return NextResponse.json({
-            success: true,
-            messageId: (info as any)?.messageId,
-            accepted: (info as any)?.accepted,
-            rejected: (info as any)?.rejected,
-            response: (info as any)?.response,
-        });
+            // Store the code before sending. If delivery fails, the reservation is
+            // released below so the user can retry without waiting for the browser timer.
+            const r = await createEmailVerificationCode(email, code);
+            if (!r.success) {
+                logger.error('Verification-code storage unavailable');
+                return NextResponse.json(
+                    {
+                        code: 'EMAIL_CODE_STORAGE_UNAVAILABLE',
+                        error: '验证码服务暂不可用，请稍后重试',
+                    },
+                    { status: 503 }
+                );
+            }
+            issuedCode = code;
+
+            const info = await sendVerificationEmail(email, code);
+            if (!isVerificationRecipientAccepted(info, email)) {
+                clearIssuedCode = true;
+                logger.error('SMTP did not accept the requested verification recipient');
+                return NextResponse.json(
+                    { code: 'EMAIL_DELIVERY_UNAVAILABLE', error: '邮件服务暂不可用，请稍后重试。' },
+                    { status: 503 }
+                );
+            }
+
+            logger.info('Verification email sent', {
+                acceptedCount: (info as any)?.accepted?.length || 0,
+            });
+
+            delivered = true;
+            return NextResponse.json({ success: true });
+        } catch (error: unknown) {
+            const failure = getSafeMailFailure(error);
+            // Configuration and authentication failures happen before the SMTP
+            // hand-off, so the just-created code cannot have been delivered.
+            // Other transport failures may be ambiguous; retain that short-lived
+            // code while releasing the resend reservation for a recovery attempt.
+            clearIssuedCode = failure.code !== 'EMAIL_DELIVERY_UNAVAILABLE';
+            logger.error('Verification email delivery unavailable', {
+                errorName: error instanceof Error ? error.name : 'UnknownError',
+                failureCode: failure.code,
+            });
+            return NextResponse.json(failure, { status: 503 });
+        } finally {
+            // A successful request keeps its server-side resend window. Any failure
+            // releases it so a corrected SMTP configuration can be retried immediately.
+            if (!delivered) {
+                if (clearIssuedCode && issuedCode) {
+                    await clearEmailVerificationCodeIfMatches(email, issuedCode);
+                }
+                await releaseEmailVerificationSend(email);
+            }
+        }
     } catch (e: any) {
-        // 返回更详细的错误，便于你在前端或终端看到具体原因
-        logger.error('Error in send-email route:', e?.stack || e);
-        return NextResponse.json({ error: e?.message || String(e) }, { status: 500 });
+        logger.error('Invalid verification-email request', {
+            errorName: e instanceof Error ? e.name : 'UnknownError',
+        });
+        return NextResponse.json(
+            { code: 'EMAIL_REQUEST_FAILED', error: '请求处理失败，请稍后重试' },
+            { status: 500 }
+        );
     }
 }

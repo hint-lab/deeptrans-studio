@@ -22,19 +22,32 @@ export function useWorkflowData() {
             },
             {
                 id: 't1',
-                data: { label: t('termExtraction'), phase: 'mono-term-extract' } as any,
+                data: {
+                    label: t('termExtraction'),
+                    phase: 'mono-term-extract',
+                    promptKey: 'mono-term-extract',
+                } as any,
                 position: { x: 200, y: 55 },
                 type: 'agentNode',
             },
             {
                 id: 't2',
-                data: { label: t('dictionaryQuery'), phase: 'dict-lookup' } as any,
+                data: {
+                    label: t('dictionaryQuery'),
+                    description: t('dictionaryQueryReference'),
+                    phase: 'dict-lookup',
+                    nodeKind: 'reference',
+                } as any,
                 position: { x: 420, y: 55 },
                 type: 'agentNode',
             },
             {
                 id: 't3',
-                data: { label: t('termEmbeddedTranslation'), phase: 'term-embed-trans' } as any,
+                data: {
+                    label: t('termEmbeddedTranslation'),
+                    phase: 'term-embed-trans',
+                    promptKey: 'term-embed-trans',
+                } as any,
                 position: { x: 640, y: 55 },
                 type: 'agentNode',
             },
@@ -93,13 +106,21 @@ export function useWorkflowData() {
             },
             {
                 id: 'e1',
-                data: { label: t('syntaxEvaluation'), qaPhase: 'bi-term-eval' } as any,
+                data: {
+                    label: t('syntaxEvaluation'),
+                    qaPhase: 'bi-term-eval',
+                    promptKey: 'syntax-evaluate',
+                } as any,
                 position: { x: 200, y: 60 },
                 type: 'agentNode',
             },
             {
                 id: 'e2',
-                data: { label: t('syntaxSuggestion'), qaPhase: 'syntax-eval' } as any,
+                data: {
+                    label: t('syntaxSuggestion'),
+                    qaPhase: 'syntax-eval',
+                    promptKey: 'syntax-evaluate',
+                } as any,
                 position: { x: 420, y: 60 },
                 type: 'agentNode',
             },
@@ -108,6 +129,7 @@ export function useWorkflowData() {
                 data: {
                     label: t('syntaxEmbeddedTranslation'),
                     qaPhase: 'syntex-embed-trans',
+                    promptKey: 'syntax-advice-embed',
                 } as any,
                 position: { x: 640, y: 60 },
                 type: 'agentNode',
@@ -163,13 +185,22 @@ export function useWorkflowData() {
             },
             {
                 id: 'p1',
-                data: { label: t('discourseQuery'), stage: 'discourse-query' } as any,
+                data: {
+                    label: t('discourseQuery'),
+                    description: t('discourseQueryReference'),
+                    stage: 'discourse-query',
+                    nodeKind: 'reference',
+                } as any,
                 position: { x: 200, y: 60 },
                 type: 'agentNode',
             },
             {
                 id: 'p2',
-                data: { label: t('discourseEvaluation'), stage: 'discourse-eval' } as any,
+                data: {
+                    label: t('discourseEvaluation'),
+                    stage: 'discourse-eval',
+                    promptKey: 'discourse-evaluate',
+                } as any,
                 position: { x: 420, y: 60 },
                 type: 'agentNode',
             },
@@ -178,6 +209,7 @@ export function useWorkflowData() {
                 data: {
                     label: t('discourseEmbeddedTranslation'),
                     stage: 'discourse-embed-trans',
+                    promptKey: 'discourse-embed',
                 } as any,
                 position: { x: 640, y: 60 },
                 type: 'agentNode',

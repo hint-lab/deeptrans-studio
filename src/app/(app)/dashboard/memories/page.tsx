@@ -1,78 +1,103 @@
 'use client';
 
+import { createMemoryAction, deleteMemoryAction, listMemoriesAction } from '@/actions/memories';
 import { Button } from '@/components/ui/button';
-import { ImportMemoryDialog } from './components/import-memory-dialog';
-import { listMemoriesAction, createMemoryAction, deleteMemoryAction } from '@/actions/memories';
-import { useEffect } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import { toast } from 'sonner';
+import { Card, CardContent } from '@/components/ui/card';
 import {
-    Trash2,
-    Database,
-    Plus,
-    Search,
-    Download,
-    FileText,
-    Calendar,
-    Languages,
-    BarChart3,
-    Settings,
-    Eye,
-    MoreHorizontal,
-    LayoutGrid,
-    List,
-} from 'lucide-react';
-import { useState } from 'react';
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { MemorySettingsDialog } from './components/memory-settings-dialog';
+import { Input } from '@/components/ui/input';
+import { useLocale, useTranslations } from 'next-intl';
+import {
+    AlertTriangle,
+    BarChart3,
+    ChevronDown,
+    Database,
+    Download,
+    Eye,
+    FileText,
+    Languages,
+    LayoutGrid,
+    List,
+    Loader2,
+    MoreHorizontal,
+    Plus,
+    Search,
+    Settings,
+    Trash2,
+} from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
+import { ImportMemoryDialog } from './components/import-memory-dialog';
 import { MemoryImportHelpDialog } from './components/memory-import-guide';
-import { useTranslations, useLocale } from 'next-intl';
+import { MemoryResourceCard, type MemorySummary } from './components/memory-resource-card';
+import { MemorySettingsDialog } from './components/memory-settings-dialog';
+
+function filenameFromContentDisposition(header: string | null) {
+    if (!header) return null;
+    const utf8 = /filename\*=UTF-8''([^;]+)/i.exec(header)?.[1];
+    const quoted = /filename="([^"]+)"/i.exec(header)?.[1];
+    let candidate = quoted;
+    if (utf8) {
+        try {
+            candidate = decodeURIComponent(utf8);
+        } catch {
+            // Fall back to the ASCII filename when a malformed proxy header is returned.
+        }
+    }
+    return candidate?.replace(/[\\/:*?"<>|\u0000-\u001F]/g, '_') || null;
+}
 
 export default function MemoriesPage() {
     const t = useTranslations('Dashboard.Memories');
     const locale = useLocale();
     const [loading, setLoading] = useState(true);
-    const [memories, setMemories] = useState<
-        Array<{
-            id: string;
-            name: string;
-            description?: string;
-            _count?: { entries: number };
-            createdAt?: string;
-            updatedAt?: string;
-            sourceLanguage?: string;
-            targetLanguage?: string;
-        }>
-    >([]);
+    const [memoryLoadFailed, setMemoryLoadFailed] = useState(false);
+    const [memories, setMemories] = useState<MemorySummary[]>([]);
     const [creating, setCreating] = useState(false);
     const [newName, setNewName] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
     const [settingsOpen, setSettingsOpen] = useState(false);
-    const [settingsMemoryId, setSettingsMemoryId] = useState<string>('');
+    const [settingsMemoryId, setSettingsMemoryId] = useState('');
+    const [exportingTarget, setExportingTarget] = useState<string | null>(null);
+    const [deleteCandidate, setDeleteCandidate] = useState<MemorySummary | null>(null);
+    const [deletingMemoryId, setDeletingMemoryId] = useState<string | null>(null);
+
+    const showRetryableError = (title: string) => {
+        toast.error(title, { description: t('retryLater') });
+    };
 
     const loadMemories = async () => {
         setLoading(true);
+        setMemoryLoadFailed(false);
         try {
-            const res = (await listMemoriesAction()) as {
+            const result = (await listMemoriesAction()) as {
                 success: boolean;
-                data?: Array<{
-                    id: string;
-                    name: string;
-                    description?: string;
-                    _count?: { entries: number };
-                }>;
-                error?: string;
+                data?: MemorySummary[];
             };
-            if (res.success) setMemories(res.data ?? []);
-            else toast.error(res.error ?? '加载失败');
+            if (!result.success) {
+                setMemories([]);
+                setMemoryLoadFailed(true);
+                showRetryableError(t('loadFailed'));
+                return;
+            }
+            setMemories(result.data ?? []);
+        } catch {
+            setMemories([]);
+            setMemoryLoadFailed(true);
+            showRetryableError(t('loadFailed'));
         } finally {
             setLoading(false);
         }
@@ -83,308 +108,423 @@ export default function MemoriesPage() {
     }, []);
 
     const handleCreate = async () => {
-        if (!newName.trim()) {
-            toast.info('请输入名称');
+        const name = newName.trim();
+        if (!name) {
+            toast.info(t('pleaseEnterName'));
             return;
         }
+
         setCreating(true);
         try {
-            const res = await createMemoryAction({ name: newName.trim() });
-            if (!res.success) {
-                const message = typeof res.error === 'string' ? res.error : '创建失败';
-                throw new Error(message);
+            const result = await createMemoryAction({ name });
+            if (!result.success) {
+                showRetryableError(t('createFailed'));
+                return;
             }
             setNewName('');
-            toast.success('创建成功');
-            void loadMemories();
-        } catch (e: unknown) {
-            const message = e instanceof Error ? e.message : String(e);
-            toast.error('创建失败' + message);
+            toast.success(t('createSuccess'));
+            await loadMemories();
+        } catch {
+            showRetryableError(t('createFailed'));
         } finally {
             setCreating(false);
         }
     };
 
-    const handleDelete = async (id: string) => {
+    const requestDelete = (memory: MemorySummary) => {
+        if (!deletingMemoryId) setDeleteCandidate(memory);
+    };
+
+    const confirmDelete = async () => {
+        const memory = deleteCandidate;
+        if (!memory || deletingMemoryId) return;
+
+        setDeletingMemoryId(memory.id);
         try {
-            const res = await deleteMemoryAction(id);
-            if (!res.success) {
-                const message =
-                    typeof (res as { error?: string }).error === 'string'
-                        ? (res as { error?: string }).error
-                        : '删除失败';
-                throw new Error(message);
+            const result = await deleteMemoryAction(memory.id);
+            if (!result.success) {
+                showRetryableError(t('deleteFailed'));
+                return;
             }
-            toast.success('已删除');
-            void loadMemories();
-        } catch (e: unknown) {
-            const message = e instanceof Error ? e.message : String(e);
-            toast.error('删除失败' + message);
+            toast.success(t('deleteSuccess'));
+            setDeleteCandidate(null);
+            await loadMemories();
+        } catch {
+            showRetryableError(t('deleteFailed'));
+        } finally {
+            setDeletingMemoryId(null);
         }
     };
 
-    const handleExport = async (id: string) => {
-        toast.info('导出准备中', { description: '即将支持导出 TMX/CSV' });
+    const handleDeleteDialogOpenChange = (open: boolean) => {
+        if (!open && !deletingMemoryId) setDeleteCandidate(null);
     };
 
-    const handleSettings = (id: string) => {
-        setSettingsMemoryId(id);
+    const handleExport = async (target: 'all' | { memoryId: string }, format: 'tmx' | 'csv') => {
+        const exportKey =
+            target === 'all' ? `all:${format}` : `memory:${target.memoryId}:${format}`;
+        if (exportingTarget) return;
+
+        setExportingTarget(exportKey);
+        try {
+            const params = new URLSearchParams({ format });
+            if (target === 'all') params.set('scope', 'all');
+            else params.set('memoryId', target.memoryId);
+
+            const response = await fetch(`/api/memories/export?${params.toString()}`, {
+                cache: 'no-store',
+                credentials: 'same-origin',
+            });
+            if (!response.ok) {
+                toast.error(t('exportFailed'), {
+                    description: response.status === 413 ? t('exportTooLarge') : t('retryLater'),
+                });
+                return;
+            }
+
+            const blob = await response.blob();
+            if (!blob.size) {
+                showRetryableError(t('exportFailed'));
+                return;
+            }
+
+            const filename =
+                filenameFromContentDisposition(response.headers.get('content-disposition')) ||
+                `deeptrans-${target === 'all' ? 'memories' : 'memory'}.${format}`;
+            const objectUrl = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = objectUrl;
+            link.download = filename;
+            link.style.display = 'none';
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+            toast.success(t('exportStarted', { format: format.toUpperCase() }));
+        } catch {
+            showRetryableError(t('exportFailed'));
+        } finally {
+            setExportingTarget(null);
+        }
+    };
+
+    const handleSettings = (memory: MemorySummary) => {
+        setSettingsMemoryId(memory.id);
         setSettingsOpen(true);
     };
 
-    // 过滤记忆库
+    const settingsMemory = memories.find(memory => memory.id === settingsMemoryId);
+    const normalizedQuery = searchQuery.trim().toLocaleLowerCase(locale);
     const filteredMemories = memories.filter(
         memory =>
-            memory.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            (memory.description &&
-                memory.description.toLowerCase().includes(searchQuery.toLowerCase()))
+            memory.name.toLocaleLowerCase(locale).includes(normalizedQuery) ||
+            memory.description?.toLocaleLowerCase(locale).includes(normalizedQuery)
     );
-
-    // 格式化日期
-    const formatDate = (dateStr?: string) => {
-        if (!dateStr) return t('noDate');
+    const formatDate = (date?: string) => {
+        if (!date) return t('noDate');
         try {
             return new Intl.DateTimeFormat(locale === 'zh' ? 'zh-CN' : 'en-US', {
                 year: 'numeric',
                 month: 'short',
                 day: 'numeric',
-            }).format(new Date(dateStr));
+            }).format(new Date(date));
         } catch {
             return t('noDate');
         }
     };
+    const totalEntries = memories.reduce((sum, memory) => sum + (memory._count?.entries ?? 0), 0);
+    const activeMemories = memories.filter(memory => (memory._count?.entries ?? 0) > 0).length;
+    const languagePairCount = new Set(
+        memories.map(
+            memory => `${memory.sourceLanguage || 'auto'}-${memory.targetLanguage || 'zh'}`
+        )
+    ).size;
 
-    // 获取记忆库大小等级（用于展示）
-    const getMemorySize = (entryCount: number) => {
-        if (entryCount >= 10000)
-            return {
-                label: t('sizeLarge'),
-                color: 'border-slate-300 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300',
-            };
-        if (entryCount >= 1000)
-            return {
-                label: t('sizeMedium'),
-                color: 'border-slate-300 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300',
-            };
-        if (entryCount >= 100)
-            return {
-                label: t('sizeSmall'),
-                color: 'border-slate-300 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300',
-            };
-        return {
-            label: t('sizeTiny'),
-            color: 'border-slate-300 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300',
-        };
-    };
+    const renderMemoryActions = (memory: MemorySummary) => (
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    aria-label={t('memoryActions', { name: memory.name })}
+                >
+                    <MoreHorizontal className="h-4 w-4" />
+                </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="min-w-[180px]">
+                <DropdownMenuItem asChild>
+                    <a
+                        href={`/dashboard/memories/${memory.id}`}
+                        className="flex items-center gap-2"
+                    >
+                        <Eye className="h-4 w-4" />
+                        {t('viewDetails')}
+                    </a>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                    onClick={() => void handleExport({ memoryId: memory.id }, 'tmx')}
+                    disabled={exportingTarget !== null}
+                    className="flex items-center gap-2"
+                >
+                    {exportingTarget === `memory:${memory.id}:tmx` ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                        <Download className="h-4 w-4" />
+                    )}
+                    {exportingTarget === `memory:${memory.id}:tmx`
+                        ? t('exporting')
+                        : t('exportTmx')}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                    onClick={() => void handleExport({ memoryId: memory.id }, 'csv')}
+                    disabled={exportingTarget !== null}
+                    className="flex items-center gap-2"
+                >
+                    {exportingTarget === `memory:${memory.id}:csv` ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                        <Download className="h-4 w-4" />
+                    )}
+                    {exportingTarget === `memory:${memory.id}:csv`
+                        ? t('exporting')
+                        : t('exportCsv')}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                    onClick={() => handleSettings(memory)}
+                    className="flex items-center gap-2"
+                >
+                    <Settings className="h-4 w-4" />
+                    {t('settings')}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                    onClick={() => requestDelete(memory)}
+                    disabled={deletingMemoryId !== null}
+                    className="flex items-center gap-2 text-destructive focus:text-destructive"
+                >
+                    <Trash2 className="h-4 w-4" />
+                    {t('delete')}
+                </DropdownMenuItem>
+            </DropdownMenuContent>
+        </DropdownMenu>
+    );
 
     return (
-        <div className="mx-auto w-full max-w-7xl p-6">
-            <div className="space-y-6">
-                {/* Header Section */}
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="mx-auto w-full max-w-7xl px-4 py-5 sm:p-6">
+            <div className="space-y-4">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                     <div>
-                        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+                        <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
                             {t('title')}
                         </h1>
-                        <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                            {t('description')}
-                        </p>
+                        <p className="mt-1 text-sm text-muted-foreground">{t('description')}</p>
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2">
                         <MemoryImportHelpDialog />
                         <ImportMemoryDialog onCompleted={loadMemories} />
-                        <Button variant="outline" className="gap-2">
-                            <Download className="h-4 w-4" />
-                            {t('exportAll')}
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="gap-1.5"
+                                    disabled={exportingTarget !== null}
+                                >
+                                    {exportingTarget?.startsWith('all:') ? (
+                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    ) : (
+                                        <Download className="h-3.5 w-3.5" />
+                                    )}
+                                    {exportingTarget?.startsWith('all:')
+                                        ? t('exporting')
+                                        : t('exportAll')}
+                                    <ChevronDown className="h-3.5 w-3.5" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="min-w-[176px]">
+                                <DropdownMenuItem
+                                    onClick={() => void handleExport('all', 'tmx')}
+                                    disabled={exportingTarget !== null}
+                                    className="flex items-center gap-2"
+                                >
+                                    <Download className="h-4 w-4" />
+                                    {t('exportTmx')}
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                    onClick={() => void handleExport('all', 'csv')}
+                                    disabled={exportingTarget !== null}
+                                    className="flex items-center gap-2"
+                                >
+                                    <Download className="h-4 w-4" />
+                                    {t('exportCsv')}
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    </div>
+                </div>
+
+                <section
+                    aria-label={t('title')}
+                    className="grid grid-cols-2 divide-x divide-y overflow-hidden rounded-md border bg-card md:grid-cols-4 md:divide-y-0"
+                >
+                    {[
+                        { label: t('totalMemories'), value: memories.length, Icon: Database },
+                        {
+                            label: t('totalEntries'),
+                            value: totalEntries.toLocaleString(),
+                            Icon: FileText,
+                        },
+                        { label: t('activeMemories'), value: activeMemories, Icon: BarChart3 },
+                        { label: t('languagePairs'), value: languagePairCount, Icon: Languages },
+                    ].map(({ label, value, Icon }) => (
+                        <div key={label} className="flex items-center gap-2.5 px-3 py-2.5">
+                            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                                <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+                            </div>
+                            <div className="min-w-0">
+                                <p className="truncate text-[11px] leading-4 text-muted-foreground">
+                                    {label}
+                                </p>
+                                <p className="font-mono text-base font-semibold tabular-nums leading-5 text-foreground">
+                                    {value}
+                                </p>
+                            </div>
+                        </div>
+                    ))}
+                </section>
+
+                <div className="flex flex-col gap-2 rounded-md border bg-card p-2 sm:flex-row sm:items-center">
+                    <div className="relative max-w-md flex-1">
+                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                            placeholder={t('searchPlaceholder')}
+                            value={searchQuery}
+                            onChange={event => setSearchQuery(event.target.value)}
+                            className="h-8 border-transparent bg-muted/45 pl-9 shadow-none focus-visible:border-input focus-visible:bg-background"
+                        />
+                    </div>
+                    <div className="flex items-center gap-1" role="group" aria-label={t('title')}>
+                        <Button
+                            variant={viewMode === 'grid' ? 'default' : 'ghost'}
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => setViewMode('grid')}
+                            aria-label={t('gridView')}
+                            aria-pressed={viewMode === 'grid'}
+                            title={t('gridView')}
+                        >
+                            <LayoutGrid className="h-4 w-4" />
+                        </Button>
+                        <Button
+                            variant={viewMode === 'list' ? 'default' : 'ghost'}
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => setViewMode('list')}
+                            aria-label={t('listView')}
+                            aria-pressed={viewMode === 'list'}
+                            title={t('listView')}
+                        >
+                            <List className="h-4 w-4" />
                         </Button>
                     </div>
                 </div>
 
-                {/* Stats Cards */}
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-                    <Card className="border bg-card">
-                        <CardContent className="p-4">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="text-sm text-muted-foreground">
-                                        {t('totalMemories')}
-                                    </p>
-                                    <p className="text-2xl font-semibold text-foreground">
-                                        {memories.length}
-                                    </p>
-                                </div>
-                                <Database className="h-5 w-5 text-muted-foreground" />
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    <Card className="border bg-card">
-                        <CardContent className="p-4">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="text-sm text-muted-foreground">
-                                        {t('totalEntries')}
-                                    </p>
-                                    <p className="text-2xl font-semibold text-foreground">
-                                        {memories
-                                            .reduce((sum, m) => sum + (m._count?.entries ?? 0), 0)
-                                            .toLocaleString()}
-                                    </p>
-                                </div>
-                                <FileText className="h-5 w-5 text-muted-foreground" />
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    <Card className="border bg-card">
-                        <CardContent className="p-4">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="text-sm text-muted-foreground">
-                                        {t('activeMemories')}
-                                    </p>
-                                    <p className="text-2xl font-semibold text-foreground">
-                                        {memories.filter(m => (m._count?.entries ?? 0) > 0).length}
-                                    </p>
-                                </div>
-                                <BarChart3 className="h-5 w-5 text-muted-foreground" />
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    <Card className="border bg-card">
-                        <CardContent className="p-4">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="text-sm text-muted-foreground">
-                                        {t('languagePairs')}
-                                    </p>
-                                    <p className="text-2xl font-semibold text-foreground">
-                                        {
-                                            new Set(
-                                                memories.map(
-                                                    m =>
-                                                        `${m.sourceLanguage || 'auto'}-${m.targetLanguage || 'zh'}`
-                                                )
-                                            ).size
-                                        }
-                                    </p>
-                                </div>
-                                <Languages className="h-5 w-5 text-muted-foreground" />
-                            </div>
-                        </CardContent>
-                    </Card>
-                </div>
-
-                {/* Toolbar */}
-                <Card className="border bg-card">
-                    <CardContent className="p-4">
-                        <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-                            <div className="relative max-w-md flex-1">
-                                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 transform text-gray-400" />
-                                <Input
-                                    placeholder={t('searchPlaceholder')}
-                                    value={searchQuery}
-                                    onChange={e => setSearchQuery(e.target.value)}
-                                    className="pl-10"
-                                />
-                            </div>
-
-                            <div className="flex items-center gap-2">
-                                <Button
-                                    variant={viewMode === 'grid' ? 'default' : 'outline'}
-                                    size="icon"
-                                    onClick={() => setViewMode('grid')}
-                                    title={t('gridView')}
-                                >
-                                    <LayoutGrid className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                    variant={viewMode === 'list' ? 'default' : 'outline'}
-                                    size="icon"
-                                    onClick={() => setViewMode('list')}
-                                    title={t('listView')}
-                                >
-                                    <List className="h-4 w-4" />
-                                </Button>
-                            </div>
+                <section
+                    aria-labelledby="memory-quick-create-title"
+                    className="flex flex-col gap-3 rounded-md border bg-card p-3 sm:flex-row sm:items-center"
+                >
+                    <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                            <Plus className="h-4 w-4" aria-hidden="true" />
                         </div>
-                    </CardContent>
-                </Card>
-
-                {/* Quick Create Card */}
-                <Card className="border bg-card">
-                    <CardContent className="p-6">
-                        <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-                            <div className="flex-1">
-                                <h3 className="mb-1 font-semibold text-gray-900 dark:text-white">
-                                    {t('quickCreate')}
-                                </h3>
-                                <p className="text-sm text-gray-600 dark:text-gray-400">
-                                    {t('quickCreateDesc')}
-                                </p>
-                            </div>
-                            <div className="flex min-w-0 gap-2 sm:min-w-fit">
-                                <Input
-                                    placeholder={t('memoryName')}
-                                    value={newName}
-                                    onChange={e => setNewName(e.target.value)}
-                                    className="flex-1 sm:w-64"
-                                    onKeyDown={e => e.key === 'Enter' && handleCreate()}
-                                />
-                                <Button
-                                    onClick={handleCreate}
-                                    disabled={creating || !newName.trim()}
-                                    className="gap-2 whitespace-nowrap"
-                                >
-                                    {creating ? (
-                                        <>
-                                            <div className="h-4 w-4 animate-spin rounded-full border-b-2 border-white"></div>
-                                            创建中
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Plus className="h-4 w-4" />
-                                            {t('create')}
-                                        </>
-                                    )}
-                                </Button>
-                            </div>
+                        <div className="min-w-0">
+                            <h2
+                                id="memory-quick-create-title"
+                                className="text-sm font-semibold text-foreground"
+                            >
+                                {t('quickCreate')}
+                            </h2>
+                            <p className="truncate text-[11px] text-muted-foreground">
+                                {t('quickCreateDesc')}
+                            </p>
                         </div>
-                    </CardContent>
-                </Card>
+                    </div>
+                    <div className="flex min-w-0 gap-2 sm:min-w-fit">
+                        <Input
+                            placeholder={t('memoryName')}
+                            value={newName}
+                            onChange={event => setNewName(event.target.value)}
+                            className="h-8 flex-1 sm:w-64"
+                            onKeyDown={event => {
+                                if (event.key === 'Enter') void handleCreate();
+                            }}
+                        />
+                        <Button
+                            size="sm"
+                            onClick={() => void handleCreate()}
+                            disabled={creating || !newName.trim()}
+                            className="gap-1.5 whitespace-nowrap"
+                        >
+                            {creating ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                                <Plus className="h-3.5 w-3.5" />
+                            )}
+                            {creating ? t('creating') : t('create')}
+                        </Button>
+                    </div>
+                </section>
 
-                {/* Memory Libraries Grid/List */}
                 {loading ? (
                     <Card>
-                        <CardContent className="p-8">
-                            <div className="flex items-center justify-center">
-                                <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-primary"></div>
-                                <span className="ml-3 text-gray-600 dark:text-gray-400">
-                                    {t('loading')}
-                                </span>
+                        <CardContent className="flex min-h-32 items-center justify-center gap-3 p-6 text-sm text-muted-foreground">
+                            <Loader2
+                                className="h-5 w-5 animate-spin text-primary"
+                                aria-hidden="true"
+                            />
+                            {t('loading')}
+                        </CardContent>
+                    </Card>
+                ) : memoryLoadFailed ? (
+                    <Card>
+                        <CardContent className="flex min-h-32 flex-col items-center justify-center gap-3 p-6 text-center">
+                            <AlertTriangle className="h-6 w-6 text-amber-600" aria-hidden="true" />
+                            <div>
+                                <h2 className="text-base font-semibold text-foreground">
+                                    {t('loadUnavailable')}
+                                </h2>
+                                <p className="mt-1 text-sm text-muted-foreground">
+                                    {t('retryLater')}
+                                </p>
                             </div>
+                            <Button variant="outline" size="sm" onClick={() => void loadMemories()}>
+                                {t('retryLoad')}
+                            </Button>
                         </CardContent>
                     </Card>
                 ) : filteredMemories.length === 0 ? (
                     <Card>
                         <CardContent className="p-8 text-center">
-                            <Database className="mx-auto mb-4 h-12 w-12 text-gray-400" />
-                            <h3 className="mb-2 text-lg font-semibold text-gray-900 dark:text-white">
+                            <Database
+                                className="mx-auto mb-3 h-9 w-9 text-muted-foreground"
+                                aria-hidden="true"
+                            />
+                            <h2 className="text-base font-semibold text-foreground">
                                 {searchQuery ? t('noResults') : t('noMemories')}
-                            </h3>
-                            <p className="mb-4 text-gray-600 dark:text-gray-400">
+                            </h2>
+                            <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
                                 {searchQuery ? t('adjustSearch') : t('createFirstDesc')}
                             </p>
                             {!searchQuery && (
-                                <div className="flex justify-center gap-3">
+                                <div className="mt-4 flex justify-center gap-2">
                                     <Button
                                         onClick={() => setNewName(t('newMemory'))}
                                         variant="outline"
-                                        className="gap-2"
+                                        size="sm"
+                                        className="gap-1.5"
                                     >
-                                        <Plus className="h-4 w-4" />
+                                        <Plus className="h-3.5 w-3.5" />
                                         {t('createMemory')}
                                     </Button>
                                     <ImportMemoryDialog onCompleted={loadMemories} />
@@ -393,267 +533,80 @@ export default function MemoriesPage() {
                         </CardContent>
                     </Card>
                 ) : (
-                    <div
+                    <section
+                        aria-label={t('title')}
                         className={
                             viewMode === 'grid'
-                                ? 'grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3'
-                                : 'space-y-3'
+                                ? 'grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4'
+                                : 'space-y-2'
                         }
                     >
-                        {filteredMemories.map(memory => {
-                            const entryCount = memory._count?.entries ?? 0;
-                            const sizeInfo = getMemorySize(entryCount);
-
-                            return viewMode === 'grid' ? (
-                                /* Grid Card View */
-                                <Card
-                                    key={memory.id}
-                                    className="group border bg-card transition-colors hover:border-muted-foreground/30"
-                                >
-                                    <CardHeader className="pb-3">
-                                        <div className="flex items-start justify-between">
-                                            <div className="min-w-0 flex-1">
-                                                <CardTitle className="truncate text-lg font-semibold text-gray-900 dark:text-white">
-                                                    {memory.name}
-                                                </CardTitle>
-                                                <CardDescription className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                                                    {memory.description || t('noDescription')}
-                                                </CardDescription>
-                                            </div>
-                                            <DropdownMenu>
-                                                <DropdownMenuTrigger asChild>
-                                                    <Button variant="ghost" size="sm">
-                                                        <MoreHorizontal className="h-4 w-4" />
-                                                    </Button>
-                                                </DropdownMenuTrigger>
-                                                <DropdownMenuContent
-                                                    align="end"
-                                                    className="min-w-[180px]"
-                                                >
-                                                    <DropdownMenuItem asChild>
-                                                        <a
-                                                            href={`/dashboard/memories/${memory.id}`}
-                                                            className="flex items-center justify-between gap-2"
-                                                        >
-                                                            <span className="flex items-center gap-2">
-                                                                <Eye className="h-4 w-4" />{' '}
-                                                                {t('viewDetails')}
-                                                            </span>
-                                                        </a>
-                                                    </DropdownMenuItem>
-                                                    <DropdownMenuItem
-                                                        onClick={() => handleExport(memory.id)}
-                                                        className="flex items-center justify-between"
-                                                    >
-                                                        <span className="flex items-center gap-2">
-                                                            <Download className="h-4 w-4" />{' '}
-                                                            {t('export')}
-                                                        </span>
-                                                    </DropdownMenuItem>
-                                                    <DropdownMenuItem
-                                                        onClick={() => handleSettings(memory.id)}
-                                                        className="flex items-center justify-between"
-                                                    >
-                                                        <span className="flex items-center gap-2">
-                                                            <Settings className="h-4 w-4" />{' '}
-                                                            {t('settings')}
-                                                        </span>
-                                                    </DropdownMenuItem>
-                                                    <DropdownMenuItem
-                                                        onClick={() => handleDelete(memory.id)}
-                                                        className="flex items-center justify-between text-red-600 focus:text-red-600"
-                                                    >
-                                                        <span className="flex items-center gap-2">
-                                                            <Trash2 className="h-4 w-4" />{' '}
-                                                            {t('delete')}
-                                                        </span>
-                                                    </DropdownMenuItem>
-                                                </DropdownMenuContent>
-                                            </DropdownMenu>
-                                        </div>
-                                    </CardHeader>
-
-                                    <CardContent className="pt-0">
-                                        <div className="space-y-3">
-                                            <div className="flex items-center justify-between">
-                                                <span className="text-sm text-gray-600 dark:text-gray-400">
-                                                    {t('entryCount')}
-                                                </span>
-                                                <div className="flex items-center gap-2">
-                                                    <span className="font-semibold text-gray-900 dark:text-white">
-                                                        {entryCount.toLocaleString()}
-                                                    </span>
-                                                    <Badge
-                                                        variant="outline"
-                                                        className={`text-xs ${sizeInfo.color}`}
-                                                    >
-                                                        {sizeInfo.label}
-                                                    </Badge>
-                                                </div>
-                                            </div>
-
-                                            <div className="flex items-center justify-between">
-                                                <span className="text-sm text-gray-600 dark:text-gray-400">
-                                                    {t('languagePairs')}
-                                                </span>
-                                                <div className="flex items-center gap-1 text-sm">
-                                                    <Languages className="h-3 w-3" />
-                                                    <span>
-                                                        {memory.sourceLanguage || 'auto'} →{' '}
-                                                        {memory.targetLanguage || 'zh'}
-                                                    </span>
-                                                </div>
-                                            </div>
-
-                                            <div className="flex items-center justify-between">
-                                                <span className="text-sm text-gray-600 dark:text-gray-400">
-                                                    {t('updateTime')}
-                                                </span>
-                                                <div className="flex items-center gap-1 text-sm">
-                                                    <Calendar className="h-3 w-3" />
-                                                    <span>{formatDate(memory.updatedAt)}</span>
-                                                </div>
-                                            </div>
-
-                                            <div className="border-t pt-2">
-                                                <Button asChild className="w-full">
-                                                    <a href={`/dashboard/memories/${memory.id}`}>
-                                                        {t('viewMemory')}
-                                                    </a>
-                                                </Button>
-                                            </div>
-                                        </div>
-                                    </CardContent>
-                                </Card>
-                            ) : (
-                                /* List View */
-                                <Card
-                                    key={memory.id}
-                                    className="border bg-card transition-colors hover:border-muted-foreground/30"
-                                >
-                                    <CardContent className="p-4">
-                                        <div className="flex items-center justify-between">
-                                            <div className="flex min-w-0 flex-1 items-center gap-4">
-                                                <div className="rounded-md border bg-muted/40 p-2">
-                                                    <Database className="h-5 w-5 text-muted-foreground" />
-                                                </div>
-
-                                                <div className="min-w-0 flex-1">
-                                                    <h3 className="truncate font-semibold text-gray-900 dark:text-white">
-                                                        {memory.name}
-                                                    </h3>
-                                                    <p className="truncate text-sm text-gray-600 dark:text-gray-400">
-                                                        {memory.description || t('noDescription')}
-                                                    </p>
-                                                </div>
-
-                                                <div className="hidden items-center gap-6 text-sm sm:flex">
-                                                    <div className="text-center">
-                                                        <div className="font-semibold text-gray-900 dark:text-white">
-                                                            {entryCount.toLocaleString()}
-                                                        </div>
-                                                        <div className="text-gray-500">
-                                                            {t('entriesShort')}
-                                                        </div>
-                                                    </div>
-
-                                                    <div className="text-center">
-                                                        <div className="font-semibold text-gray-900 dark:text-white">
-                                                            {memory.sourceLanguage || 'auto'} →{' '}
-                                                            {memory.targetLanguage || 'zh'}
-                                                        </div>
-                                                        <div className="text-gray-500">
-                                                            {t('languagePairs')}
-                                                        </div>
-                                                    </div>
-
-                                                    <div className="text-center">
-                                                        <div className="font-semibold text-gray-900 dark:text-white">
-                                                            {formatDate(memory.updatedAt)}
-                                                        </div>
-                                                        <div className="text-gray-500">
-                                                            {t('updatedShort')}
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            <div className="flex items-center gap-2">
-                                                <Badge variant="outline" className={sizeInfo.color}>
-                                                    {sizeInfo.label}
-                                                </Badge>
-                                                <Button variant="outline" size="sm" asChild>
-                                                    <a href={`/dashboard/memories/${memory.id}`}>
-                                                        {t('view')}
-                                                    </a>
-                                                </Button>
-                                                <DropdownMenu>
-                                                    <DropdownMenuTrigger asChild>
-                                                        <Button variant="ghost" size="sm">
-                                                            <MoreHorizontal className="h-4 w-4" />
-                                                        </Button>
-                                                    </DropdownMenuTrigger>
-                                                    <DropdownMenuContent
-                                                        align="end"
-                                                        className="min-w-[180px]"
-                                                    >
-                                                        <DropdownMenuItem asChild>
-                                                            <a
-                                                                href={`/dashboard/memories/${memory.id}`}
-                                                                className="flex items-center justify-between gap-2"
-                                                            >
-                                                                <span className="flex items-center gap-2">
-                                                                    <Eye className="h-4 w-4" />{' '}
-                                                                    {t('viewDetails')}
-                                                                </span>
-                                                            </a>
-                                                        </DropdownMenuItem>
-                                                        <DropdownMenuItem
-                                                            onClick={() => handleExport(memory.id)}
-                                                            className="flex items-center justify-between"
-                                                        >
-                                                            <span className="flex items-center gap-2">
-                                                                <Download className="h-4 w-4" />{' '}
-                                                                {t('export')}
-                                                            </span>
-                                                        </DropdownMenuItem>
-                                                        <DropdownMenuItem
-                                                            onClick={() =>
-                                                                handleSettings(memory.id)
-                                                            }
-                                                            className="flex items-center justify-between"
-                                                        >
-                                                            <span className="flex items-center gap-2">
-                                                                <Settings className="h-4 w-4" />{' '}
-                                                                {t('settings')}
-                                                            </span>
-                                                        </DropdownMenuItem>
-                                                        <DropdownMenuItem
-                                                            onClick={() => handleDelete(memory.id)}
-                                                            className="flex items-center justify-between text-red-600 focus:text-red-600"
-                                                        >
-                                                            <span className="flex items-center gap-2">
-                                                                <Trash2 className="h-4 w-4" />{' '}
-                                                                {t('delete')}
-                                                            </span>
-                                                        </DropdownMenuItem>
-                                                    </DropdownMenuContent>
-                                                </DropdownMenu>
-                                            </div>
-                                        </div>
-                                    </CardContent>
-                                </Card>
-                            );
-                        })}
-                    </div>
+                        {filteredMemories.map(memory => (
+                            <MemoryResourceCard
+                                key={memory.id}
+                                memory={memory}
+                                viewMode={viewMode}
+                                formatDate={formatDate}
+                                labels={{
+                                    viewMemory: t('viewMemory'),
+                                    noDescription: t('noDescription'),
+                                    entriesShort: t('entriesShort'),
+                                    updatedShort: t('updatedShort'),
+                                }}
+                                actions={renderMemoryActions(memory)}
+                            />
+                        ))}
+                    </section>
                 )}
             </div>
+
             <MemorySettingsDialog
                 open={settingsOpen}
                 onOpenChange={setSettingsOpen}
                 memoryId={settingsMemoryId}
+                sourceLanguage={settingsMemory?.sourceLanguage}
+                targetLanguage={settingsMemory?.targetLanguage}
                 onUpdated={loadMemories}
             />
+            <Dialog open={deleteCandidate !== null} onOpenChange={handleDeleteDialogOpenChange}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>{t('DeleteDialog.title')}</DialogTitle>
+                        <DialogDescription>
+                            {deleteCandidate &&
+                                t('DeleteDialog.description', {
+                                    name: deleteCandidate.name,
+                                    count: (deleteCandidate._count?.entries ?? 0).toLocaleString(),
+                                })}
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="flex gap-3 rounded-md border border-destructive/20 bg-destructive/5 p-3 text-sm text-foreground">
+                        <AlertTriangle
+                            className="mt-0.5 h-4 w-4 shrink-0 text-destructive"
+                            aria-hidden="true"
+                        />
+                        <p>{t('DeleteDialog.irreversible')}</p>
+                    </div>
+                    <DialogFooter>
+                        <Button
+                            variant="outline"
+                            onClick={() => setDeleteCandidate(null)}
+                            disabled={deletingMemoryId !== null}
+                        >
+                            {t('DeleteDialog.cancel')}
+                        </Button>
+                        <Button
+                            variant="destructive"
+                            onClick={() => void confirmDelete()}
+                            disabled={deletingMemoryId !== null || !deleteCandidate}
+                        >
+                            {deletingMemoryId
+                                ? t('DeleteDialog.deleting')
+                                : t('DeleteDialog.confirm')}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

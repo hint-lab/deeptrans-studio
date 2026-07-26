@@ -28,6 +28,11 @@ COPY . .
 # 使用更高效的构建选项
 RUN yarn build
 
+# 用于一次性生产迁移；保留完整 Prisma CLI 与 migrations，不进入应用运行镜像。
+FROM builder AS migrator
+ENV NODE_ENV=production
+CMD ["npx", "prisma", "migrate", "deploy"]
+
 # 生产阶段
 FROM node:20-slim AS runner
 WORKDIR /app
@@ -50,5 +55,9 @@ COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 # 暴露端口
 EXPOSE 3000
 
+# This confirms that the Next.js Web process can serve a request. It is not a
+# database, object-storage, queue, or Worker readiness claim.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 CMD node -e "fetch('http://127.0.0.1:3000/api/health').then(response => { if (!response.ok) process.exit(1); }).catch(() => process.exit(1))"
+
 # 启动应用
-CMD ["node", "server.js"] 
+CMD ["node", "server.js"]

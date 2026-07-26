@@ -15,13 +15,17 @@ import {
     setQASyntaxEmbedded,
     setQADislikedPairs,
     setPosteditOutputs,
+    setPosteditOutcome,
+    clearPosteditOutcome,
     setPosteditFinalized,
     setBaselineTranslation,
     setAllOutputs,
     TranslatePhase,
     QAPhase,
     PostEditPhase,
+    type PostEditOutputs,
 } from '@/store/features/workFlowStepSlice';
+import type { PostEditOutcome } from '@/lib/post-edit-query-outcome';
 
 type WorkflowAPI = {
     setBaselineTranslation: (v: string | undefined) => void;
@@ -39,7 +43,9 @@ type WorkflowAPI = {
     setQASyntaxTranslation: (v: string | undefined) => void;
     setQASyntaxEmbedded: (v: string | undefined) => void;
     setQADislikedPairs: (m: Record<string, boolean> | undefined) => void;
-    setPosteditOutputs: (p: any) => void;
+    setPosteditOutputs: (p: PostEditOutputs | undefined) => void;
+    setPosteditOutcome: (outcome: PostEditOutcome) => void;
+    clearPosteditOutcome: (itemId: string) => void;
     setPosteditFinalized: (b: boolean) => void;
     setAllOutputs: (p: any) => void;
     [key: string]: any;
@@ -73,7 +79,9 @@ export function useAgentWorkflowSteps<T>(selector?: (s: WorkflowAPI) => T): T | 
         setQASyntaxEmbedded: (v: string | undefined) => dispatch(setQASyntaxEmbedded(v)),
         setQADislikedPairs: (m: Record<string, boolean> | undefined) =>
             dispatch(setQADislikedPairs(m)),
-        setPosteditOutputs: (p: any) => dispatch(setPosteditOutputs(p)),
+        setPosteditOutputs: (p: PostEditOutputs | undefined) => dispatch(setPosteditOutputs(p)),
+        setPosteditOutcome: (outcome: PostEditOutcome) => dispatch(setPosteditOutcome(outcome)),
+        clearPosteditOutcome: (itemId: string) => dispatch(clearPosteditOutcome(itemId)),
         setPosteditFinalized: (b: boolean) => dispatch(setPosteditFinalized(b)),
         setAllOutputs: (p: any) => dispatch(setAllOutputs(p)),
     };

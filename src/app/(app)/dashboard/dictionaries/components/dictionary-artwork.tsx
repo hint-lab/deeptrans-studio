@@ -7,6 +7,7 @@ import {
     Edit3,
     GraduationCap,
     Landmark,
+    LockKeyhole,
     Scale,
     Stethoscope,
     Trash2,
@@ -45,6 +46,52 @@ import { createLogger } from '@/lib/logger';
 import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import { cn } from 'src/lib/utils';
+
+const domainIcons = {
+    technology: Cpu,
+    legal: Scale,
+    medical: Stethoscope,
+    finance: Landmark,
+    marketing: BriefcaseBusiness,
+    engineering: Wrench,
+    education: GraduationCap,
+    'artificial-intelligence': Cpu,
+} as const;
+
+const domainAccents: Record<string, string> = {
+    technology: '#3157D5',
+    legal: '#7C3AED',
+    medical: '#0F766E',
+    finance: '#B45309',
+    marketing: '#BE185D',
+    engineering: '#0369A1',
+    education: '#4D7C0F',
+    'artificial-intelligence': '#3157D5',
+    general: '#475569',
+    custom: '#475569',
+};
+
+const domainTranslationKeys: Record<string, string> = {
+    'artificial-intelligence': 'ai',
+};
+
+const supportedDomainTranslationKeys = new Set([
+    'general',
+    'technology',
+    'legal',
+    'medical',
+    'finance',
+    'ai',
+    'marketing',
+    'engineering',
+    'education',
+    'custom',
+]);
+
+function getEntryScale(entryCount: number) {
+    if (entryCount <= 0) return 12;
+    return Math.min(100, Math.max(18, Math.round(Math.log10(entryCount + 1) * 32)));
+}
 
 // 定义Dictionary接口
 interface Dictionary {
@@ -100,17 +147,29 @@ export function DictionaryArtwork({
         domain: dictionary.domain,
     });
     const [loading, setLoading] = useState(false);
-    const domainIcons = {
-        technology: Cpu,
-        legal: Scale,
-        medical: Stethoscope,
-        finance: Landmark,
-        marketing: BriefcaseBusiness,
-        engineering: Wrench,
-        education: GraduationCap,
-        'artificial-intelligence': Cpu,
-    } as const;
     const DomainIcon = domainIcons[dictionary.domain as keyof typeof domainIcons] ?? BookOpenText;
+    const domainAccent = domainAccents[dictionary.domain] ?? domainAccents.general;
+    const domainTranslationKey = domainTranslationKeys[dictionary.domain] ?? dictionary.domain;
+    const domainLabel = t(
+        `domains.${supportedDomainTranslationKeys.has(domainTranslationKey) ? domainTranslationKey : 'custom'}`
+    );
+    const entryCount = dictionary.entryCount ?? 0;
+    const isReadOnlyProjectDictionary =
+        dictionary.visibility === 'PROJECT' && dictionary.canWrite === false;
+    const hasInlineActions = Boolean((showEditButton && onEdit) || (showDeleteButton && onDelete));
+    const fieldIds = {
+        name: `dictionary-${dictionary.id}-name`,
+        description: `dictionary-${dictionary.id}-description`,
+        domain: `dictionary-${dictionary.id}-domain`,
+    };
+    const dictionaryAriaLabel = [
+        dictionary.name,
+        domainLabel,
+        `${t('total')} ${entryCount.toLocaleString()} ${t('entries')}`,
+        isReadOnlyProjectDictionary ? t('readOnlyDictionary') : null,
+    ]
+        .filter(Boolean)
+        .join(', ');
 
     const handleDelete = () => {
         setShowDeleteDialog(true);
@@ -136,14 +195,14 @@ export function DictionaryArtwork({
                 if (onDelete) {
                     onDelete(dictionary.id);
                 }
-                logger.info('词典删除成功！');
-                toast.success('词典删除成功！');
+                logger.info(t('deleteSuccess'));
+                toast.success(t('deleteSuccess'));
             } else {
-                toast.error(result.error ?? '删除词典失败');
+                toast.error(result.error ?? t('DeleteDialog.deleteFailed'));
             }
         } catch (error) {
-            logger.error('删除词典失败:', error);
-            toast.error('删除词典时发生错误');
+            logger.error(t('DeleteDialog.deleteFailed'), error);
+            toast.error(t('DeleteDialog.deleteError'));
         } finally {
             setLoading(false);
             setShowDeleteDialog(false);
@@ -152,8 +211,8 @@ export function DictionaryArtwork({
 
     const confirmEdit = async () => {
         if (!editForm.name.trim()) {
-            logger.warn('词典删除成功！');
-            toast.error('词库名称不能为空');
+            logger.warn(t('EditDialog.nameRequired'));
+            toast.error(t('EditDialog.nameRequired'));
             return;
         }
 
@@ -166,8 +225,8 @@ export function DictionaryArtwork({
             });
 
             if (result.success && result.data) {
-                logger.info('词典信息更新成功！');
-                toast.success('词典信息更新成功！');
+                logger.info(t('EditDialog.success'));
+                toast.success(t('EditDialog.success'));
 
                 // 调用父组件的回调函数
                 if (onEdit) {
@@ -180,12 +239,12 @@ export function DictionaryArtwork({
 
                 setShowEditDialog(false);
             } else {
-                logger.error('更新词典失败:', result.error);
-                toast.error(result.error ?? '更新词典失败');
+                logger.error(t('EditDialog.updateFailed'), result.error);
+                toast.error(result.error ?? t('EditDialog.updateFailed'));
             }
         } catch (error) {
-            logger.error('更新词典失败:', error);
-            toast.error('更新词典时发生错误');
+            logger.error(t('EditDialog.updateFailed'), error);
+            toast.error(t('EditDialog.updateError'));
         } finally {
             setLoading(false);
         }
@@ -204,49 +263,75 @@ export function DictionaryArtwork({
                 <ContextMenu>
                     <ContextMenuTrigger asChild>
                         <div
-                            role="button"
-                            tabIndex={0}
-                            className="group relative flex min-h-[116px] cursor-pointer gap-3 rounded-lg border bg-card p-4 pr-12 text-left transition-colors hover:border-muted-foreground/30 hover:bg-muted/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                            onClick={onClick}
-                            onKeyDown={event => {
-                                if (event.target !== event.currentTarget) return;
-                                if (event.key === 'Enter' || event.key === ' ') {
-                                    event.preventDefault();
-                                    onClick?.();
-                                }
-                            }}
+                            className={cn(
+                                'group relative flex h-[96px] gap-3 rounded-md border border-l-[3px] bg-card p-3 text-left shadow-sm transition-[border-color,background-color,box-shadow] hover:border-muted-foreground/35 hover:bg-muted/25 hover:shadow-md',
+                                onClick && 'cursor-pointer',
+                                hasInlineActions && 'pr-12'
+                            )}
+                            style={{ borderLeftColor: domainAccent }}
                         >
-                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border bg-muted/50">
-                                <DomainIcon className="h-5 w-5 text-muted-foreground" />
+                            {onClick && (
+                                <button
+                                    type="button"
+                                    aria-label={dictionaryAriaLabel}
+                                    className="absolute inset-0 z-0 rounded-[inherit] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                    onClick={onClick}
+                                />
+                            )}
+
+                            <div
+                                className="pointer-events-none relative z-10 mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md border bg-muted/40"
+                                style={{ color: domainAccent }}
+                            >
+                                <DomainIcon className="h-4 w-4" aria-hidden="true" />
                             </div>
 
-                            <div className="min-w-0 flex-1">
-                                <h3 className="truncate text-sm font-semibold text-foreground">
-                                    {dictionary.name}
-                                </h3>
-                                <p className="mt-1 line-clamp-2 min-h-8 text-xs leading-4 text-muted-foreground">
-                                    {dictionary.description || dictionary.domain}
-                                </p>
-                                <div className="mt-2 flex items-center gap-2 text-[11px] text-muted-foreground">
-                                    <span className="rounded border bg-background px-1.5 py-0.5">
-                                        {dictionary.domain}
+                            <div className="pointer-events-none relative z-10 min-w-0 flex-1 py-0.5">
+                                <div className="flex min-w-0 items-center gap-2">
+                                    <h3 className="min-w-0 flex-1 truncate text-[13px] font-semibold leading-4 text-foreground">
+                                        {dictionary.name}
+                                    </h3>
+                                    <span className="max-w-20 shrink-0 truncate rounded-sm border bg-background px-1 py-0.5 text-[10px] leading-3 text-muted-foreground sm:max-w-28">
+                                        {domainLabel}
                                     </span>
-                                    {dictionary.entryCount !== undefined && (
-                                        <span>
-                                            {t('total')} {dictionary.entryCount.toLocaleString()}{' '}
-                                            {t('entries')}
+                                </div>
+                                <p className="mt-1 line-clamp-1 min-h-4 text-[11px] leading-4 text-muted-foreground">
+                                    {dictionary.description || domainLabel}
+                                </p>
+                                <div className="mt-2 flex items-center gap-2 text-[10px] leading-3 text-muted-foreground">
+                                    <span className="shrink-0 font-mono tabular-nums">
+                                        {t('total')} {entryCount.toLocaleString()} {t('entries')}
+                                    </span>
+                                    {isReadOnlyProjectDictionary && (
+                                        <span
+                                            className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center text-muted-foreground"
+                                            title={t('readOnlyDictionary')}
+                                        >
+                                            <LockKeyhole className="h-3 w-3" aria-hidden="true" />
                                         </span>
                                     )}
+                                    <span
+                                        className="h-1 w-12 overflow-hidden rounded-full bg-muted"
+                                        aria-hidden="true"
+                                    >
+                                        <span
+                                            className="block h-full rounded-full"
+                                            style={{
+                                                backgroundColor: domainAccent,
+                                                width: `${getEntryScale(entryCount)}%`,
+                                            }}
+                                        />
+                                    </span>
                                 </div>
                             </div>
 
-                            <div className="absolute right-3 top-3 flex items-center gap-1 opacity-60 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
+                            <div className="absolute right-2 top-2 z-10 flex items-center gap-0.5 opacity-60 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
                                 {showEditButton && onEdit && (
                                     <Button
                                         variant="ghost"
                                         size="icon"
-                                        className="h-7 w-7"
-                                        aria-label="编辑词库"
+                                        className="h-6 w-6"
+                                        aria-label={t('editDictionary')}
                                         onClick={e => {
                                             e.stopPropagation();
                                             handleEdit();
@@ -260,8 +345,8 @@ export function DictionaryArtwork({
                                     <Button
                                         variant="ghost"
                                         size="icon"
-                                        className="h-7 w-7 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                                        aria-label="删除词库"
+                                        className="h-6 w-6 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                                        aria-label={t('deleteDictionary')}
                                         onClick={e => {
                                             e.stopPropagation();
                                             handleDelete();
@@ -274,13 +359,15 @@ export function DictionaryArtwork({
                         </div>
                     </ContextMenuTrigger>
                     <ContextMenuContent className="w-40">
-                        <ContextMenuItem onClick={onClick}>查看词条</ContextMenuItem>
+                        <ContextMenuItem onClick={onClick} disabled={!onClick}>
+                            {t('viewEntries')}
+                        </ContextMenuItem>
                         {showEditButton && onEdit && (
                             <>
                                 <ContextMenuSeparator />
                                 <ContextMenuItem onClick={handleEdit}>
                                     <Edit3 size={16} className="mr-2" />
-                                    编辑词库
+                                    {t('editDictionary')}
                                 </ContextMenuItem>
                             </>
                         )}
@@ -292,7 +379,7 @@ export function DictionaryArtwork({
                                     className="text-red-600 focus:text-red-600"
                                 >
                                     <Trash2 size={16} className="mr-2" />
-                                    删除词库
+                                    {t('deleteDictionary')}
                                 </ContextMenuItem>
                             </>
                         )}
@@ -304,10 +391,12 @@ export function DictionaryArtwork({
             <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
                 <DialogContent>
                     <DialogHeader>
-                        <DialogTitle>确认删除</DialogTitle>
+                        <DialogTitle>{t('DeleteDialog.title')}</DialogTitle>
                         <DialogDescription>
-                            您确定要删除词库 &ldquo;{dictionary.name}&rdquo;
-                            吗？此操作将同时删除该词库中的所有词条，且无法撤销。
+                            {t('DeleteDialog.description', {
+                                name: dictionary.name,
+                                count: entryCount.toLocaleString(),
+                            })}
                         </DialogDescription>
                     </DialogHeader>
                     <DialogFooter>
@@ -316,10 +405,10 @@ export function DictionaryArtwork({
                             onClick={() => setShowDeleteDialog(false)}
                             disabled={loading}
                         >
-                            取消
+                            {t('DeleteDialog.cancel')}
                         </Button>
                         <Button variant="destructive" onClick={confirmDelete} disabled={loading}>
-                            {loading ? '删除中...' : '删除'}
+                            {loading ? t('DeleteDialog.deleting') : t('DeleteDialog.confirm')}
                         </Button>
                     </DialogFooter>
                 </DialogContent>
@@ -329,71 +418,77 @@ export function DictionaryArtwork({
             <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
                 <DialogContent className="sm:max-w-[425px]">
                     <DialogHeader>
-                        <DialogTitle>编辑词库</DialogTitle>
-                        <DialogDescription>
-                            修改词库的基本信息。点击保存以应用更改。
-                        </DialogDescription>
+                        <DialogTitle>{t('EditDialog.title')}</DialogTitle>
+                        <DialogDescription>{t('EditDialog.desc')}</DialogDescription>
                     </DialogHeader>
                     <div className="grid gap-4 py-4">
                         <div className="grid grid-cols-4 items-center gap-4">
-                            <Label htmlFor="name" className="text-right">
-                                名称
+                            <Label htmlFor={fieldIds.name} className="text-right">
+                                {t('EditDialog.name')}
                             </Label>
                             <Input
-                                id="name"
+                                id={fieldIds.name}
                                 value={editForm.name}
                                 onChange={e => handleInputChange('name', e.target.value)}
                                 className="col-span-3"
-                                placeholder="输入词库名称"
+                                placeholder={t('EditDialog.namePlaceholder')}
                             />
                         </div>
                         <div className="grid grid-cols-4 items-center gap-4">
-                            <Label htmlFor="description" className="text-right">
-                                介绍
+                            <Label htmlFor={fieldIds.description} className="text-right">
+                                {t('EditDialog.description')}
                             </Label>
                             <Textarea
-                                id="description"
+                                id={fieldIds.description}
                                 value={editForm.description}
                                 onChange={e => handleInputChange('description', e.target.value)}
                                 className="col-span-3"
-                                placeholder="输入词库介绍"
+                                placeholder={t('EditDialog.descriptionPlaceholder')}
                                 rows={3}
                             />
                         </div>
                         <div className="grid grid-cols-4 items-center gap-4">
-                            <Label htmlFor="domain" className="text-right">
-                                领域
+                            <Label htmlFor={fieldIds.domain} className="text-right">
+                                {t('EditDialog.domain')}
                             </Label>
                             <Select
                                 value={editForm.domain}
                                 onValueChange={value => handleInputChange('domain', value)}
                             >
-                                <SelectTrigger className="col-span-3">
-                                    <SelectValue placeholder="选择领域" />
+                                <SelectTrigger id={fieldIds.domain} className="col-span-3">
+                                    <SelectValue placeholder={t('EditDialog.selectDomain')} />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="general">通用</SelectItem>
-                                    <SelectItem value="technology">技术</SelectItem>
-                                    <SelectItem value="legal">法律</SelectItem>
-                                    <SelectItem value="medical">医疗</SelectItem>
-                                    <SelectItem value="finance">金融</SelectItem>
-                                    <SelectItem value="artificial-intelligence">
-                                        人工智能
+                                    <SelectItem value="general">{t('domains.general')}</SelectItem>
+                                    <SelectItem value="technology">
+                                        {t('domains.technology')}
                                     </SelectItem>
-                                    <SelectItem value="marketing">营销</SelectItem>
-                                    <SelectItem value="engineering">工程</SelectItem>
-                                    <SelectItem value="education">教育</SelectItem>
-                                    <SelectItem value="custom">自定义</SelectItem>
+                                    <SelectItem value="legal">{t('domains.legal')}</SelectItem>
+                                    <SelectItem value="medical">{t('domains.medical')}</SelectItem>
+                                    <SelectItem value="finance">{t('domains.finance')}</SelectItem>
+                                    <SelectItem value="artificial-intelligence">
+                                        {t('domains.ai')}
+                                    </SelectItem>
+                                    <SelectItem value="marketing">
+                                        {t('domains.marketing')}
+                                    </SelectItem>
+                                    <SelectItem value="engineering">
+                                        {t('domains.engineering')}
+                                    </SelectItem>
+                                    <SelectItem value="education">
+                                        {t('domains.education')}
+                                    </SelectItem>
+                                    <SelectItem value="custom">{t('domains.custom')}</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
                     </div>
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setShowEditDialog(false)}>
-                            取消
+                            {t('EditDialog.cancel')}
                         </Button>
                         <Button onClick={confirmEdit} disabled={loading || !editForm.name.trim()}>
-                            {loading ? '保存中...' : '保存'}
+                            {loading ? t('EditDialog.saving') : t('EditDialog.save')}
                         </Button>
                     </DialogFooter>
                 </DialogContent>

@@ -1,5 +1,6 @@
 import { getCookie } from 'cookies-next';
 import { APIResponse } from './api';
+import { apiRequestFailureMessage, API_REQUEST_UNAVAILABLE_MESSAGE } from '@/lib/api-request-error';
 import { keysToSnake, keysToCamel, convertDatesToISOStrings } from '@/utils/func';
 // import { HeadersInit, RequestInit } from 'node-fetch';
 // 定义通用的请求函数
@@ -46,24 +47,16 @@ export async function APIRequestWithCredentials<T, B = unknown>(
             fetchOptions
         );
 
-        if (!response.ok) {
-            // 处理非 2xx 响应
-            const errorData = await response.json();
-            const result = errorData.detail.replace(/^\d+: /, ''); // 去掉开头的状态码
-            console.error('错误信息:', result); // 这里可以访问 detail
-            throw new Error(`${result}`);
-        }
+        // Do not trust a remote `detail` field as a browser message. It can
+        // carry framework, proxy, provider, or storage diagnostics. HTTP
+        // status is enough to retain the small actionable public vocabulary.
+        if (!response.ok)
+            return { error: true, message: apiRequestFailureMessage(response.status) };
 
         const data: unknown = await response.json(); // 获取 JSON 格式的响应
         const camelCaseData = keysToCamel(data) as T; // 将下划线命名转换为驼峰命名
         return { data: camelCaseData }; // 返回转换后的数据
-    } catch (error) {
-        console.error('API request error:', error);
-        // 类型保护
-        if (error instanceof Error) {
-            return { error: true, message: error.message };
-        } else {
-            return { error: true, message: '未知错误' };
-        }
+    } catch {
+        return { error: true, message: API_REQUEST_UNAVAILABLE_MESSAGE };
     }
 }

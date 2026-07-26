@@ -69,6 +69,7 @@ export class DiscourseEmbedAgent extends BaseAgent<
             .join('\n\n')}`;
 
         const sourceText = i18n.getUserPrompt('source_text', { text: input.source });
+        const userPref = await this.buildUserPref(input.prompt);
         const currentTranslation = i18n.getAgentPrompt('discourse_embed', 'current_translation', {
             text: input.target,
         });
@@ -89,7 +90,7 @@ export class DiscourseEmbedAgent extends BaseAgent<
         const makeNatural = i18n.getAgentPrompt('discourse_embed', 'make_natural');
         const outputInstruction = i18n.getAgentPrompt('discourse_embed', 'output_instruction');
 
-        const userContent = `${context}\n\n${currentTask}\n${sourceText}\n${currentTranslation}\n\n${optimizationInstruction}\n${preserveOriginalMeaning}\n${learnReferenceStyle}\n${ensureTermConsistency}\n${makeNatural}\n\n${outputInstruction}`;
+        const userContent = `${userPref}${context}\n\n${currentTask}\n${sourceText}\n${currentTranslation}\n\n${optimizationInstruction}\n${preserveOriginalMeaning}\n${learnReferenceStyle}\n${ensureTermConsistency}\n${makeNatural}\n\n${outputInstruction}`;
 
         const messages = this.messages(systemPrompt, userContent);
         return this.text(messages, { maxTokens: 800 });

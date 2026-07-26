@@ -131,137 +131,69 @@ graph TD
 
 ### 前置要求
 
-- **Node.js** ≥ 18.18（推荐使用 `corepack` 管理 Yarn 1.22.22）
-- **Yarn**（通过 `corepack enable` 启用）
+- **Node.js** ≥ 18.18（内含 npm）
+- **Yarn 1.22.22**（可选；需要使用仓库锁文件时通过 `corepack` 启用）
 - **Docker** & **Docker Compose**（用于服务和部署）
 - **Git**
 
 ### 安装依赖
 
 ```bash
-# 启用 corepack 并设置 Yarn
+# 方案 A：启用 Corepack，按仓库 Yarn v1 锁文件安装
 corepack enable
 corepack prepare yarn@1.22.22 --activate
-
-# 安装依赖
 yarn install
+
+# 方案 B（不要与方案 A 同时执行）：npm 同样支持受保护的本地开发脚本
+npm install
 ```
 
-### 环境配置
+### 本地开发（隔离环境）
 
-创建 `.env.local` 文件并填写以下配置：
-
-```env
-# 数据库与缓存
-DATABASE_URL="postgresql://postgres:password@localhost:5432/deeptrans"
-REDIS_URL="redis://valkey:6379"
-
-# 鉴权与站点配置
-AUTH_SECRET="your-secret-key-here"  # 生成方式: openssl rand -base64 32
-NEXTAUTH_URL="http://localhost:3000"
-NODE_ENV=development
-
-# AI 服务配置
-OPENAI_API_KEY="sk-xxxx"
-OPENAI_BASE_URL="https://api.openai.com/v1"
-OPENAI_API_MODEL="gpt-4o-mini"
-
-# 独立聊天/翻译 LLM 配置；未设置时回退到 OPENAI_*。
-# LLM_API_KEY="sk-xxxx"
-# LLM_BASE_URL="https://api.openai.com/v1"
-# LLM_MODEL="gpt-4o-mini"
-
-# Embedding 提供方；EMBEDDING_* 未设置时回退到 OPENAI_*。
-OPENAI_EMBED_MODEL=doubao-embedding-vision-251215
-# EMBEDDING_API_KEY="sk-xxxx"
-# EMBEDDING_BASE_URL="https://api.openai.com/v1"
-# EMBEDDING_API_PATH="/embeddings/multimodal"
-# EMBEDDING_MODEL="doubao-embedding-vision-251215"
-# EMBEDDING_DIMENSIONS=2048
-
-# MinerU 在线 PDF 解析
-MINERU_API_MODE=agent
-MINERU_AGENT_BASE_URL=https://mineru.net/api/v1/agent
-MINERU_API_BASE_URL=https://mineru.net/api/v4
-# MINERU_API_TOKEN="standard-or-precise-mode-token"
-MINERU_MODEL_VERSION=vlm
-MINERU_LANGUAGE=ch
-MINERU_IS_OCR=false
-MINERU_ENABLE_TABLE=true
-MINERU_ENABLE_FORMULA=true
-MINERU_TIMEOUT_MS=300000
-MINERU_POLL_INTERVAL_MS=3000
-# MINERU_PAGE_RANGE=1-20
-# MINERU_DISABLE=false
-
-# 对象存储：MinIO 或腾讯云 COS 二选一
-STORAGE_TYPE=minio
-STORAGE_ENDPOINT=localhost
-STORAGE_PORT=9000
-STORAGE_USE_SSL=false
-STORAGE_ACCESS_KEY=minioadmin
-STORAGE_SECRET_KEY=minioadmin
-STORAGE_BUCKET=deeptrans
-
-# 腾讯云 COS 示例
-# STORAGE_TYPE=cos
-# COS_SECRET_ID=AKIDxxxxxxxx
-# COS_SECRET_KEY=xxxxxxxx
-# COS_BUCKET=deeptrans-1250000000
-# COS_REGION=ap-guangzhou
-
-# 服务配置
-STUDIO_HOST=localhost
-
-# 可选：SMTP 等
-# EMAIL_SERVER=smtps://deeptrans_studio%40163.com:<163客户端授权码>@smtp.163.com:465
-# EMAIL_FROM="DeepTrans Studio <deeptrans_studio@163.com>"
-```
-
-> 💡 **生产提示**：默认数据库镜像是 PostgreSQL 18 + pgvector + PGroonga。PGroonga 是 CJK 关键词检索的必需能力。生产对象存储使用腾讯云 COS；MinIO 只由本地开发 compose 启动。
-> PDF 解析默认使用 MinerU 在线解析器。`MINERU_API_MODE=agent` 使用无需 token 的轻量 agent 接口；`standard`/`precise` 使用需要 token 的 v4 精准解析接口。只有明确需要本地 PDF 文本抽取时才设置 `MINERU_DISABLE=true`。
-
-### 数据库初始化
+本地开发使用 `.env.local` 与 `docker-compose.dev.yml`，不会读取或改写生产 `.env`。数据库、Valkey、MinIO S3 API 与 MinIO Console 都只绑定回环地址，分别使用 `55432`、`56379`、`59002` 和 `59003`；`NEXTAUTH_URL` 必须是端口 `3000` 上的 `http` 回环地址。脚本会拒绝非本机地址、TCP/远程 Docker daemon 或非 `deeptrans_local` 数据库。
 
 ```bash
-# 运行数据库迁移
-yarn prisma migrate deploy
+# 如尚未安装依赖，使用上方的 npm install 或 Yarn v1 方案即可。
 
-# 生成 Prisma Client
-yarn prisma generate
+# 复制安全的本地模板，并把 AUTH_SECRET 改成随机本地值
+cp .env.local.example .env.local
 
-# （可选）导入示例数据
-yarn db:seed
+# 在所有受支持的终端生成仅供本地使用的 AUTH_SECRET，再将输出粘贴到 .env.local。
+# 该命令只打印随机值，不会读取或写入 .env.local；不可复用生产密钥。
+npm run local:secret
+
+# 首次初始化：启动隔离依赖，仅对 deeptrans_local 执行迁移并创建演示账号
+npm run local:setup
+
+# 初始化后执行只读就绪检查
+npm run local:check
+
+# 启动 Web；演示登录使用 test@example.com 和固定验证码 123456（不是密码）
+# （yarn dev 会走同一隔离启动器）
+# 端口 3000 必须空闲：启动器会拒绝 Next 自动切换到 3001，
+# 因为已校验的本地认证和 API 地址固定使用 3000。
+npm run dev
+
+# 翻译记忆导入、向量回填和其他队列工作流需要在另一个终端运行 Worker
+npm run worker
+
+# 可选：在一个终端中同时启动受保护的 Web 与 Worker
+npm run dev:all
 ```
 
-### 开发模式
+首次安装应先运行 `local:setup`，再运行 `local:check`：setup 会自行启动受管依赖、执行迁移、创建演示账号和所属本地存储 bucket。`local:check` 不写入任何数据，并检查 PostgreSQL、Valkey、MinIO 的两个端口是否确属 `deeptrans-local` Compose 项目且精确映射到回环地址，以及本地凭据、存储 bucket 就绪状态和迁移状态。`local:up` 只用于启动已初始化的受管依赖或排查启动问题，不能替代 setup。受保护的 app 与 worker 只接收校验过的本地配置，shell 变量或生产式 `.env` 不能重新启用远程服务。默认禁用 SMTP、COS 和远程 AI；翻译记忆的向量维度固定为 2048。翻译记忆导入、向量回填和其他队列工作流需要 `npm run worker`；Worker 暂不可用时，任务会保留在队列中，待 Worker 就绪后继续。需要远程 AI 时，明确在 `.env.local` 设置 `LOCAL_ALLOW_REMOTE_AI=yes` 及对应本地开发凭据。
 
-**方式一：使用 Docker Compose（推荐）**
+固定的 `test@example.com` / `123456` 演示凭据仅在 `IS_DEMO=yes` 时启用；正常运行环境一律走真实邮箱验证码链路，不会创建或接受该演示账号。
 
-```bash
-# 启动依赖服务
-docker compose up -d db valkey minio
+`npm run dev` 还会检查回环地址上的 `3000` 端口是否被占用；若已有监听进程，脚本会明确失败。不要依赖 Next 自动切换到 `3001`：本地认证和内部 API 地址有意固定在 `3000`。
 
-# 启动 Next.js 开发服务器
-yarn dev
-
-# 访问应用: http://localhost:3000
-```
-
-**方式二：本地服务**
-
-```bash
-# 启动 Next.js 开发服务器
-yarn dev
-
-# 在另一个终端启动 Worker
-yarn worker
-```
+Web 进程启动后，访问 `GET http://localhost:3000/api/health` 会返回 `{ "status": "ok", "scope": "web" }`，这只表示 Web 路由可以响应；它不表示 PostgreSQL、对象存储、Valkey 或 Worker 已就绪。前者仍使用 `npm run local:check`，队列任务还应查看对应工作流状态。
 
 可用界面：
 
 - **Studio**: http://localhost:3000
-- **Prisma Studio**: 运行 `yarn prisma studio`
+- **MinIO Console**: http://127.0.0.1:59003
+- **数据库就绪检查**：运行 `npm run local:check`。直接执行 Prisma CLI 不属于安全的本地启动路径。
 
 ### 生产部署
 
@@ -277,19 +209,50 @@ cp .env.example .env.production
 # COS_BUCKET=deeptrans-1250000000
 # COS_REGION=ap-guangzhou
 
-# 构建镜像，包括 PostgreSQL 18 + pgvector + PGroonga
-docker compose -f docker-compose-prod.yml build db app app_worker
+# 固定 Compose 项目名并显式传入同一份生产环境文件；该文件既用于 Compose
+# 变量替换，也会注入 app、worker 与迁移容器。
+export DEPLOY_ENV_FILE=.env.production
+# 若升级的旧主机只有 .env，请先显式保留 DEPLOY_ENV_FILE=.env；完整复制并核对
+# .env.production 后再切换，且不要提交任一真实环境文件。
+docker compose -p deeptrans-studio --env-file "$DEPLOY_ENV_FILE" -f docker-compose-prod.yml \
+  build db migrate app app_worker
 
-# 部署生产服务。生产环境不启动 MinIO。
-docker compose -f docker-compose-prod.yml up -d traefik app app_worker db valkey
+# 升级前先停止入口和旧 worker；保留 db/valkey，避免旧 worker 在迁移期间继续写入。
+docker compose -p deeptrans-studio --env-file "$DEPLOY_ENV_FILE" -f docker-compose-prod.yml \
+  stop traefik app app_worker
 
-# 服务将在配置的域名上通过 Traefik 提供 SSL 访问
+# 只启动数据库与队列，单独完成迁移；此时不要启动新 app/worker。
+docker compose -p deeptrans-studio --env-file "$DEPLOY_ENV_FILE" -f docker-compose-prod.yml \
+  up -d db valkey
+docker compose -p deeptrans-studio --env-file "$DEPLOY_ENV_FILE" -f docker-compose-prod.yml \
+  run --rm --no-deps migrate
+
+# 仅在从“导入回执/预约”之前的旧版本升级时：先保留 Redis/BullMQ 快照并核查
+# 已被清理的历史任务，再执行审计；下方必须写入不含凭据的快照位置与 SHA-256，
+# 并把审计输出与部署记录一同留存。无回执的旧任务会物化为逐任务的安全门禁。
+# 未完成此步骤，不得启动新 app/worker。
+export LEGACY_QUEUE_SNAPSHOT=/secure-backups/deeptrans-memory-import-before-upgrade.rdb
+export LEGACY_QUEUE_SNAPSHOT_SHA256=replace_with_the_actual_64_character_sha256
+docker compose -p deeptrans-studio --env-file "$DEPLOY_ENV_FILE" -f docker-compose-prod.yml \
+  run --rm --no-deps migrate npx tsx scripts/memory-import-upgrade-audit.ts \
+  --live --apply --legacy-history-proof=queue-snapshot-and-pruned-history-reviewed \
+  --legacy-queue-snapshot="$LEGACY_QUEUE_SNAPSHOT" \
+  --legacy-queue-snapshot-sha256="$LEGACY_QUEUE_SNAPSHOT_SHA256"
+
+# 审计与迁移均成功后，才开放入口、应用和新 worker；生产环境不启动 MinIO。
+docker compose -p deeptrans-studio --env-file "$DEPLOY_ENV_FILE" -f docker-compose-prod.yml \
+  up -d traefik app app_worker
+
+# 服务将在配置的域名上通过 Traefik 提供 SSL 访问。
 ```
+
+`memory-import-upgrade-audit.ts` 未显式传入 `--live` 时拒绝连接数据库和 Redis；只能在上述已停旧 worker 的部署窗口中加入该参数。带 `--live` 时默认仍为只读检查；若仍有旧任务而未加 `--apply`，它会非零退出。它无法凭空恢复已经被 Redis 清理的旧任务，因此 `--apply` 除 `--legacy-history-proof` 外还要求不含凭据的快照位置和 SHA-256；两者会写入审计输出，必须与部署记录一同留存。脚本生成的门禁不会声明旧任务成功；当前记忆库所有者必须核查后逐项解除。旧 job 被升级后的 worker 处理时，即使管理员人工重跑也会被 tombstone 拒绝写入；该门禁无法追溯控制旧镜像或外部队列消费者，因此迁移窗口前必须确认所有旧 worker 均已停止。
 
 生产服务集合：
 
 - `db`：PostgreSQL 18 + pgvector + PGroonga
 - `valkey`：Redis 协议缓存与 BullMQ 运行时
+- `migrate`：一次性 Prisma 迁移门禁，应用启动前必须成功完成
 - `app`：DeepTrans Studio Web 应用
 - `app_worker`：后台任务 worker
 - `traefik`：HTTPS 反向代理
@@ -318,28 +281,35 @@ deeptrans-studio/
 │   └── migrations/             # 数据库迁移文件
 ├── scripts/                    # 开发与工具脚本
 ├── public/                     # 静态资源
-├── docker-compose.yml          # Docker 服务编排
+├── docker-compose.dev.yml      # 隔离的本地 PostgreSQL、Valkey 与 MinIO
+├── docker-compose-prod.yml     # 生产部署服务
+├── docker-compose.yml          # 兼容旧配置；不作为本地启动路径
 ├── Dockerfile                  # 容器镜像定义
 └── package.json                # 项目依赖
 ```
 
 ## 🛠️ 常用脚本
 
-| 命令                | 说明                                          |
-| ------------------- | --------------------------------------------- |
-| `yarn dev`          | 启动 Next.js 开发服务器（热更新）             |
-| `yarn worker`       | 本地启动 Worker 服务（如不使用 Docker）       |
-| `yarn build`        | 构建生产版本 Next.js 应用                     |
-| `yarn build:worker` | 编译 Worker 服务（esbuild → dist/worker.cjs） |
-| `yarn start`        | 启动生产模式 Next.js 服务器                   |
-| `yarn lint`         | 运行 ESLint 代码质量检查                      |
-| `yarn type-check`   | 运行 TypeScript 类型检查                      |
-| `yarn db:studio`    | 打开 Prisma Studio 数据库 GUI                 |
-| `yarn db:migrate`   | 运行数据库迁移                                |
-| `yarn db:push`      | 推送模式变更到数据库                          |
-| `yarn db:seed`      | 导入示例数据到数据库                          |
-| `yarn test:docx`    | 测试文档解析                                  |
-| `yarn queue:ui`     | 启动 Bull Board 队列监控                      |
+| 命令                  | 说明                                                |
+| --------------------- | --------------------------------------------------- |
+| `npm run local:check` | 只读校验隔离本地配置                                |
+| `npm run local:up`    | 为恢复或排查启动已初始化的受管本地依赖              |
+| `npm run local:secret` | 仅打印本地随机 AUTH_SECRET，不读取或写入 `.env.local` |
+| `npm run local:setup` | 仅迁移 `deeptrans_local` 并创建演示账号             |
+| `npm run dev`         | 通过受保护的本地启动器启动 Next.js 热更新服务器     |
+| `npm run worker`      | 启动翻译记忆导入及队列工作流所需的受保护 Worker     |
+| `npm run dev:all`     | 同时启动受保护的 Web 与 Worker                       |
+| `yarn build`          | 构建生产版本 Next.js 应用                           |
+| `yarn build:worker`   | 编译 Worker 服务（esbuild → dist/worker.cjs）       |
+| `yarn start`          | 启动生产模式 Next.js 服务器                         |
+| `yarn lint`           | 运行 ESLint 代码质量检查                            |
+| `yarn type-check`     | 运行 TypeScript 类型检查                            |
+| `yarn db:studio`      | 高级命令：使用当前 shell 环境，不经过本地启动器     |
+| `yarn db:migrate`     | 高级命令；使用当前 shell 数据库，不属于本地开发路径 |
+| `yarn db:push`        | 高级命令；使用当前 shell 数据库，不属于本地开发路径 |
+| `yarn db:seed`        | 高级命令；使用当前 shell 数据库，不属于本地开发路径 |
+| `yarn test:docx`      | 测试文档解析                                        |
+| `yarn queue:ui`       | 启动 Bull Board 队列监控                            |
 
 ## 🌍 国际化
 

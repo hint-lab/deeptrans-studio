@@ -93,6 +93,13 @@ export async function POST(req: NextRequest, ctx: any) {
             );
         }
         lockRedis = await getRedis();
+        const scopedBatchId = scopedProjectBatchId(projectId, batchId);
+        if ((await lockRedis.get(`docTerms.${scopedBatchId}.cancel`)) === '1') {
+            return NextResponse.json(
+                { error: '术语提取已停止，请重新提取后再写入词库' },
+                { status: 409 }
+            );
+        }
         applyLockKey = `project-init:terms-apply-lock:${ownedDocumentId}`;
         applyLockValue = randomUUID();
         const applyLockAcquired = await lockRedis.set(
@@ -112,8 +119,6 @@ export async function POST(req: NextRequest, ctx: any) {
         ) {
             return NextResponse.json({ error: '文档阶段已变化，术语未写入' }, { status: 409 });
         }
-        const scopedBatchId = scopedProjectBatchId(projectId, batchId);
-
         const redis = lockRedis;
         let unique: string[] = [];
         {

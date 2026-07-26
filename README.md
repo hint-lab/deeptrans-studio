@@ -131,137 +131,72 @@ graph TD
 
 ### Prerequisites
 
-- **Node.js** ≥ 18.18 (Recommended: use `corepack` to manage Yarn 1.22.22)
-- **Yarn** (Enable via `corepack enable`)
+- **Node.js** ≥ 18.18 (includes npm)
+- **Yarn 1.22.22** (optional; use `corepack` when you want the repository lockfile)
 - **Docker** & **Docker Compose** (For services and deployment)
 - **Git**
 
 ### Installation
 
 ```bash
-# Enable corepack and setup Yarn
+# Option A: enable Corepack and install from the repository Yarn v1 lockfile
 corepack enable
 corepack prepare yarn@1.22.22 --activate
-
-# Install dependencies
 yarn install
+
+# Option B instead of Option A: npm also supports the guarded local-development scripts
+npm install
 ```
 
-### Environment Configuration
+### Local Development (isolated)
 
-Create `.env.local` file with the following configuration:
-
-```env
-# Database & Cache
-DATABASE_URL="postgresql://postgres:password@localhost:5432/deeptrans"
-REDIS_URL="redis://valkey:6379"
-
-# Authentication & Site
-AUTH_SECRET="your-secret-key-here"  # Generate with: openssl rand -base64 32
-NEXTAUTH_URL="http://localhost:3000"
-NODE_ENV=development
-
-# AI Service Configuration
-OPENAI_API_KEY="sk-xxxx"
-OPENAI_BASE_URL="https://api.openai.com/v1"
-OPENAI_API_MODEL="gpt-4o-mini"
-
-# Dedicated chat/translation LLM config. Falls back to OPENAI_* when unset.
-# LLM_API_KEY="sk-xxxx"
-# LLM_BASE_URL="https://api.openai.com/v1"
-# LLM_MODEL="gpt-4o-mini"
-
-# Embedding provider. EMBEDDING_* falls back to OPENAI_* when unset.
-OPENAI_EMBED_MODEL=doubao-embedding-vision-251215
-# EMBEDDING_API_KEY="sk-xxxx"
-# EMBEDDING_BASE_URL="https://api.openai.com/v1"
-# EMBEDDING_API_PATH="/embeddings/multimodal"
-# EMBEDDING_MODEL="doubao-embedding-vision-251215"
-# EMBEDDING_DIMENSIONS=2048
-
-# MinerU online PDF parser
-MINERU_API_MODE=agent
-MINERU_AGENT_BASE_URL=https://mineru.net/api/v1/agent
-MINERU_API_BASE_URL=https://mineru.net/api/v4
-# MINERU_API_TOKEN="token-for-standard-or-precise-mode"
-MINERU_MODEL_VERSION=vlm
-MINERU_LANGUAGE=ch
-MINERU_IS_OCR=false
-MINERU_ENABLE_TABLE=true
-MINERU_ENABLE_FORMULA=true
-MINERU_TIMEOUT_MS=300000
-MINERU_POLL_INTERVAL_MS=3000
-# MINERU_PAGE_RANGE=1-20
-# MINERU_DISABLE=false
-
-# Object Storage: choose MinIO or Tencent COS
-STORAGE_TYPE=minio
-STORAGE_ENDPOINT=localhost
-STORAGE_PORT=9000
-STORAGE_USE_SSL=false
-STORAGE_ACCESS_KEY=minioadmin
-STORAGE_SECRET_KEY=minioadmin
-STORAGE_BUCKET=deeptrans
-
-# Tencent COS example
-# STORAGE_TYPE=cos
-# COS_SECRET_ID=AKIDxxxxxxxx
-# COS_SECRET_KEY=xxxxxxxx
-# COS_BUCKET=deeptrans-1250000000
-# COS_REGION=ap-guangzhou
-
-# Services
-STUDIO_HOST=localhost
-
-# Optional: SMTP, etc.
-# EMAIL_SERVER=smtps://deeptrans_studio%40163.com:<your-163-authorization-code>@smtp.163.com:465
-# EMAIL_FROM="DeepTrans Studio <deeptrans_studio@163.com>"
-```
-
-> 💡 **Production note**: The default database image is PostgreSQL 18 with pgvector and PGroonga. PGroonga is required for CJK keyword search. Production object storage uses Tencent COS; MinIO is only started by the local development compose file.
-> PDF parsing uses the MinerU online parser by default. `MINERU_API_MODE=agent` uses the lightweight agent endpoint without a token; `standard`/`precise` uses the token-based v4 endpoint. Set `MINERU_DISABLE=true` only when you intentionally want local PDF text extraction.
-
-### Database Setup
+Local development uses `.env.local` and `docker-compose.dev.yml`; it never edits the production-style `.env`. PostgreSQL, Valkey, MinIO's S3 API, and the MinIO Console bind only to loopback ports `55432`, `56379`, `59002`, and `59003`. `NEXTAUTH_URL` must be an `http` loopback URL on port `3000`. The helper rejects a non-local address, TCP/remote Docker daemon, or any database other than `deeptrans_local`.
 
 ```bash
-# Run database migrations
-yarn prisma migrate deploy
+# If dependencies are not installed yet, use either npm install or Yarn v1 above.
 
-# Generate Prisma Client
-yarn prisma generate
+# Create the safe local profile and replace AUTH_SECRET with a random local value
+cp .env.local.example .env.local
 
-# (Optional) Seed with sample data
-yarn db:seed
+# Generate a local-only AUTH_SECRET in every supported shell, then paste it into .env.local.
+# This command only prints a random value; it never reads or writes .env.local.
+npm run local:secret
+
+# First-time setup: starts isolated dependencies, migrates only deeptrans_local,
+# and creates the demo account
+npm run local:setup
+
+# Read-only readiness verification after setup
+npm run local:check
+
+# Start the web app; demo sign-in uses test@example.com and the fixed
+# verification code 123456 (not a password)
+# (yarn dev uses the same isolated runner)
+# Port 3000 must be free: the runner refuses Next's automatic 3001 fallback,
+# because the validated local auth and API URLs intentionally stay on 3000.
+npm run dev
+
+# Translation-memory imports, vector backfills, and other queued workflows
+# require the Worker in another terminal
+npm run worker
+
+# Optional: start the guarded Web app and Worker together in one terminal
+npm run dev:all
 ```
 
-### Development Mode
+For a first install, run `local:setup` before `local:check`: setup starts the owned dependencies itself, applies migrations, creates the demo account, and creates the owned local storage bucket. `local:check` is read-only and verifies that PostgreSQL, Valkey, and both MinIO ports belong to the `deeptrans-local` Compose project and map to the exact loopback ports, then checks local credentials, storage-bucket readiness, and migration status. Use `local:up` only to start already-initialized dependencies or while diagnosing startup; it never replaces setup. The guarded app and worker receive only the validated local profile, so shell variables or a production-style `.env` cannot re-enable remote services. SMTP, COS, and remote AI are disabled by default. The translation-memory vector contract is fixed at 2048 dimensions. Translation-memory imports, vector backfills, and other queued workflows require `npm run worker`; when it is unavailable, queued work remains durable and resumes after the Worker becomes ready. To use remote AI deliberately, set `LOCAL_ALLOW_REMOTE_AI=yes` and provide development-only credentials in `.env.local`.
 
-**Option 1: Using Docker Compose (Recommended)**
+The fixed `test@example.com` / `123456` demo credential is active only when `IS_DEMO=yes`; a normal runtime follows the regular mailbox-verification path and never creates or accepts that demo account.
 
-```bash
-# Start dependency services
-docker compose up -d db valkey minio
+`npm run dev` also refuses to start when port `3000` is already occupied on either loopback family. Do not rely on Next.js choosing `3001`: the local profile deliberately keeps authentication and internal API URLs fixed at port `3000`.
 
-# Start Next.js development server
-yarn dev
-
-# Access the application at http://localhost:3000
-```
-
-**Option 2: Local Services**
-
-```bash
-# Start Next.js dev server
-yarn dev
-
-# In another terminal, start worker
-yarn worker
-```
+After the Web process starts, `GET http://localhost:3000/api/health` returns `{ "status": "ok", "scope": "web" }` only when that process can serve a route. It deliberately does not claim that PostgreSQL, storage, Valkey, or the Worker is ready; use `npm run local:check` and the relevant workflow status for those checks.
 
 Additional UIs:
 
 - **Studio**: http://localhost:3000
-- **Prisma Studio**: Run `yarn prisma studio`
+- **MinIO Console**: http://127.0.0.1:59003
+- **Database readiness**: Run `npm run local:check`. Direct Prisma CLI commands are intentionally not part of the safe local-start path.
 
 ### Production Deployment
 
@@ -277,19 +212,54 @@ cp .env.example .env.production
 # COS_BUCKET=deeptrans-1250000000
 # COS_REGION=ap-guangzhou
 
-# Build images, including PostgreSQL 18 + pgvector + PGroonga
-docker compose -f docker-compose-prod.yml build db app app_worker
+# Use one explicit Compose project and environment file. The same file is passed
+# both for Compose interpolation and into the app/worker/migration containers.
+export DEPLOY_ENV_FILE=.env.production
+# When upgrading a host that only has the legacy .env, explicitly keep
+# DEPLOY_ENV_FILE=.env until the complete production file has been copied and checked.
+docker compose -p deeptrans-studio --env-file "$DEPLOY_ENV_FILE" -f docker-compose-prod.yml \
+  build db migrate app app_worker
 
-# Deploy production services. MinIO is intentionally not started in production.
-docker compose -f docker-compose-prod.yml up -d traefik app app_worker db valkey
+# Stop ingress and the old worker before upgrading. Keep db/valkey available so
+# an old worker cannot write during the migration window.
+docker compose -p deeptrans-studio --env-file "$DEPLOY_ENV_FILE" -f docker-compose-prod.yml \
+  stop traefik app app_worker
 
-# Services will be available on configured domain with SSL via Traefik
+# Start only database and queue services, then run the migration by itself.
+# Do not start the new app/worker yet.
+docker compose -p deeptrans-studio --env-file "$DEPLOY_ENV_FILE" -f docker-compose-prod.yml \
+  up -d db valkey
+docker compose -p deeptrans-studio --env-file "$DEPLOY_ENV_FILE" -f docker-compose-prod.yml \
+  run --rm --no-deps migrate
+
+# Required when upgrading from a version that predates import receipts and
+# reservations. Preserve/review a Redis/BullMQ snapshot before acknowledging
+# pruned history; provide its credential-free reference and SHA-256 below.
+# Retain the audit output with the deployment record. Unresolved legacy jobs
+# become one durable gate per job.
+export LEGACY_QUEUE_SNAPSHOT=/secure-backups/deeptrans-memory-import-before-upgrade.rdb
+export LEGACY_QUEUE_SNAPSHOT_SHA256=replace_with_the_actual_64_character_sha256
+docker compose -p deeptrans-studio --env-file "$DEPLOY_ENV_FILE" -f docker-compose-prod.yml \
+  run --rm --no-deps migrate npx tsx scripts/memory-import-upgrade-audit.ts \
+  --live --apply --legacy-history-proof=queue-snapshot-and-pruned-history-reviewed \
+  --legacy-queue-snapshot="$LEGACY_QUEUE_SNAPSHOT" \
+  --legacy-queue-snapshot-sha256="$LEGACY_QUEUE_SNAPSHOT_SHA256"
+
+# Only after migration and audit succeed, restore ingress, app, and worker.
+# MinIO is intentionally not started in production.
+docker compose -p deeptrans-studio --env-file "$DEPLOY_ENV_FILE" -f docker-compose-prod.yml \
+  up -d traefik app app_worker
+
+# Services will be available on configured domain with SSL via Traefik.
 ```
+
+`memory-import-upgrade-audit.ts` refuses all database/Redis connections unless `--live` is supplied in this stopped deployment window. With `--live`, it is read-only by default and exits non-zero while legacy jobs still need gates. It cannot reconstruct jobs that Redis has already pruned, so `--apply` additionally requires a credential-free snapshot reference and its SHA-256; both are printed in the audit record and must be retained with the deployment. The generated gates do not declare old work successful; the current memory owner must review and release each one. An old job remains write-blocked if it is processed by the upgraded worker even if an administrator manually retries it. The barrier cannot retroactively control an old image or external queue consumer, so verify every old worker is stopped before the migration window.
 
 Production service set:
 
 - `db`: PostgreSQL 18 with pgvector and PGroonga
 - `valkey`: Redis-protocol cache and BullMQ runtime
+- `migrate`: one-shot Prisma migration gate, required before app startup
 - `app`: DeepTrans Studio web application
 - `app_worker`: background worker
 - `traefik`: HTTPS reverse proxy
@@ -318,28 +288,35 @@ deeptrans-studio/
 │   └── migrations/             # Database migration files
 ├── scripts/                    # Development and utility scripts
 ├── public/                     # Static assets
-├── docker-compose.yml          # Docker services orchestration
+├── docker-compose.dev.yml      # Isolated local PostgreSQL, Valkey, and MinIO
+├── docker-compose-prod.yml     # Production deployment services
+├── docker-compose.yml          # Legacy compatibility; not the local-start path
 ├── Dockerfile                  # Container image definition
 └── package.json                # Project dependencies
 ```
 
 ## 🛠️ Available Scripts
 
-| Command             | Description                                        |
-| ------------------- | -------------------------------------------------- |
-| `yarn dev`          | Start Next.js development server with hot reload   |
-| `yarn worker`       | Start worker service locally (if not using Docker) |
-| `yarn build`        | Build production Next.js application               |
-| `yarn build:worker` | Compile worker service (esbuild → dist/worker.cjs) |
-| `yarn start`        | Start production Next.js server                    |
-| `yarn lint`         | Run ESLint code quality checks                     |
-| `yarn type-check`   | Run TypeScript type checking                       |
-| `yarn db:studio`    | Open Prisma Studio database GUI                    |
-| `yarn db:migrate`   | Run database migrations                            |
-| `yarn db:push`      | Push schema changes to database                    |
-| `yarn db:seed`      | Seed database with sample data                     |
-| `yarn test:docx`    | Test document parsing                              |
-| `yarn queue:ui`     | Launch Bull Board queue monitoring                 |
+| Command               | Description                                                                |
+| --------------------- | -------------------------------------------------------------------------- |
+| `npm run local:check` | Read-only validation of the isolated local profile                         |
+| `npm run local:up`    | Start already-initialized owned dependencies for recovery or diagnosis     |
+| `npm run local:secret` | Print a local random AUTH_SECRET without reading or writing `.env.local` |
+| `npm run local:setup` | Migrate only `deeptrans_local` and create the demo account                 |
+| `npm run dev`         | Start the guarded local Next.js server with hot reload                     |
+| `npm run worker`      | Start the guarded local worker required by memory imports and queued work  |
+| `npm run dev:all`     | Start the guarded Web app and Worker together                              |
+| `yarn build`          | Build production Next.js application                                       |
+| `yarn build:worker`   | Compile worker service (esbuild → dist/worker.cjs)                         |
+| `yarn start`          | Start production Next.js server                                            |
+| `yarn lint`           | Run ESLint code quality checks                                             |
+| `yarn type-check`     | Run TypeScript type checking                                               |
+| `yarn db:studio`      | Advanced command; uses the current shell environment, not the local runner |
+| `yarn db:migrate`     | Advanced command; targets the current shell database, not local dev        |
+| `yarn db:push`        | Advanced command; targets the current shell database, not local dev        |
+| `yarn db:seed`        | Advanced command; targets the current shell database, not local dev        |
+| `yarn test:docx`      | Test document parsing                                                      |
+| `yarn queue:ui`       | Launch Bull Board queue monitoring                                         |
 
 ## 🌍 Internationalization
 

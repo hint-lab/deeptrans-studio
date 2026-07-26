@@ -1,128 +1,62 @@
 'use client';
 
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useAgentWorkflowSteps } from '@/hooks/useAgentWorkflowSteps';
-import { useTranslationState } from '@/hooks/useTranslation';
-import { useTranslations } from 'next-intl';
-import React, { useEffect, useRef } from 'react';
-import LoggingPanel from './panels/logging';
-import MtReviewPanel from './panels/mt-review';
-import PostEditPanel from './panels/post-edit';
-import QaReviewPanel from './panels/qa-review';
-import SignoffPanel from './panels/signoff';
+import type { TranslationStage } from '@/store/features/translationSlice';
+import React from 'react';
+import StageWorkbench, { type StageWorkbenchWorkflowContext } from './panels/stage-workbench';
 import MTWorkflowPanel from './panels/workflow-diagram/MTWorkflowPanel';
 import PostEditWorkflowPanel from './panels/workflow-diagram/PostEditWorkflowPanel';
 import QAWorkflowPanel from './panels/workflow-diagram/QAWorkflowPanel';
+import { WorkflowPromptProvider } from './panels/workflow-diagram/prompt-config-provider';
 
-interface TranslationProcessPanelProps {
-    panelTab: string;
-    setPanelTab: (value: string) => void;
-    projectId: string;
+function renderWorkflow({ stage, workflowLabel }: StageWorkbenchWorkflowContext) {
+    const className = 'size-full min-h-0 overflow-hidden rounded-md border bg-background';
+
+    switch (stage) {
+        case 'NOT_STARTED':
+        case 'MT':
+        case 'MT_REVIEW':
+            return (
+                <section
+                    className={className}
+                    aria-label={workflowLabel}
+                    data-workflow-stage={stage}
+                >
+                    <MTWorkflowPanel />
+                </section>
+            );
+        case 'QA':
+        case 'QA_REVIEW':
+            return (
+                <section
+                    className={className}
+                    aria-label={workflowLabel}
+                    data-workflow-stage={stage}
+                >
+                    <QAWorkflowPanel />
+                </section>
+            );
+        case 'POST_EDIT':
+        case 'POST_EDIT_REVIEW':
+            return (
+                <section
+                    className={className}
+                    aria-label={workflowLabel}
+                    data-workflow-stage={stage}
+                >
+                    <PostEditWorkflowPanel />
+                </section>
+            );
+        default:
+            return null;
+    }
 }
 
-export const TranslationProcessPanel: React.FC<TranslationProcessPanelProps> = ({
-    panelTab,
-    setPanelTab,
-    projectId,
-}) => {
-    const t = useTranslations('IDE.translationPanel');
-    const { currentStage } = useTranslationState();
-    const isPERunning = useAgentWorkflowSteps(s => s.isPERunning);
-
-    // 使用 ref 记录上一次的 stage，避免重复触发
-    const prevStageRef = useRef<string | null>(null);
-
-    // 监听 currentStage 变化，自动切换对应的标签页
-    useEffect(() => {
-        const stageToTabMap: Record<string, string> = {
-            NOT_STARTED: 'pre-flow',
-            MT: 'pre-flow',
-            MT_REVIEW: 'mt-review',
-            QA: 'qa-flow',
-            QA_REVIEW: 'qa-review',
-            POST_EDIT: 'post-edit-flow',
-            POST_EDIT_REVIEW: 'post-edit-review',
-            SIGN_OFF: 'signoff',
-            COMPLETED: 'signoff',
-        };
-
-        // 只有当 currentStage 真正发生变化时，才执行切换逻辑
-        if (currentStage && currentStage !== prevStageRef.current) {
-            // 更新 ref
-            prevStageRef.current = currentStage;
-
-            if (stageToTabMap[currentStage]) {
-                const targetTab = stageToTabMap[currentStage];
-                setPanelTab(targetTab);
-            }
-        }
-    }, [currentStage, setPanelTab]); // 移除 panelTab 依赖，切断循环
-
-    // 监听 PE 工作流运行状态 (这也可能导致跳变，建议也加上类似保护，或者作为特例保留)
-    useEffect(() => {
-        if (isPERunning && panelTab !== 'post-edit-flow') {
-            // 这里是否需要保护取决于业务逻辑：PE运行时是否强制用户看流程图？
-            // 如果是，保持原样。如果不是，可以加上类似 prevRunning 的判断。
-            // 目前看似合理，因为运行中看流程图比较直观。
-            setPanelTab('post-edit-flow');
-        }
-    }, [isPERunning, panelTab, setPanelTab]);
-
+export const TranslationProcessPanel: React.FC = () => {
     return (
-        <Tabs value={panelTab} onValueChange={setPanelTab} className="flex h-full flex-col pb-12">
-            <div className="relative z-10 border-b bg-muted/20 px-2">
-                <TabsList className="pointer-events-auto h-9 bg-transparent">
-                    <TabsTrigger value="pre-flow" className="text-xs">
-                        {t('preWorkflow')}
-                    </TabsTrigger>
-                    <TabsTrigger value="mt-review" className="text-xs">
-                        {t('mtReview')}
-                    </TabsTrigger>
-                    <TabsTrigger value="qa-flow" className="text-xs">
-                        {t('qaWorkflow')}
-                    </TabsTrigger>
-                    <TabsTrigger value="qa-review" className="text-xs">
-                        {t('qaReview')}
-                    </TabsTrigger>
-                    <TabsTrigger value="post-edit-flow" className="text-xs">
-                        {t('postEditWorkflow')}
-                    </TabsTrigger>
-                    <TabsTrigger value="post-edit-review" className="text-xs">
-                        {t('postEditReview')}
-                    </TabsTrigger>
-                    <TabsTrigger value="signoff" className="text-xs">
-                        {t('signoff')}
-                    </TabsTrigger>
-                    <TabsTrigger value="output" className="text-xs">
-                        {t('outputLog')}
-                    </TabsTrigger>
-                </TabsList>
+        <WorkflowPromptProvider>
+            <div className="size-full">
+                <StageWorkbench renderWorkflow={renderWorkflow} />
             </div>
-
-            <TabsContent value="pre-flow" className="m-1 flex-1 p-1">
-                <MTWorkflowPanel />
-            </TabsContent>
-            <TabsContent value="mt-review" className="my-1 size-full flex-1">
-                <MtReviewPanel />
-            </TabsContent>
-            <TabsContent value="qa-flow" className="m-0 flex-1 p-0">
-                <QAWorkflowPanel />
-            </TabsContent>
-            <TabsContent value="qa-review" className="my-1 size-full flex-1">
-                <QaReviewPanel />
-            </TabsContent>
-            <TabsContent value="post-edit-flow" className="m-0 flex-1 p-0">
-                <PostEditWorkflowPanel />
-            </TabsContent>
-            <TabsContent value="post-edit-review" className="my-1 h-full flex-1">
-                <PostEditPanel />
-            </TabsContent>
-            <TabsContent value="signoff" className="m-0 flex-1 overflow-auto p-0">
-                <SignoffPanel />
-            </TabsContent>
-            <TabsContent value="output" className="m-0 flex-1 overflow-auto p-0">
-                <LoggingPanel logs={[]} onClear={() => { }} />
-            </TabsContent>
-        </Tabs>
+        </WorkflowPromptProvider>
     );
 };

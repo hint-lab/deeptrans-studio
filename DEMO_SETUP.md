@@ -1,86 +1,53 @@
-## 测试账户
+## 本地演示账号
 
 - **邮箱**: `test@example.com`
-- **验证码**: `123456` (固定验证码,无需发送邮件)
+- **验证码**: `123456`（固定验证码，无需发送邮件）
 
-**重要说明**: 本系统使用**邮箱验证码登录**,而非传统的邮箱+密码登录方式。登录时:
-1. 输入邮箱: `test@example.com`
-2. 输入验证码: `123456` (演示账户使用固定验证码)
-3. 点击登录
+本系统使用邮箱验证码登录，而非邮箱密码登录。演示账号仅用于隔离的本地开发环境。
 
-## 部署步骤
+## 隔离本地演示步骤
 
-### 1. 启动服务
+### 1. 创建本地配置
 
 ```bash
-docker compose up -d
+cp .env.local.example .env.local
+# 使用 npm run local:secret 生成随机的本地值并填入 AUTH_SECRET；不要复制 .env 或生产配置。
 ```
 
-### 2. 创建测试账户
-
-有三种方式创建测试账户:
-
-#### 方式 1: 使用 TypeScript 脚本
+### 2. 启动并初始化受管的本地服务
 
 ```bash
-# 在容器内运行
-docker compose exec app yarn db:seed:demo
+# 启动受管依赖、只迁移 deeptrans_local，并创建演示账号
+npm run local:setup
+
+# 仅在初始化成功后检查服务归属、凭据和迁移状态
+npm run local:check
 ```
 
-#### 方式 2: 使用 SQL 脚本 (推荐)
+### 3. 启动应用
 
 ```bash
-# 创建数据库deeptrans（如需要）
-docker compose exec db psql -U postgres -c "CREATE DATABASE deeptrans;"
-# 创建表结构（如需要）
-docker compose cp prisma/migrations/20251115172210_nn/migration.sql db:/migration.sql
-docker compose exec db psql -U postgres -d deeptrans -f /migration.sql
-# 创建demo账户
-docker compose cp scripts/create-demo-user.sql db:/create-demo-user.sql
-docker compose exec db psql -U postgres -d deeptrans -f /create-demo-user.sql
+# Web 应用（yarn dev 走同一隔离启动器）
+# 端口 3000 必须空闲；本地认证和 API 地址固定在该端口，启动器不会允许 Next 自动改用 3001。
+npm run dev
+
+# 如需后台任务，在另一终端运行
+npm run worker
 ```
 
-或者连接到数据库后手动执行 `scripts/create-demo-user.sql` 中的 SQL。
+访问 `http://localhost:3000`，输入邮箱 `test@example.com` 和固定验证码 `123456` 登录；`123456` 不是密码。
 
-#### 方式 3: 手动在 Prisma Studio 中创建
-
-```bash
-# 打开 Prisma Studio
-docker compose exec app yarn db:studio
-```
-
-然后手动创建用户:
-- email: `test@example.com`
-- name: `Demo User`
-- password: `$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy`
-- emailVerified: 当前时间
-- role: `USER`
-
-### 3. 访问应用
-
-访问 `https://www.deeptrans.studio/` 并使用测试账户登录。
+若只需确认 Web 进程能响应，可访问 `http://localhost:3000/api/health`；返回的 `scope: "web"` 不代表数据库、存储或 Worker 已就绪。
 
 ## 功能限制
 
-在 Demo 模式中:
+在本地演示模式（`.env.local` 中的 `IS_DEMO=yes`）下：
 
 - ✅ 用户可以使用测试账户登录
 - ❌ 用户注册功能已禁用
-- ❌ 登录页面不显示"去注册"链接
+- ❌ 不会发送 SMTP 邮件
 - ℹ️ 登录页面显示测试账户信息
 
-## 与生产模式的区别
+## 生产边界
 
-1. **禁用注册**: 移除了注册入口,防止用户自行注册
-2. **测试账户**: 提供了预配置的测试账户
-3. **UI 调整**: 登录页面显示测试账户信息
-
-## 切换回生产模式
-
-如果需要恢复完整功能:
-
-修改项目.env配置文件中NEXT_PUBLIC_DEMO的值为false后重新构建镜像
-
-```bash
-docker compose up -d --build app app_worker
-```
+本文件只说明隔离本地演示，不用于切换或部署生产环境。生产部署应使用 README 的生产部署流程、独立审核过的生产环境文件和显式 `DEPLOY_ENV_FILE`；不要将 `.env.local`、演示账号或 `IS_DEMO=yes` 带入生产。

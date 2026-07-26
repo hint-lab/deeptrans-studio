@@ -14,8 +14,8 @@ import {
 import { Button } from '@/components/ui/button';
 
 const locales = [
-    { code: 'zh', name: '中文', flag: '' },
-    { code: 'en', name: 'English', flag: '' },
+    { code: 'zh', name: '中文', shortName: '中' },
+    { code: 'en', name: 'English', shortName: 'EN' },
 ];
 
 interface LocaleSwitcherProps {
@@ -49,12 +49,13 @@ export default function LocaleSwitcher({
                         variant === 'dark-bg' ? 'text-white hover:bg-white/10 hover:text-white' : ''
                     }`}
                     disabled={isPending}
+                    aria-label={currentLocale?.name}
                 >
                     <Languages className="mr-1 h-4 w-4" />
                     {!iconOnly && (
                         <>
                             <span className="hidden sm:inline">{currentLocale?.name}</span>
-                            <span className="sm:hidden">{currentLocale?.flag}</span>
+                            <span className="sm:hidden">{currentLocale?.shortName}</span>
                         </>
                     )}
                 </Button>
@@ -66,7 +67,7 @@ export default function LocaleSwitcher({
                         onClick={() => switchTo(loc.code)}
                         className={`cursor-pointer ${locale === loc.code ? 'bg-accent' : ''}`}
                     >
-                        <span className="mr-2">{loc.flag}</span>
+                        <span className="mr-2 text-xs font-medium">{loc.shortName}</span>
                         {loc.name}
                     </DropdownMenuItem>
                 ))}

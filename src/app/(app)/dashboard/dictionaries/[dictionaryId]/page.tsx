@@ -79,7 +79,9 @@ export default function DictionaryDetailPage({
             </div>
             <Separator className="mb-4" />
             <DictionaryEntriesManager
+                key={dictionary.id}
                 dictionary={dictionary}
+                onDictionaryDeleted={() => router.push('/dashboard/dictionaries')}
             />
         </div>
     );

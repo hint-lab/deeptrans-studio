@@ -9,6 +9,7 @@ import {
     guardStatus,
     requireOwnedProject,
     requireOwnedProjectDocument,
+    requireUser,
     requireWritableProject,
 } from '@/lib/guards';
 import {
@@ -30,6 +31,7 @@ import { canWriteDocumentSegmentStatus } from '@/lib/document-init-status';
 import { createLogger } from '@/lib/logger';
 import { getRedis } from '@/lib/redis';
 import { TTL_BATCH, TTL_PROGRESS, setJSONWithTTL, setTextWithTTL } from '@/lib/redis-ttl';
+import { getReadableDocumentSourceUrlForOwner } from '@/server/uploaded-object';
 import { NextRequest, NextResponse } from 'next/server';
 const logger = createLogger(
     {
@@ -119,12 +121,13 @@ export async function POST(req: NextRequest, ctx: any) {
         };
         if (!batchId) return NextResponse.json({ error: 'missing batchId' }, { status: 400 });
 
-        const project = await requireWritableProject(projectIdFromParams);
+        const authCtx = await requireUser();
+        const project = await requireWritableProject(projectIdFromParams, authCtx);
         const scopedBatchId = scopedProjectBatchId(projectIdFromParams, batchId);
         const only = docIdFromReq
-            ? await requireOwnedProjectDocument(projectIdFromParams, docIdFromReq)
+            ? await requireOwnedProjectDocument(projectIdFromParams, docIdFromReq, authCtx)
             : project.documents?.[0];
-        if (!only || !only.url)
+        if (!only || !only.name)
             return NextResponse.json({ error: 'document not found' }, { status: 404 });
         const isPreview = segment?.preview === true;
         if (!isPreview && !canWriteDocumentSegmentStatus(only.status)) {
@@ -146,8 +149,9 @@ export async function POST(req: NextRequest, ctx: any) {
             isPreview ? { isPreview: true, headChars: previewHead, maxParas: 20 } : undefined
         );
         if (!bodyText) {
+            const sourceUrl = await getReadableDocumentSourceUrlForOwner(only.name, authCtx);
             try {
-                const { text } = await extractTextFromUrl(only.url);
+                const { text } = await extractTextFromUrl(sourceUrl);
                 bodyText = String(text || '').trim();
             } catch {}
         }

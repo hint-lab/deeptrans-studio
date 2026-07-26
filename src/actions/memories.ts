@@ -1,11 +1,28 @@
 'use server';
 
-import { embedBatchAction, embedTextAction } from '@/actions/embedding';
+import { embedBatchAction } from '@/actions/embedding';
 import { prisma } from '@/lib/db';
 import { assertEmbeddingBatch } from '@/lib/embedding-contract';
-import { type AuthContext, requireOwnedMemory, requireUser, userOwnedWhere } from '@/lib/guards';
+import {
+    GuardError,
+    type AuthContext,
+    requireOwnedMemory,
+    requireUser,
+    userOwnedWhere,
+} from '@/lib/guards';
 import { createLogger } from '@/lib/logger';
-import { hybridSearch, upsertVectors } from '@/lib/vector/postgres';
+import {
+    EMPTY_TRANSLATION_MEMORY_IMPORT_MESSAGE,
+    hasImportableTranslationMemoryPairs,
+} from '@/lib/memory-import-validation';
+import { parseMemoryImportDelimited } from '@/lib/memory-import-delimited';
+import { createMemoryImportEntriesForCurrentOwner } from '@/lib/memory-import-owner-lock';
+import { sanitizeMemoryLanguageUpdateInput } from '@/lib/memory-language-settings';
+import {
+    MEMORY_SEARCH_UNAVAILABLE_MESSAGE,
+    memorySearchPublicErrorMessage,
+} from '@/lib/memory-search';
+import { upsertVectors } from '@/lib/vector/postgres';
 import { searchMemoryForOwner } from '@/server/memory';
 import { HybridSearchConfig } from '@/types/hybrid-search';
 import { XMLParser } from 'fast-xml-parser';
@@ -21,6 +38,17 @@ const logger = createLogger(
         includeCaller: false, // 日志不包含调用者
     }
 );
+
+/**
+ * Server Actions serialize their return values back to the browser. Keep
+ * database/provider errors in server logs and preserve only explicit guard
+ * messages, which form the small public authorization vocabulary.
+ */
+function memoryActionErrorMessage(error: unknown, fallback: string) {
+    if (error instanceof GuardError) return error.message;
+    logger.error(`[MEMORY_ACTION] ${fallback}`, error);
+    return fallback;
+}
 
 type ImportInput = {
     file: File;
@@ -39,24 +67,13 @@ type ImportInput = {
     }) => void | Promise<void>;
 };
 
-function parseCSV(text: string) {
-    const lines = text.split(/\r?\n/).filter(Boolean);
-    if (lines.length === 0) return [] as Array<{ source: string; target: string; notes?: string }>;
-    const firstLine = lines[0] || '';
-    const headers = firstLine.split(/,|\t/).map(h => h.trim().toLowerCase());
-    const idx = (cands: string[]) => cands.map(c => headers.indexOf(c)).find(i => i >= 0) ?? -1;
-    const si = idx(['source', 'src', '源', '原文']);
-    const ti = idx(['target', 'tgt', '译', '译文']);
-    const ni = idx(['notes', 'note', '备注']);
-    const out: Array<{ source: string; target: string; notes?: string }> = [];
-    for (const line of lines.slice(1)) {
-        const cols = line.split(/,|\t/);
-        const s = si >= 0 ? String(cols[si] ?? '').trim() : '';
-        const t = ti >= 0 ? String(cols[ti] ?? '').trim() : '';
-        const n = ni >= 0 ? String(cols[ni] ?? '').trim() : '';
-        if (s && t) out.push({ source: s, target: t, notes: n || undefined });
-    }
-    return out;
+// The dashboard moved to the durable upload + BullMQ protocol. Keep the old
+// Server Action exported only long enough for stale action references to get a
+// clear response; it must never bypass the receipt-backed worker write path.
+const RETIRED_DIRECT_MEMORY_IMPORT_MESSAGE = '旧版导入协议已停用，请刷新页面后使用后台导入。';
+
+function legacyDirectMemoryImportIsRetired() {
+    return true;
 }
 
 function parseExcel(
@@ -120,6 +137,9 @@ function parseTMX(xml: string, srcPref?: string, tgtPref?: string) {
 
 export async function importMemoryAction(input: ImportInput) {
     const authCtx = await requireUser();
+    if (legacyDirectMemoryImportIsRetired()) {
+        return { success: false, error: RETIRED_DIRECT_MEMORY_IMPORT_MESSAGE } as const;
+    }
     const { file, memoryId, sourceLang, targetLang, sourceKey, targetKey, notesKey, onProgress } =
         input;
     const name = (file as any).name || 'upload';
@@ -138,10 +158,20 @@ export async function importMemoryAction(input: ImportInput) {
     let entries: Array<{ source: string; target: string; notes?: string }> = [];
     if (ext === 'tmx' || ext === 'xml')
         entries = parseTMX(buf.toString('utf-8'), sourceLang, targetLang);
-    else if (ext === 'csv' || ext === 'tsv') entries = parseCSV(buf.toString('utf-8'));
-    else if (ext === 'xlsx' || ext === 'xls')
+    else if (ext === 'csv' || ext === 'tsv') {
+        const parsed = parseMemoryImportDelimited(buf.toString('utf-8'), {
+            format: ext,
+            mapping: { sourceKey, targetKey, notesKey },
+        });
+        if (!parsed.ok) return { success: false, error: parsed.error.message } as const;
+        entries = parsed.pairs;
+    } else if (ext === 'xlsx' || ext === 'xls')
         entries = parseExcel(buf, { sourceKey, targetKey, notesKey });
     else return { success: false, error: '仅支持 TMX/CSV/TSV/XLSX/XLS' } as const;
+
+    if (!hasImportableTranslationMemoryPairs(entries)) {
+        return { success: false, error: EMPTY_TRANSLATION_MEMORY_IMPORT_MESSAGE } as const;
+    }
 
     const batchSize = 200;
     const totalBatches = Math.max(1, Math.ceil(entries.length / batchSize));
@@ -203,22 +233,23 @@ export async function importMemoryAction(input: ImportInput) {
             progress: 80,
             stage: 'vector',
         });
-        const created = await prisma.$transaction(
-            entries.map(e =>
-                (prisma as any).translationMemoryEntry.create({
-                    data: {
-                        memoryId: targetMemoryId!,
-                        sourceText: e.source,
-                        targetText: e.target,
-                        notes: e.notes ?? null,
-                        sourceLang,
-                        targetLang,
-                        createdById: authCtx.userId,
-                        updatedById: authCtx.userId,
-                    },
-                })
-            )
-        );
+        // This legacy progress route performs the same potentially long
+        // embedding work as the queue worker. Re-check and lock ownership at
+        // the final write boundary so an ownership transfer or deletion while
+        // embeddings are generated cannot create rows in a different scope.
+        const created = await createMemoryImportEntriesForCurrentOwner(prisma, {
+            memoryId: targetMemoryId,
+            userId: authCtx.userId,
+            entries: entries.map(e => ({
+                sourceText: e.source,
+                targetText: e.target,
+                notes: e.notes ?? null,
+                sourceLang,
+                targetLang,
+                createdById: authCtx.userId,
+                updatedById: authCtx.userId,
+            })),
+        });
         // 写入 Postgres pgvector embedding（TranslationMemory collection）
         try {
             const points = created.map((row: any, i: number) => ({
@@ -270,6 +301,9 @@ export async function importMemoryFromForm(form: FormData, onProgress?: ImportIn
     'use server';
     try {
         await requireUser();
+        if (legacyDirectMemoryImportIsRetired()) {
+            return { success: false, error: RETIRED_DIRECT_MEMORY_IMPORT_MESSAGE } as const;
+        }
         const file = form.get('file');
         if (!(file instanceof File)) return { success: false, error: '缺少文件（file）' } as const;
         const memoryId = (form.get('memoryId') as string) || undefined;
@@ -288,8 +322,11 @@ export async function importMemoryFromForm(form: FormData, onProgress?: ImportIn
             notesKey,
             onProgress,
         });
-    } catch (e: any) {
-        return { success: false, error: e?.message || String(e) } as const;
+    } catch (error) {
+        return {
+            success: false,
+            error: memoryActionErrorMessage(error, RETIRED_DIRECT_MEMORY_IMPORT_MESSAGE),
+        } as const;
     }
 }
 
@@ -348,8 +385,11 @@ export async function createMemoryAction(input: { name: string; description?: st
             },
         });
         return { success: true, data: mem } as const;
-    } catch (e: any) {
-        return { success: false, error: e?.message || '创建失败' } as const;
+    } catch (error) {
+        return {
+            success: false,
+            error: memoryActionErrorMessage(error, '创建记忆库失败，请稍后重试。'),
+        } as const;
     }
 }
 
@@ -362,8 +402,11 @@ export async function deleteMemoryAction(memoryId: string) {
         await requireOwnedMemory(memoryId, authCtx);
         await (prisma as any).translationMemory.delete({ where: { id: memoryId } });
         return { success: true } as const;
-    } catch (e: any) {
-        return { success: false, error: e?.message || '删除失败' } as const;
+    } catch (error) {
+        return {
+            success: false,
+            error: memoryActionErrorMessage(error, '删除记忆库失败，请稍后重试。'),
+        } as const;
     }
 }
 
@@ -380,9 +423,7 @@ export async function updateMemoryLanguagesAction(
         if (!memoryId) return { success: false, error: '缺少 memoryId' } as const;
         await requireOwnedMemory(memoryId, authCtx);
 
-        const data: any = {};
-        if (input.sourceLang !== undefined) data.sourceLang = input.sourceLang || null;
-        if (input.targetLang !== undefined) data.targetLang = input.targetLang || null;
+        const data = sanitizeMemoryLanguageUpdateInput(input);
         if (!Object.keys(data).length)
             return { success: false, error: '未提供需要更新的字段' } as const;
 
@@ -392,8 +433,11 @@ export async function updateMemoryLanguagesAction(
         });
 
         return { success: true, data: { updated: res.count } } as const;
-    } catch (e: any) {
-        return { success: false, error: e?.message || '更新失败' } as const;
+    } catch (error) {
+        return {
+            success: false,
+            error: memoryActionErrorMessage(error, '更新记忆库设置失败，请稍后重试。'),
+        } as const;
     }
 }
 
@@ -409,8 +453,11 @@ export async function getMemoryByIdAction(memoryId: string) {
         });
         if (!mem) return { success: false, error: '未找到记忆库' } as const;
         return { success: true, data: mem } as const;
-    } catch (e: any) {
-        return { success: false, error: e?.message || '查询失败' } as const;
+    } catch (error) {
+        return {
+            success: false,
+            error: memoryActionErrorMessage(error, '加载记忆库信息失败，请稍后重试。'),
+        } as const;
     }
 }
 
@@ -445,8 +492,11 @@ export async function getMemoryEntriesPagedAction(
             }),
         ]);
         return { success: true, data: items, total, page, pageSize: take } as const;
-    } catch (e: any) {
-        return { success: false, error: e?.message || '获取词条失败' } as const;
+    } catch (error) {
+        return {
+            success: false,
+            error: memoryActionErrorMessage(error, '加载记忆库内容失败，请稍后重试。'),
+        } as const;
     }
 }
 
@@ -470,11 +520,16 @@ export async function searchMemoryInLibraryAction(
     searchConfig?: Partial<HybridSearchConfig>
 ) {
     try {
+        const safeLimit = Math.max(
+            1,
+            Math.min(200, Number.isFinite(limit) ? Math.floor(limit) : 50)
+        );
         const authCtx = await requireUser();
         const hasEntry = (prisma as any).translationMemoryEntry;
         if (!hasEntry)
             return {
-                success: true,
+                success: false,
+                error: MEMORY_SEARCH_UNAVAILABLE_MESSAGE,
                 data: [] as Array<{
                     id: string;
                     sourceText: string;
@@ -486,111 +541,77 @@ export async function searchMemoryInLibraryAction(
         const memory = await requireOwnedMemory(memoryId, authCtx);
         if (!query?.trim()) return { success: true, data: [] as any[] } as const;
 
-        // 使用混合检索（向量 + BM25）
-        try {
-            const qv = await embedTextAction(query);
-            if (Array.isArray(qv) && qv.length) {
-                const hits = await hybridSearch({
-                    collection: 'TranslationMemory',
-                    query,
-                    vector: qv,
-                    memoryId: memory.id,
-                    config: {
-                        finalTopK: Math.max(50, limit * 5), // 多取一些再内存过滤
-                        ...searchConfig,
-                    },
-                });
-
-                // 进一步过滤确保属于指定记忆库
-                const filteredHits = hits.filter(
-                    (h: any) => String(h?.meta?.memoryId || '') === String(memoryId)
-                );
-
-                if (filteredHits.length) {
-                    const take = Math.min(limit, filteredHits.length);
-                    const top = filteredHits.slice(0, take);
-                    const ids = top.map((h: any) => String(h.id));
-                    const rows: Array<{
-                        id: string;
-                        sourceText: string;
-                        targetText: string;
-                        notes?: string | null;
-                    }> = await (prisma as any).translationMemoryEntry.findMany({
-                        where: { id: { in: ids }, memoryId: memory.id },
-                        select: { id: true, sourceText: true, targetText: true, notes: true },
-                    });
-                    const rowMap = new Map(rows.map(r => [r.id, r]));
-                    const merged = top
-                        .map((h: any) => {
-                            const r = rowMap.get(String(h.id));
-                            return r
-                                ? {
-                                      ...r,
-                                      score: Number(h.score || 0),
-                                      searchMode: h.source,
-                                      vectorScore: h.vectorScore,
-                                      keywordScore: h.keywordScore,
-                                  }
-                                : null;
-                        })
-                        .filter(Boolean) as Array<{
-                        id: string;
-                        sourceText: string;
-                        targetText: string;
-                        notes?: string | null;
-                        score?: number;
-                        searchMode?: string;
-                        vectorScore?: number;
-                        keywordScore?: number;
-                    }>;
-
-                    if (merged.length) {
-                        logger.log(
-                            `[SEARCH_LIBRARY] Hybrid search found ${merged.length} results in library ${memoryId}`
-                        );
-                        return { success: true, data: merged, mode: 'hybrid' as const } as const;
-                    }
-                }
-            }
-        } catch (error) {
-            logger.error('[SEARCH_LIBRARY] Hybrid search error:', error);
+        // Keep library search on the same owner-scoped retrieval path as the
+        // API and agents. This is what makes keyword-only, vector-only and
+        // hybrid failures follow the configured semantics everywhere.
+        const result = await searchMemoryForOwner(query, authCtx, {
+            limit: safeLimit,
+            searchConfig,
+            memoryIds: [memory.id],
+        });
+        if (!result.success) {
+            return {
+                success: false,
+                error: result.error || '检索失败',
+                data: [] as any[],
+                configuredMode: result.configuredMode,
+                effectiveMode: result.effectiveMode,
+                unavailableLegs: result.unavailableLegs,
+            } as const;
         }
 
-        // 关键词兜底（限定 memoryId）
-        const t = String(query || '').toLowerCase();
-        const tokens = Array.from(
-            new Set(t.split(/[\s,.;:!?，。；：！、()\[\]{}"'“”‘’<>\-_/]+/).filter(Boolean))
-        ).slice(0, 20);
-        if (!tokens.length) return { success: true, data: [] as any[] } as const;
-        const ors = tokens.map(tok => ({
-            sourceText: { contains: tok, mode: 'insensitive' as const },
-        }));
-        const rows = await (prisma as any).translationMemoryEntry.findMany({
-            where: { memoryId: memory.id, OR: ors },
-            select: { id: true, sourceText: true, targetText: true, notes: true },
-            take: Math.max(50, limit * 3),
-            orderBy: { createdAt: 'desc' },
-        });
-        const tokenSet = new Set(tokens);
-        const scored = rows
-            .map((r: any) => {
-                const text =
-                    `${String(r.sourceText || '')} ${String(r.targetText || '')}`.toLowerCase();
-                const words = text
-                    .split(/[\s,.;:!?，。；：！、()\[\]{}"'“”‘’<>\-_/]+/)
-                    .filter(Boolean);
-                const inter = words.filter((w: string) => tokenSet.has(w));
-                const recall = inter.length / Math.max(1, tokens.length);
-                const precision = inter.length / Math.max(1, words.length);
-                const f1 = (2 * recall * precision) / Math.max(1e-6, recall + precision);
-                const score = 0.6 * recall + 0.4 * f1;
-                return { ...r, score };
+        const ids = result.data.map(entry => entry.id);
+        const rows: Array<{
+            id: string;
+            sourceText: string;
+            targetText: string;
+            notes?: string | null;
+        }> = ids.length
+            ? await (prisma as any).translationMemoryEntry.findMany({
+                  where: { id: { in: ids }, memoryId: memory.id },
+                  select: { id: true, sourceText: true, targetText: true, notes: true },
+              })
+            : [];
+        const rowMap = new Map(rows.map(row => [row.id, row]));
+        const data = result.data
+            .map(entry => {
+                const row = rowMap.get(entry.id);
+                return row
+                    ? {
+                          ...row,
+                          score: entry.score,
+                          searchMode: entry.searchMode,
+                          vectorScore: entry.vectorScore,
+                          keywordScore: entry.keywordScore,
+                      }
+                    : null;
             })
-            .sort((a: any, b: any) => b.score - a.score)
-            .slice(0, limit);
-        return { success: true, data: scored, mode: 'keyword' as const } as const;
-    } catch (e: any) {
-        return { success: false, error: e?.message || '检索失败' } as const;
+            .filter(Boolean);
+
+        logger.log(
+            `[SEARCH_LIBRARY] Found ${data.length} results in library ${memoryId} using ${result.effectiveMode} mode`
+        );
+        return {
+            success: true,
+            data,
+            mode: result.effectiveMode,
+            configuredMode: result.configuredMode,
+            effectiveMode: result.effectiveMode,
+            degraded: result.degraded,
+            unavailableLegs: result.unavailableLegs,
+        } as const;
+    } catch (error) {
+        // Authorization failures are already a small, intentional public
+        // vocabulary. Database/provider failures must not escape a Server
+        // Action merely because this page also sanitizes them in its UI.
+        if (error instanceof GuardError) {
+            return { success: false, error: error.message, data: [] as any[] } as const;
+        }
+        return {
+            success: false,
+            error: memorySearchPublicErrorMessage(error),
+            data: [] as any[],
+        } as const;
     }
 }
 
@@ -688,7 +709,10 @@ export async function backfillMemoryVectorsAction(
             success: true,
             data: { upserted: totalUpserted, remaining: Number(remainingRows[0]?.count || 0) },
         } as const;
-    } catch (e: any) {
-        return { success: false, error: e?.message || '重建向量失败' } as const;
+    } catch (error) {
+        return {
+            success: false,
+            error: memoryActionErrorMessage(error, '重建记忆向量失败，请稍后重试。'),
+        } as const;
     }
 }

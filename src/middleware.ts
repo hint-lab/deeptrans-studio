@@ -35,19 +35,22 @@ async function readAuthToken(request: NextRequest) {
 
 export async function middleware(request: NextRequest) {
     // --- 1. 日志记录设置 ---
-    const logger = createLogger({
-        type: 'middleware:auth',
-        method: request.method,
-        path: request.nextUrl.pathname,
-        ip: request.headers.get('x-forwarded-for') ?? undefined,
-        userAgent: request.headers.get('user-agent') ?? undefined,
-        referer: request.headers.get('referer') ?? undefined,
-    }, {
-        json: false,// 开启json格式输出
-        pretty: false, // 关闭开发环境美化输出
-        colors: true, // 仅当json：false时启用颜色输出可用
-        includeCaller: false, // 日志不包含调用者
-    });
+    const logger = createLogger(
+        {
+            type: 'middleware:auth',
+            method: request.method,
+            path: request.nextUrl.pathname,
+            ip: request.headers.get('x-forwarded-for') ?? undefined,
+            userAgent: request.headers.get('user-agent') ?? undefined,
+            referer: request.headers.get('referer') ?? undefined,
+        },
+        {
+            json: false, // 开启json格式输出
+            pretty: false, // 关闭开发环境美化输出
+            colors: true, // 仅当json：false时启用颜色输出可用
+            includeCaller: false, // 日志不包含调用者
+        }
+    );
     const token = await readAuthToken(request);
     const { pathname } = request.nextUrl;
 
@@ -55,6 +58,9 @@ export async function middleware(request: NextRequest) {
     const publicPaths = [
         '/',
         '/docs',
+        // This is a process-only liveness probe. It never represents database,
+        // storage, queue, or Worker readiness.
+        '/api/health',
         '/api/auth/verify-email',
         '/api/auth/send-email',
         '/api/auth/register',

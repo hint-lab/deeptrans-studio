@@ -46,16 +46,21 @@ const guardMarkers = [
 
 const criticalRoutes: Record<string, string[]> = {
     'src/app/api/chat/route.ts': ['requireUser'],
-    'src/app/api/dictionary/lookup/route.ts': ['requireUser', 'ownedWhere'],
+    'src/app/api/chat/agent/route.ts': ['requireUser', 'runChatAgentForOwner'],
+    'src/app/api/dictionary/lookup/route.ts': [
+        'requireUser',
+        'queryDictionaryEntriesExactWithOwner',
+    ],
     'src/app/api/document/preview/[itemId]/route.ts': ['requireOwnedDocumentItem'],
     'src/app/api/export/markdown/route.ts': ['requireOwnedDocument'],
     'src/app/api/export/word/route.ts': ['requireOwnedDocument'],
     'src/app/api/items/[id]/workflow/route.ts': ['requireWritableDocumentItem'],
     'src/app/api/memories/hybrid-search/route.ts': ['requireUser'],
+    'src/app/api/memories/export/route.ts': ['requireUser', 'requireOwnedMemory'],
     'src/app/api/memories/import/route.ts': ['requireUser', 'requireOwnedMemory'],
     'src/app/api/memories/import-progress/route.ts': ['requireUser'],
     'src/app/api/projects/[id]/delete/route.ts': ['requireWritableProject'],
-    'src/app/api/projects/[id]/dictionaries/route.ts': ['requireOwnedProject'],
+    'src/app/api/projects/[id]/dictionaries/route.ts': ['requireWritableProject'],
     'src/app/api/projects/[id]/doc/route.ts': ['requireOwnedProject'],
     'src/app/api/projects/[id]/init/route.ts': ['requireWritableProject'],
     'src/app/api/projects/[id]/parse/route.ts': [
@@ -166,11 +171,13 @@ checks.push({
     detail: unguardedActionExports.join(', '),
 });
 
-const unguardedApiRoutes = listFiles('src/app/api', rel => rel.endsWith('route.ts')).filter(file => {
-    if (file.startsWith('src/app/api/auth/')) return false;
-    const text = read(file);
-    return /^export async function/m.test(text) && !includesAny(text, guardMarkers);
-});
+const unguardedApiRoutes = listFiles('src/app/api', rel => rel.endsWith('route.ts')).filter(
+    file => {
+        if (file.startsWith('src/app/api/auth/')) return false;
+        const text = read(file);
+        return /^export async function/m.test(text) && !includesAny(text, guardMarkers);
+    }
+);
 checks.push({
     ok: unguardedApiRoutes.length === 0,
     label: 'all non-auth api routes have guard markers',
@@ -203,6 +210,17 @@ checks.push({
     detail: unguardedApiMethods.join(', '),
 });
 
+const unsafeHtmlSinks = listFiles('src', rel => /\.(ts|tsx)$/.test(rel)).filter(file => {
+    if (file.endsWith('.test.ts') || file.endsWith('.test.tsx')) return false;
+    if (file === 'src/components/sanitized-html.tsx') return false;
+    return read(file).includes('dangerouslySetInnerHTML');
+});
+checks.push({
+    ok: unsafeHtmlSinks.length === 0,
+    label: 'untrusted HTML rendering is centralized behind SanitizedHtml',
+    detail: unsafeHtmlSinks.join(', '),
+});
+
 const forbiddenPatterns: Array<{ label: string; pattern: RegExp; files: string[] }> = [
     {
         label: 'src/actions exported owner/internal entrypoints',
@@ -219,7 +237,7 @@ const forbiddenPatterns: Array<{ label: string; pattern: RegExp; files: string[]
     {
         label: 'client supplied tenant/user action scope',
         pattern:
-            /lookupDictionaryAction\([^)]*,|runPreTranslateAction\([\s\S]{0,200}userId|searchMemoryAction\([\s\S]{0,160}(tenantId|userId)|createDictionaryAction\([\s\S]{0,180}(tenantId|userId)|bulkUpsertEntriesAction\([\s\S]{0,180}userId|tenantId:\s*params\?|tenantId:\s*\(activeDocumentItem/,
+            /lookupDictionaryAction\([^)]*,\s*\{[^}]*\b(?:tenantId|userId)\b|runPreTranslateAction\([\s\S]{0,200}userId|searchMemoryAction\([\s\S]{0,160}(tenantId|userId)|createDictionaryAction\([\s\S]{0,180}(tenantId|userId)|bulkUpsertEntriesAction\([\s\S]{0,180}userId|tenantId:\s*params\?|tenantId:\s*\(activeDocumentItem/,
         files: ['src/app', 'src/actions'],
     },
     {
@@ -392,26 +410,26 @@ checks.push({
 
 const isolationSmokeText = read('scripts/security-isolation-smoke.ts');
 checks.push({
-  ok:
-    isolationSmokeText.includes('requireWritableProject') &&
+    ok:
+        isolationSmokeText.includes('requireWritableProject') &&
         isolationSmokeText.includes('requireWritableDocument') &&
         isolationSmokeText.includes('requireWritableDocumentItem') &&
         isolationSmokeText.includes('same tenant cannot write project dictionary'),
-  label: 'security isolation smoke covers readable-vs-writable boundaries',
+    label: 'security isolation smoke covers readable-vs-writable boundaries',
 });
 
 const tenancyPlan = read('SECURITY_TENANCY_PLAN.md');
 checks.push({
-  ok:
-    tenancyPlan.includes('Do not use tenant match as write permission') &&
-    tenancyPlan.includes('requireWritableProject') &&
-    tenancyPlan.includes('ProjectMember'),
-  label: 'tenant permission plan documents write boundaries',
+    ok:
+        tenancyPlan.includes('Do not use tenant match as write permission') &&
+        tenancyPlan.includes('requireWritableProject') &&
+        tenancyPlan.includes('ProjectMember'),
+    label: 'tenant permission plan documents write boundaries',
 });
 
 checks.push({
-  ok:
-    packageJson.scripts?.['security:verify'] === 'tsx scripts/security-verify.ts' &&
+    ok:
+        packageJson.scripts?.['security:verify'] === 'tsx scripts/security-verify.ts' &&
         read('scripts/security-verify.ts').includes('DATABASE_URL') &&
         read('scripts/security-verify.ts').includes('tenant:backfill') &&
         read('scripts/security-verify.ts').includes('security:isolation-smoke'),
@@ -435,6 +453,29 @@ checks.push({
     label: 'tenant ownership backfill is registered and write-gated',
 });
 
+const memoryImportUpgradeAudit = read('scripts/memory-import-upgrade-audit.ts');
+const memoryImportAuditLiveGuard = memoryImportUpgradeAudit.indexOf('if (!live)');
+const memoryImportAuditPrismaConnection = memoryImportUpgradeAudit.indexOf(
+    'const prisma = new PrismaClient()'
+);
+const memoryImportAuditRedisConnection = memoryImportUpgradeAudit.indexOf('new IORedis(');
+checks.push({
+    ok:
+        packageJson.scripts?.['memory-import:upgrade:audit'] ===
+            'tsx scripts/memory-import-upgrade-audit.ts' &&
+        memoryImportUpgradeAudit.includes("process.argv.includes('--live')") &&
+        memoryImportUpgradeAudit.includes("process.argv.includes('--apply')") &&
+        memoryImportUpgradeAudit.includes('LEGACY_HISTORY_PROOF') &&
+        memoryImportUpgradeAudit.includes('LEGACY_SNAPSHOT_REFERENCE_PREFIX') &&
+        memoryImportUpgradeAudit.includes('LEGACY_SNAPSHOT_SHA256_PREFIX') &&
+        memoryImportUpgradeAudit.includes('translationMemoryImportAmbiguity.create') &&
+        memoryImportUpgradeAudit.includes('queue-snapshot-and-pruned-history-reviewed') &&
+        memoryImportAuditLiveGuard >= 0 &&
+        memoryImportAuditLiveGuard < memoryImportAuditPrismaConnection &&
+        memoryImportAuditLiveGuard < memoryImportAuditRedisConnection,
+    label: 'legacy memory-import upgrade audit is registered and write-gated',
+});
+
 const memoryImportRoute = read('src/app/api/memories/import/route.ts');
 checks.push({
     ok:
@@ -444,12 +485,68 @@ checks.push({
 });
 
 const workerText = read('src/worker/index.ts');
+const memoryImportOwnerLock = read('src/lib/memory-import-owner-lock.ts');
+const memoryImportActions = read('src/actions/memories.ts');
+const memoryImportStatusRoute = read('src/app/api/memories/import/status/route.ts');
+const memoryImportProgressRoute = read('src/app/api/memories/import-progress/route.ts');
+const memoryImportAcknowledgeRoute = read('src/app/api/memories/import/acknowledge/route.ts');
+const dictionaryService = read('src/server/dictionary.ts');
 checks.push({
     ok:
         workerText.includes('startsWith(`users/${userId}/uploads/`)') &&
         workerText.includes('where: { id: memoryId, userId }') &&
-        workerText.includes('translationMemoryEntry.create'),
-    label: 'memory import worker verifies owner and writes TranslationMemoryEntry',
+        workerText.includes('commitMemoryImportWithReceiptForCurrentOwner(prisma, {') &&
+        workerText.includes('upsertTranslationMemoryVectorsWithClient(transaction, points)') &&
+        memoryImportOwnerLock.includes('AND "userId" = ${userId}') &&
+        memoryImportOwnerLock.includes('FOR UPDATE') &&
+        memoryImportOwnerLock.includes('transaction.translationMemoryEntry.createMany') &&
+        memoryImportOwnerLock.includes('transaction.translationMemoryImportReceipt.create'),
+    label: 'memory import worker verifies owner and atomically commits entries, vectors, and a receipt',
+});
+
+checks.push({
+    ok:
+        memoryImportRoute.includes('reserveMemoryImportForCurrentOwner(prisma, reservationInput)') &&
+        memoryImportRoute.includes('resolveMemoryImportAsUnconfirmedForCurrentOwner') &&
+        memoryImportRoute.includes('MEMORY_IMPORT_RECEIPT_PROTOCOL_VERSION') &&
+        memoryImportRoute.includes("if (state === 'completed')") &&
+        memoryImportStatusRoute.includes('receiptForCurrentOwner') &&
+        memoryImportStatusRoute.includes('requireOwnedMemory(receipt.memoryId, authCtx)') &&
+        memoryImportStatusRoute.includes("if (state === 'completed')") &&
+        memoryImportStatusRoute.includes('translationMemoryImportReservation.findFirst') &&
+        memoryImportStatusRoute.includes("if (!reservation) throw new GuardError(404") &&
+        memoryImportStatusRoute.includes('resolveMemoryImportAsUnconfirmedForCurrentOwner') &&
+        memoryImportStatusRoute.includes('usesMemoryImportReceiptProtocol') &&
+        memoryImportStatusRoute.includes('MEMORY_IMPORT_COMPLETION_UNCONFIRMED_CODE') &&
+        memoryImportAcknowledgeRoute.includes('requireOwnedMemory(memoryId, authCtx)') &&
+        memoryImportAcknowledgeRoute.includes('acknowledgeMemoryImportAmbiguityForCurrentOwner') &&
+        memoryImportAcknowledgeRoute.includes("state !== 'completed' && state !== 'failed'") &&
+        memoryImportOwnerLock.includes('MEMORY_IMPORT_UNCONFIRMED_GATE_ERROR') &&
+        memoryImportOwnerLock.includes('MEMORY_IMPORT_ACKNOWLEDGED_TOMBSTONE_ERROR') &&
+        memoryImportOwnerLock.includes('findMemoryImportAmbiguityByJob') &&
+        memoryImportOwnerLock.includes('requireReservation?: boolean') &&
+        !memoryImportStatusRoute.includes('requestedMemoryId') &&
+        !memoryImportStatusRoute.includes('recordImportAmbiguity') &&
+        !memoryImportStatusRoute.includes("result: state === 'completed' ? job.returnvalue : null"),
+    label: 'memory import recovery uses a memory-scoped reservation and durable gate',
+});
+
+checks.push({
+    ok:
+        memoryImportProgressRoute.includes('status: 410') &&
+        memoryImportProgressRoute.includes("Deprecation: 'true'") &&
+        !memoryImportProgressRoute.includes('importMemoryFromForm') &&
+        memoryImportActions.includes('legacyDirectMemoryImportIsRetired()') &&
+        memoryImportActions.includes('RETIRED_DIRECT_MEMORY_IMPORT_MESSAGE'),
+    label: 'legacy streaming memory import cannot bypass the durable queue path',
+});
+
+checks.push({
+    ok:
+        dictionaryService.includes('buildDictionaryLookupScopes(authCtx, projectDictionaryIds)') &&
+        dictionaryService.includes('where: { id, ...ownedProjectWhere(owner) }') &&
+        dictionaryService.includes('projectDictionaries:'),
+    label: 'project dictionary lookup is resolved from an authorized exact project binding',
 });
 
 const guardsText = read('src/lib/guards.ts');
@@ -472,7 +569,9 @@ checks.push({
         writableDictionaryGuard.includes('userId: ctx.userId') &&
         writableDictionaryGuard.includes('tenantId: ctx.tenantId ?? null') &&
         writableDictionaryGuard.includes('projectBindings:') &&
-        writableDictionaryGuard.includes('project: {\n                            userId: ctx.userId'),
+        writableDictionaryGuard.includes(
+            'project: {\n                            userId: ctx.userId'
+        ),
     label: 'writable guards are user-owner scoped',
 });
 

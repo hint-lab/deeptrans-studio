@@ -1,4 +1,4 @@
-import { createSlice } from '@reduxjs/toolkit';
+import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
 
 interface SidebarState {
     isOpen: boolean;
@@ -15,8 +15,11 @@ export const sidebarSlice = createSlice({
         toggle: state => {
             state.isOpen = !state.isOpen;
         },
+        setOpen: (state, action: PayloadAction<boolean>) => {
+            state.isOpen = action.payload;
+        },
     },
 });
 
-export const { toggle } = sidebarSlice.actions;
+export const { setOpen, toggle } = sidebarSlice.actions;
 export default sidebarSlice.reducer;

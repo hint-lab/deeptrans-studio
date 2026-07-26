@@ -1,55 +1,21 @@
-import { NextRequest } from 'next/server';
-import { importMemoryFromForm } from '@/actions/memories';
+import { NextResponse } from 'next/server';
 import { requireUser } from '@/lib/guards';
 
-export async function POST(req: NextRequest) {
+/**
+ * Replaced by the durable upload + queue protocol at `/api/memories/import`.
+ * Keeping this route as an explicit authenticated 410 prevents old tabs from
+ * silently reaching the former streaming, non-idempotent write path.
+ */
+export async function POST() {
     await requireUser();
-    const encoder = new TextEncoder();
-    const encodeEvent = (payload: Record<string, unknown>) =>
-        encoder.encode(`data: ${JSON.stringify(payload)}\n\n`);
-
-    const stream = new ReadableStream({
-        async start(controller) {
-            try {
-                const formData = await req.formData();
-
-                // 解析文件和参数
-                const file = formData.get('file') as File;
-                if (!file) {
-                    controller.enqueue(encodeEvent({ type: 'error', error: '缺少文件' }));
-                    controller.close();
-                    return;
-                }
-
-                const result = await importMemoryFromForm(formData, event => {
-                    controller.enqueue(encodeEvent(event));
-                });
-
-                controller.enqueue(
-                    encodeEvent({
-                        type: 'complete',
-                        result,
-                        stage: 'complete',
-                    })
-                );
-            } catch (error: any) {
-                controller.enqueue(
-                    encodeEvent({
-                        type: 'error',
-                        error: error.message || '导入失败',
-                    })
-                );
-            } finally {
-                controller.close();
-            }
+    return NextResponse.json(
+        {
+            success: false,
+            error: '旧版导入协议已停用，请刷新页面后使用后台导入。',
         },
-    });
-
-    return new Response(stream, {
-        headers: {
-            'Content-Type': 'text/event-stream',
-            'Cache-Control': 'no-cache',
-            Connection: 'keep-alive',
-        },
-    });
+        {
+            status: 410,
+            headers: { Deprecation: 'true' },
+        }
+    );
 }

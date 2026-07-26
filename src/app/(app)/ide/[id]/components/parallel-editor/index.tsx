@@ -17,10 +17,7 @@ import {
     lookupDictionaryAction,
 } from '@/actions/pre-translate';
 import { runQualityAssureAction } from '@/actions/quality-assure';
-import {
-    recordGoToNextTranslationProcessEventAction,
-    recordGoToPreviousTranslationStageAction,
-} from '@/actions/translation-process-event';
+import { recordGoToNextTranslationProcessEventAction } from '@/actions/translation-process-event';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -28,6 +25,7 @@ import { useActiveDocumentItem } from '@/hooks/useActiveDocumentItem';
 import { useAgentWorkflowSteps } from '@/hooks/useAgentWorkflowSteps';
 import { useBottomPanel } from '@/hooks/useBottomPanel';
 import { useExplorerTabs } from '@/hooks/useExplorerTabs';
+import { getTargetEditorInstance } from '@/hooks/useEditor';
 import { useLogger } from '@/hooks/useLogger';
 import { useRunningState } from '@/hooks/useRunning';
 import {
@@ -36,9 +34,24 @@ import {
     useTranslationState,
 } from '@/hooks/useTranslation';
 import { createLogger } from '@/lib/logger';
+import {
+    completePostEditOutcome,
+    failedPostEditOutcome,
+    type PostEditOutcomePhase,
+} from '@/lib/post-edit-query-outcome';
+import {
+    canLeaveCurrentPostEditDraft,
+    POST_EDIT_DRAFT_DISCARD_MESSAGE,
+} from '@/lib/post-edit-draft-navigation';
 import { cn } from '@/lib/utils';
-import MarkdownPreview from '@uiw/react-markdown-preview';
-import { ChevronLeft, ChevronRight, PanelBottomClose, PanelBottomOpen } from 'lucide-react';
+import {
+    ChevronLeft,
+    ChevronRight,
+    Columns,
+    PanelBottomClose,
+    PanelBottomOpen,
+    Rows,
+} from 'lucide-react';
 import { useSession } from 'next-auth/react';
 import { useLocale, useTranslations } from 'next-intl';
 import { useParams } from 'next/navigation';
@@ -95,6 +108,7 @@ function TranslationPendingPlaceholder({ label }: { label: string }) {
 
 export default function ParallelEditor({ className }: { className?: string }) {
     const t = useTranslations('IDE.parallelEditor');
+    const rightSidebarT = useTranslations('IDE.rightSidebar');
     const locale = useLocale();
     const {
         contentItemId,
@@ -118,6 +132,8 @@ export default function ParallelEditor({ className }: { className?: string }) {
         setQAOutputs,
         setQASyntaxEmbedded,
         setPosteditOutputs,
+        setPosteditOutcome,
+        clearPosteditOutcome,
         setPreStep,
         setQAStep,
         setPeStep,
@@ -127,26 +143,34 @@ export default function ParallelEditor({ className }: { className?: string }) {
         preTermEnabled,
     } = useAgentWorkflowSteps();
     const params = useParams();
-    const [panelTab, setPanelTab] = useState<string>('pre-flow');
     const projectId = Array.isArray(params?.id) ? params.id[0] : params?.id;
     const { data: session } = useSession();
     const userId = session?.user?.id;
     const [sourceLoading, setSourceLoading] = useState<boolean>(false);
     const contentLoadRef = useRef(0);
+    const baselineRequestRef = useRef(0);
+    const postEditRequestRef = useRef(0);
     const activeItemIdRef = useRef(String(activeDocumentItem?.id || ''));
     const sourceTextRef = useRef(String(sourceText || ''));
     const targetTextRef = useRef(String(targetText || ''));
+    const currentStageRef = useRef(currentStage);
     activeItemIdRef.current = String(activeDocumentItem?.id || '');
     sourceTextRef.current = String(sourceText || '');
     targetTextRef.current = String(targetText || '');
+    currentStageRef.current = currentStage;
 
-    const runTranslate = async () => {
+    const runTranslate = async (
+        options: { expectedTargetText?: string; preTranslateRunId?: string } = {}
+    ) => {
         if (!activeDocumentItem?.id) return;
         const itemId = String(activeDocumentItem.id);
         if (contentItemId !== itemId || sourceLoading) {
             toast.error('当前分段仍在加载，请加载完成后再启动预翻译');
             throw new Error('当前分段内容尚未加载完成');
         }
+        // A generated baseline is only a provisional preview. Once formal MT
+        // starts, any late baseline response must no longer be allowed to write.
+        baselineRequestRef.current += 1;
         const inputText = String(sourceText || '');
         const isCurrentItem = () =>
             activeItemIdRef.current === itemId && sourceTextRef.current === inputText;
@@ -162,7 +186,7 @@ export default function ParallelEditor({ className }: { className?: string }) {
             logSystem('开始术语抽取');
 
             // 创建工作流事件: 术语提取开始
-            const terms = await extractMonolingualTermsAction(inputText, { prompt: undefined });
+            const terms = await extractMonolingualTermsAction(inputText);
 
             // 完成工作流事件: 术语提取
             setPreStep('dict-lookup');
@@ -175,7 +199,9 @@ export default function ParallelEditor({ className }: { className?: string }) {
             logger.debug('提取的术语:', termStrings);
             // 可按需使用已启用术语映射：preTermEnabled
             const termCandidates = termStrings.slice(0, 50).map(t => ({ term: t, score: 1.0 }));
-            const dict = await lookupDictionaryAction(termCandidates);
+            const dict = await lookupDictionaryAction(termCandidates, {
+                projectId: typeof projectId === 'string' ? projectId : undefined,
+            });
 
             // 完成工作流事件: 词典查询
             setPreStep('term-embed-trans');
@@ -188,6 +214,9 @@ export default function ParallelEditor({ className }: { className?: string }) {
                 dict
             );
             logger.debug('翻译结果:', translation);
+            if (!String(translation || '').trim()) {
+                throw new Error('预翻译未返回有效译文，无法进入人工复核');
+            }
 
             // Persist before marking the result as visible/applied. A failed write
             // must not leave an apparently successful translation in the editor.
@@ -200,11 +229,13 @@ export default function ParallelEditor({ className }: { className?: string }) {
                         embedded: translation,
                         targetText: translation,
                     },
-                    inputText
+                    inputText,
+                    options.expectedTargetText,
+                    options.preTranslateRunId
                 );
                 logInfo('预翻译结果已保存到数据库');
             } catch (error) {
-                logger.error(`保存预翻译结果失败: ${error}`);
+                logger.error('保存预翻译结果失败');
                 throw error;
             }
             if (isCurrentItem()) {
@@ -221,7 +252,7 @@ export default function ParallelEditor({ className }: { className?: string }) {
             // 记录 MT 阶段成功完成
             await recordGoToNextTranslationProcessEventAction(itemId, 'MT', 'AGENT', 'SUCCESS');
         } catch (error) {
-            logger.error(`单例翻译失败: ${error}`);
+            logger.error('单例翻译失败');
 
             // 记录 MT 阶段失败
             await recordGoToNextTranslationProcessEventAction(itemId, 'MT', 'AGENT', 'FAILED');
@@ -234,37 +265,56 @@ export default function ParallelEditor({ className }: { className?: string }) {
 
     const undoTranslate = async () => {
         if (!activeDocumentItem?.id) return;
+        const itemId = String(activeDocumentItem.id);
+        if (contentItemId !== itemId || sourceLoading) {
+            throw new Error('当前分段内容尚未加载完成');
+        }
+        const inputSource = String(sourceText || '');
+        const inputTarget = String(targetText || '');
+        const isCurrentItem = () =>
+            activeItemIdRef.current === itemId &&
+            sourceTextRef.current === inputSource &&
+            targetTextRef.current === inputTarget;
+
         try {
             logAgent('MT');
-            await new Promise(r => setTimeout(r, 300));
             logSystem('撤销单例翻译');
-            setTargetTranslationText('');
-
-            // 清空 useAgentWorkflowSteps 状态
-            setPreOutputs(undefined);
-
-            // 保存预翻译结果到数据库
-            try {
-                await savePreTranslateResultsAction(activeDocumentItem.id, {
+            // Persist first with the source snapshot that the user reviewed.
+            // A failed write must leave the visible translation and its stage
+            // untouched so the user can retry without losing work.
+            await savePreTranslateResultsAction(
+                itemId,
+                {
                     terms: [],
                     dict: [],
                     embedded: '',
                     targetText: '',
-                });
-                logInfo('单例翻译结果已撤销');
-            } catch (error) {
-                logger.error(`撤销单例翻译结果失败: ${error}`);
+                },
+                inputSource,
+                inputTarget
+            );
+            if (isCurrentItem()) {
+                setTargetTranslationText('');
+                setPreOutputs(undefined);
             }
             logInfo('单例翻译结果已撤销');
         } catch (error) {
-            logger.error(`撤销单例翻译失败: ${error}`);
-        } finally {
+            logger.error('撤销单例翻译失败');
+            throw error;
         }
     };
 
-    const runQA = async () => {
+    const runQA = async (options: {
+        expectedSourceText: string;
+        expectedTargetText: string;
+        qaRunId: string;
+    }) => {
         if (!activeDocumentItem?.id) return;
         const itemId = String(activeDocumentItem.id);
+        const qaRunId = String(options.qaRunId || '').trim();
+        if (!qaRunId) {
+            throw new Error('质检运行标识缺失，请刷新后重试');
+        }
         if (contentItemId !== itemId || sourceLoading) {
             toast.error('当前分段仍在加载，请加载完成后再启动质检');
             throw new Error('当前分段内容尚未加载完成');
@@ -275,6 +325,12 @@ export default function ParallelEditor({ className }: { className?: string }) {
         }
         const inputSource = String(sourceText || '');
         const inputTarget = String(targetText || '');
+        if (inputSource !== String(options.expectedSourceText || '')) {
+            throw new Error('当前分段原文已变化，已取消过期质检运行');
+        }
+        if (inputTarget !== String(options.expectedTargetText || '')) {
+            throw new Error('当前分段译文已变化，已取消过期质检运行');
+        }
         const isCurrentItem = () =>
             activeItemIdRef.current === itemId &&
             sourceTextRef.current === inputSource &&
@@ -291,8 +347,8 @@ export default function ParallelEditor({ className }: { className?: string }) {
             // 记录 QA 阶段开始
             try {
                 await recordGoToNextTranslationProcessEventAction(itemId, 'QA', 'AGENT', 'STARTED');
-            } catch (eventError) {
-                logger.warn(`QA 已启动，但开始事件记录失败: ${eventError}`);
+            } catch {
+                logger.warn('QA 已启动，但开始事件记录失败');
             }
 
             // 结构关系评估只生成待复核的问题；修改译文必须由用户勾选后另行触发。
@@ -314,6 +370,7 @@ export default function ParallelEditor({ className }: { className?: string }) {
                 {
                     sourceText: inputSource,
                     targetText: inputTarget,
+                    qaRunId,
                 }
             );
             if (isCurrentItem()) {
@@ -326,17 +383,17 @@ export default function ParallelEditor({ className }: { className?: string }) {
             // 记录 QA 阶段成功完成
             try {
                 await recordGoToNextTranslationProcessEventAction(itemId, 'QA', 'AGENT', 'SUCCESS');
-            } catch (eventError) {
-                logger.warn(`QA 已完成，但成功事件记录失败: ${eventError}`);
+            } catch {
+                logger.warn('QA 已完成，但成功事件记录失败');
             }
         } catch (e) {
-            logger.error(`单例质检失败: ${e}`);
+            logger.error('单例质检失败');
 
             // 记录 QA 阶段失败
             try {
                 await recordGoToNextTranslationProcessEventAction(itemId, 'QA', 'AGENT', 'FAILED');
-            } catch (eventError) {
-                logger.warn(`QA 失败，且失败事件记录失败: ${eventError}`);
+            } catch {
+                logger.warn('QA 失败，且失败事件记录失败');
             }
             throw e;
         } finally {
@@ -345,49 +402,43 @@ export default function ParallelEditor({ className }: { className?: string }) {
         }
     };
 
-    const undoQA = async () => {
-        if (!activeDocumentItem?.id) return;
-        const itemId = String(activeDocumentItem.id);
-
-        try {
-            logAgent('QA');
-            await new Promise(r => setTimeout(r, 300));
-            logSystem('撤销单例质检');
-            await saveQualityAssureResultsAction(itemId, {
-                biTerm: null,
-                syntax: null,
-                syntaxEmbedded: null,
-            });
-            if (activeItemIdRef.current === itemId) {
-                setQAOutputs(undefined);
-                setQASyntaxEmbedded(undefined);
-                logInfo('单例质检结果已撤销');
-            }
-        } catch (error) {
-            logger.error(`撤销单例质检失败: ${error}`);
-            throw error;
-        }
-    };
-
     const runPostEdit = async () => {
         if (!activeDocumentItem?.id) return;
+        const itemId = String(activeDocumentItem.id);
+        if (contentItemId !== itemId || sourceLoading) {
+            toast.error('当前分段仍在加载，请加载完成后再启动译后编辑');
+            throw new Error('当前分段内容尚未加载完成');
+        }
         if (!sourceText || String(sourceText).trim() === '') {
             toast.error(t('postEditRequiresSource'));
-            return;
+            throw new Error('当前分段原文为空');
         }
         if (!targetText || String(targetText).trim() === '') {
             toast.error(t('postEditRequiresTranslation'));
-            return;
+            throw new Error('当前分段译文为空');
         }
+        const inputSource = String(sourceText);
+        const inputTarget = String(targetText);
+        const requestId = ++postEditRequestRef.current;
+        const isCurrentItem = () =>
+            activeItemIdRef.current === itemId &&
+            sourceTextRef.current === inputSource &&
+            targetTextRef.current === inputTarget;
+        let outcomePhase: PostEditOutcomePhase = 'query';
 
         try {
             logAgent('POST_EDIT');
             setPERunning(true);
+            // Clear only the visible output for the active item. The outcome is
+            // tracked separately and keyed by item, so another segment cannot
+            // inherit this run's loading or failure state.
+            setPosteditOutputs(undefined);
+            setPosteditOutcome({ itemId, status: 'loading', phase: outcomePhase });
             logSystem('开始译后编辑流程');
 
             // 记录 POST_EDIT 阶段开始
             await recordGoToNextTranslationProcessEventAction(
-                activeDocumentItem.id,
+                itemId,
                 'POST_EDIT',
                 'AGENT',
                 'STARTED'
@@ -396,104 +447,118 @@ export default function ParallelEditor({ className }: { className?: string }) {
             // 1. 语篇查询
             setPeStep('discourse-query');
             logSystem('开始语篇查询');
-            const queryResult = await queryDiscourseAction(sourceText);
+            const queryResult = await queryDiscourseAction(inputSource, { documentItemId: itemId });
+            if (!isCurrentItem()) throw new Error('当前分段已切换，已丢弃过期语篇查询结果');
+
+            // Query evidence is useful even if a later evaluation/rewrite step
+            // fails. Expose it now, but keep the workflow outcome as loading
+            // until the complete post-edit proposal has been persisted.
+            setPosteditOutputs({ itemId, memos: queryResult.hits });
+            outcomePhase = 'evaluation';
+            setPosteditOutcome({ itemId, status: 'loading', phase: outcomePhase });
 
             // 2. 语篇评估
             setPeStep('discourse-eval');
             logSystem('开始语篇评估');
-            const evaluation = await evaluateDiscourseAction(sourceText, targetText, {
+            const evaluation = await evaluateDiscourseAction(inputSource, inputTarget, {
                 references: queryResult.hits,
             });
+            if (!isCurrentItem()) throw new Error('当前分段已切换，已丢弃过期语篇评估结果');
 
             // 3. 语篇嵌入改写
+            outcomePhase = 'rewrite';
+            setPosteditOutcome({ itemId, status: 'loading', phase: outcomePhase });
             setPeStep('discourse-embed-trans');
             logSystem('开始语篇嵌入改写');
-            const rewrite = await embedDiscourseAction(sourceText, targetText, queryResult.hits);
+            const rewrite = await embedDiscourseAction(inputSource, inputTarget, queryResult.hits);
+            if (!isCurrentItem()) throw new Error('当前分段已切换，已丢弃过期语篇改写结果');
 
-            // 更新状态
+            // Persist before exposing a result.  The expected input snapshot
+            // prevents an asynchronous post-edit response from overwriting a
+            // segment edited in another tab while it was running.
+            outcomePhase = 'persist';
+            setPosteditOutcome({ itemId, status: 'loading', phase: outcomePhase });
+            await savePostEditResultsAction(
+                itemId,
+                {
+                    query: queryResult.hits,
+                    evaluation,
+                    rewrite,
+                },
+                { sourceText: inputSource, targetText: inputTarget }
+            );
+            if (!isCurrentItem()) throw new Error('当前分段已切换，已丢弃过期译后编辑结果');
             setPosteditOutputs({
+                itemId,
                 memos: queryResult.hits,
                 discourse: evaluation,
                 result: rewrite,
             });
+            setPosteditOutcome(completePostEditOutcome(itemId, queryResult.hits));
+            logInfo('译后编辑结果已保存到数据库，等待人工复核应用');
 
-            // 保存译后编辑结果到数据库
-            try {
-                await savePostEditResultsAction(activeDocumentItem.id, {
-                    query: queryResult.hits,
-                    evaluation: evaluation,
-                    rewrite: rewrite,
-                });
-                logInfo('译后编辑结果已保存到数据库');
-            } catch (error) {
-                logger.error(`保存译后编辑结果失败: ${error}`);
-            }
-
-            // 可选：自动应用改写结果到目标文本
-            if (rewrite && rewrite !== targetText) {
-                setTargetTranslationText(rewrite);
-                logInfo('已自动应用改写结果');
+            // The rewrite remains a proposal until the reviewer explicitly
+            // applies and persists it.  Do not make a local-only replacement
+            // look like a saved translation.
+            if (!isCurrentItem()) {
+                throw new Error('当前分段已切换，未应用过期译后编辑建议');
             }
 
             logInfo('译后编辑流程完成');
 
             // 记录 POST_EDIT 阶段成功完成
             await recordGoToNextTranslationProcessEventAction(
-                activeDocumentItem.id,
+                itemId,
                 'POST_EDIT',
                 'AGENT',
                 'SUCCESS'
             );
         } catch (e) {
-            logger.error(`译后编辑失败: ${e}`);
-            toast.error(t('postEditFailed'));
+            logger.error('译后编辑失败');
+            const failure = failedPostEditOutcome(itemId, outcomePhase, e, t('postEditFailed'));
+            // A failed retrieval or downstream post-edit stage is not an empty
+            // reference set. Keep the public, actionable failure on this
+            // segment until the user retries or discards the result.
+            if (isCurrentItem()) setPosteditOutcome(failure);
+            toast.error(failure.message);
 
             // 记录 POST_EDIT 阶段失败
             await recordGoToNextTranslationProcessEventAction(
-                activeDocumentItem.id,
+                itemId,
                 'POST_EDIT',
                 'AGENT',
                 'FAILED'
             );
+            throw e;
         } finally {
-            setPERunning(false);
-            setPeStep('idle');
+            if (requestId === postEditRequestRef.current) {
+                setPERunning(false);
+                setPeStep('idle');
+            }
         }
     };
 
-    const undoPostEdit = async () => {
-        if (!activeDocumentItem?.id) return;
+    const clearPostEditOutputs = (itemId: string) => {
+        if (activeItemIdRef.current !== String(itemId)) return;
+        setPosteditOutputs(undefined);
+        clearPosteditOutcome(itemId);
+        setPeStep('idle');
+        logInfo('译后编辑结果已驳回，等待重新执行');
+    };
 
-        try {
-            logAgent('POST_EDIT');
-            await new Promise(r => setTimeout(r, 300));
-            logSystem('撤销译后编辑');
-
-            // 清空状态
-            setPosteditOutputs(undefined);
-
-            // 清空译后编辑结果到数据库
-            try {
-                await savePostEditResultsAction(activeDocumentItem.id, {
-                    query: undefined,
-                    evaluation: undefined,
-                    rewrite: undefined,
-                });
-                logInfo('译后编辑结果已撤销');
-            } catch (error) {
-                logger.error(`撤销译后编辑结果失败: ${error}`);
-            }
-        } catch (error) {
-            logger.error(`撤销译后编辑失败: ${error}`);
-        } finally {
-            setPeStep('idle');
-        }
+    const clearQAOutputs = (itemId: string) => {
+        if (activeItemIdRef.current !== String(itemId)) return;
+        setQAOutputs(undefined);
+        setQASyntaxEmbedded(undefined);
+        setQAStep('idle');
+        logInfo('质检结果已驳回，等待重新执行');
     };
 
     const initContentByID = async (id: string) => {
         // 如果id为空，则不进行获取
         if (!id) return;
         const requestId = ++contentLoadRef.current;
+        const baselineRequestId = ++baselineRequestRef.current;
         try {
             setSourceLoading(true);
             setError(null);
@@ -513,26 +578,35 @@ export default function ParallelEditor({ className }: { className?: string }) {
                     targetText: documentItem.targetText || '',
                 });
                 // 同步阶段状态（确保切换分段后状态正确）
-                const currentStage = (documentItem as any)?.status || 'NOT_STARTED';
-                setCurrentStage(currentStage as any);
+                const documentStage = (documentItem as any)?.status || 'NOT_STARTED';
+                setCurrentStage(documentStage as any);
+                currentStageRef.current = documentStage as any;
                 setSourceLoading(false);
 
                 // 自动触发 baseline 翻译：如果没有译文且状态为 NOT_STARTED
                 if (
                     !documentItem.targetText?.trim() &&
-                    currentStage === 'NOT_STARTED' &&
+                    documentStage === 'NOT_STARTED' &&
                     documentItem.sourceText?.trim()
                 ) {
+                    const baselineSource = String(documentItem.sourceText || '');
+                    const baselineTarget = String(documentItem.targetText || '');
                     try {
                         logInfo('自动生成基线翻译...');
                         logger.debug('自动基线翻译参数:', { sourceLanguage, targetLanguage });
                         const baselineText = await baselineTranslateAction(
                             documentItem.sourceText,
                             sourceLanguage || 'auto',
-                            targetLanguage || 'auto',
-                            { prompt: undefined }
+                            targetLanguage || 'auto'
                         );
-                        if (requestId !== contentLoadRef.current) return;
+                        const canApplyBaseline =
+                            requestId === contentLoadRef.current &&
+                            baselineRequestId === baselineRequestRef.current &&
+                            activeItemIdRef.current === String(id) &&
+                            sourceTextRef.current === baselineSource &&
+                            targetTextRef.current === baselineTarget &&
+                            currentStageRef.current === 'NOT_STARTED';
+                        if (!canApplyBaseline) return;
                         if (baselineText) {
                             setTargetTranslationText(baselineText);
                             logInfo('基线翻译生成完成');
@@ -563,12 +637,12 @@ export default function ParallelEditor({ className }: { className?: string }) {
                             : undefined,
                     });
 
-                    // 只传递 setQAOutputs 需要的字段
+                    // 只恢复质检字段；译后编辑结果由 PostEditPanel 按当前分段
+                    // 单独恢复，不能借 QA 的全局输出槽混入另一个分段。
                     setQAOutputs({
                         itemId: id,
                         biTerm: intermediateResults.qualityAssureBiTerm,
                         syntax: intermediateResults.qualityAssureSyntax,
-                        discourse: intermediateResults.postEditDiscourse,
                     });
                 }
             }
@@ -595,18 +669,24 @@ export default function ParallelEditor({ className }: { className?: string }) {
             const nextIdx = Math.min(Math.max(0, idx + delta), allItems.length - 1);
             const next = allItems[nextIdx];
             if (!next || next.id === currentId) return;
+            const targetEditor = getTargetEditorInstance();
+            const targetElement = targetEditor?.view.dom;
+            const canLeave = canLeaveCurrentPostEditDraft(
+                {
+                    activeItemId: activeDocumentItem.id,
+                    currentStage,
+                    editorItemId: targetElement?.getAttribute('data-deeptrans-editor-item-id'),
+                    editorJob: targetElement?.getAttribute('data-deeptrans-editor-job'),
+                    editorDirty: targetElement?.getAttribute('data-deeptrans-editor-dirty'),
+                },
+                () => window.confirm(POST_EDIT_DRAFT_DISCARD_MESSAGE)
+            );
+            if (!canLeave) return;
             // Keep content, editor identity, and all save targets on the same item.
             // The active-item effect performs the actual content load.
             setActiveDocumentItem(next);
         } catch {}
     };
-
-    useEffect(() => {
-        const handler = () =>
-            setStackLayout(prev => (prev === 'vertical' ? 'horizontal' : 'vertical'));
-        window.addEventListener('layout:toggle', handler as any);
-        return () => window.removeEventListener('layout:toggle', handler as any);
-    }, []);
 
     useEffect(() => {
         if (activeDocumentItem.id && activeDocumentItem.id !== null) {
@@ -617,13 +697,6 @@ export default function ParallelEditor({ className }: { className?: string }) {
     }, [activeDocumentItem.id]); // 添加contentID依赖
 
     useEffect(() => {}, [sourceText, targetText]);
-
-    // 当currentStage变化时自动打开面板
-    useEffect(() => {
-        if (currentStage && !isBottomPanelOpen) {
-            toggleBottomPanel();
-        }
-    }, [currentStage, isBottomPanelOpen, toggleBottomPanel]);
 
     if (error) {
         return <div className="text-red-500">{error}</div>;
@@ -648,214 +721,174 @@ export default function ParallelEditor({ className }: { className?: string }) {
                                     runTranslate={runTranslate}
                                     undoTranslate={undoTranslate}
                                     runQA={runQA}
-                                    undoQA={undoQA}
                                     runPostEdit={runPostEdit}
-                                    undoPostEdit={undoPostEdit}
+                                    clearQAOutputs={clearQAOutputs}
+                                    clearPostEditOutputs={clearPostEditOutputs}
                                     saveRecord={async (stage, actor, status) => {
-                                        await recordGoToNextTranslationProcessEventAction(
-                                            activeDocumentItem.id,
-                                            stage,
-                                            actor,
-                                            status
-                                        );
-                                    }}
-                                    deleteRecord={async stage => {
-                                        await recordGoToPreviousTranslationStageAction(
-                                            activeDocumentItem.id,
-                                            stage
-                                        );
+                                        const event =
+                                            await recordGoToNextTranslationProcessEventAction(
+                                                activeDocumentItem.id,
+                                                stage,
+                                                actor,
+                                                status
+                                            );
+                                        if (!event.success) {
+                                            const message =
+                                                event.error || '无法保存流程审计记录，请重试';
+                                            // Sign-off and completion are human approval
+                                            // boundaries: do not advance their status
+                                            // without a persisted audit record. Earlier
+                                            // automatic results stay usable but remain
+                                            // visible in logs if their timeline write fails.
+                                            if (
+                                                stage === 'POST_EDIT_REVIEW' ||
+                                                stage === 'SIGN_OFF' ||
+                                                stage === 'COMPLETED'
+                                            ) {
+                                                throw new Error(message);
+                                            }
+                                            logger.warn('流程事件未记录');
+                                        }
                                     }}
                                 />
                             )}
                             {(() => {
-                                // 所有阶段均展示双栏（原文+译文）视图
-                                const singlePreview = false;
+                                const isVertical = stackLayout === 'vertical';
                                 return (
                                     <div className="relative flex min-h-0 w-full flex-1 flex-col">
                                         <div className="min-h-0 flex-1">
-                                            {singlePreview
-                                                ? (() => {
-                                                      const previewText =
-                                                          targetText && String(targetText).trim()
-                                                              ? targetText
-                                                              : sourceText || '';
-                                                      const isHtml = /<\w+[^>]*>/.test(
-                                                          previewText || ''
-                                                      );
-                                                      return (
-                                                          <div className="h-full w-full overflow-auto rounded border pb-1">
-                                                              <div className="flex items-center justify-between border-b bg-muted/40 px-2 py-1 text-[11px] text-foreground/70">
-                                                                  <span className="font-medium">
-                                                                      {t('preview')}:{' '}
-                                                                      {targetText &&
-                                                                      String(targetText).trim()
-                                                                          ? t('targetText')
-                                                                          : t('sourceText')}
-                                                                  </span>
-                                                                  <span className="uppercase tracking-wider">
-                                                                      {targetText &&
-                                                                      String(targetText).trim()
-                                                                          ? targetLanguage
-                                                                          : sourceLanguage}
-                                                                  </span>
-                                                              </div>
-                                                              {isHtml ? (
-                                                                  <div
-                                                                      className="prose p-2"
-                                                                      dangerouslySetInnerHTML={{
-                                                                          __html: previewText,
-                                                                      }}
-                                                                  />
-                                                              ) : (
-                                                                  <MarkdownPreview
-                                                                      source={previewText}
-                                                                      className="bg-transparent"
-                                                                      style={{
-                                                                          backgroundColor:
-                                                                              'transparent',
-                                                                      }}
-                                                                  />
-                                                              )}
-                                                          </div>
-                                                      );
-                                                  })()
-                                                : (() => {
-                                                      const isVertical = stackLayout === 'vertical';
-                                                      return (
-                                                          <div
-                                                              className={`flex w-full ${isVertical ? 'flex-col' : 'flex-row'} size-full items-stretch overflow-hidden border`}
-                                                          >
-                                                              <div
-                                                                  className={`${isVertical ? 'w-full' : 'w-1/2'} flex-1 overflow-auto`}
-                                                              >
-                                                                  <div className="flex items-center justify-between border-b bg-muted/40 px-2 py-1 text-[11px] text-foreground/70">
-                                                                      <span className="font-medium">
-                                                                          {t('sourceText')}
-                                                                      </span>
-                                                                      <span className="uppercase tracking-wider">
-                                                                          {sourceLanguage}
-                                                                      </span>
-                                                                  </div>
-                                                                  {sourceLoading ||
-                                                                  !sourceText ||
-                                                                  String(sourceText).trim() ===
-                                                                      '' ? (
-                                                                      <div className="space-y-3 p-4">
-                                                                          <div className="space-y-2">
-                                                                              <Skeleton className="h-4 w-full" />
-                                                                              <Skeleton className="h-4 w-3/4" />
-                                                                          </div>
-                                                                          <div className="pt-2 text-center">
-                                                                              <div className="text-sm text-muted-foreground">
-                                                                                  {t(
-                                                                                      'loadingSource'
-                                                                                  )}
-                                                                              </div>
-                                                                          </div>
-                                                                      </div>
-                                                                  ) : (
-                                                                      <RichTextEditor
-                                                                          key={`source-${activeDocumentItem.id}-${sourceText?.length || 0}`}
-                                                                          job="rawtext"
-                                                                          editorId={
-                                                                              activeDocumentItem.id
-                                                                          }
-                                                                          placeholder={t(
-                                                                              'editSourceHere'
-                                                                          )}
-                                                                          initialContent={
-                                                                              sourceText
-                                                                          }
-                                                                          readOnly={
-                                                                              !(
-                                                                                  currentStage ===
-                                                                                  'NOT_STARTED'
-                                                                              )
-                                                                          }
-                                                                      />
-                                                                  )}
-                                                              </div>
-                                                              <Separator
-                                                                  orientation={
-                                                                      isVertical
-                                                                          ? 'horizontal'
-                                                                          : 'vertical'
-                                                                  }
-                                                                  className={`${isVertical ? 'h-1 w-full' : 'h-full w-1'} z-100`}
-                                                              />
-                                                              <div
-                                                                  className={`${isVertical ? 'w-full' : 'w-1/2'} flex-1 overflow-auto`}
-                                                              >
-                                                                  <div className="flex items-center justify-between border-b bg-muted/40 px-2 py-1 text-[11px] text-foreground/70">
-                                                                      <span className="font-medium">
-                                                                          {t('targetText')}
-                                                                      </span>
-                                                                      <span className="uppercase tracking-wider">
-                                                                          {targetLanguage}
-                                                                      </span>
-                                                                  </div>
-                                                                  <div className="relative">
-                                                                      {isRunning && (
-                                                                          <span className="absolute left-0 right-0 top-0 h-0.5 animate-progress bg-indigo-500" />
-                                                                      )}
-                                                                      {/* 空译文状态：运行中使用 DeepL 式轻量闪烁占位，未开始保留空态提示 */}
-                                                                      {(!targetText ||
-                                                                          String(
-                                                                              targetText
-                                                                          ).trim() === '') &&
-                                                                      isRunning ? (
-                                                                          <TranslationPendingPlaceholder
-                                                                              label={t(
-                                                                                  'translatingTarget'
-                                                                              )}
-                                                                          />
-                                                                      ) : (!targetText ||
-                                                                            String(
-                                                                                targetText
-                                                                            ).trim() === '') &&
-                                                                        currentStage ===
-                                                                            'NOT_STARTED' ? (
-                                                                          <div className="space-y-3 p-4">
-                                                                              <div className="space-y-2">
-                                                                                  <Skeleton className="h-4 w-full" />
-                                                                                  <Skeleton className="h-4 w-3/4" />
-                                                                              </div>
-                                                                              <div className="pt-4 text-center">
-                                                                                  <div className="text-sm text-muted-foreground">
-                                                                                      {t(
-                                                                                          'clickToStartTranslation'
-                                                                                      )}
-                                                                                  </div>
-                                                                              </div>
-                                                                          </div>
-                                                                      ) : (
-                                                                          <div className="h-full">
-                                                                              <RichTextEditor
-                                                                                  key={`target-${activeDocumentItem.id}-${targetText?.length || 0}`}
-                                                                                  job="translation"
-                                                                                  editorId={
-                                                                                      activeDocumentItem.id
-                                                                                  }
-                                                                                  placeholder={t(
-                                                                                      'editTargetHere'
-                                                                                  )}
-                                                                                  initialContent={
-                                                                                      targetText
-                                                                                  }
-                                                                                  readOnly={
-                                                                                      !(
-                                                                                          (currentStage as any) ===
-                                                                                          'POST_EDIT'
-                                                                                      )
-                                                                                  }
-                                                                              />
-                                                                          </div>
-                                                                      )}
-                                                                  </div>
-                                                              </div>
-                                                          </div>
-                                                      );
-                                                  })()}
+                                            <div
+                                                className={`flex w-full ${isVertical ? 'flex-col' : 'flex-row'} size-full items-stretch overflow-hidden border`}
+                                            >
+                                                <div
+                                                    className={`${isVertical ? 'w-full' : 'w-1/2'} flex-1 overflow-auto`}
+                                                >
+                                                    <div className="flex items-center justify-between border-b bg-muted/40 px-2 py-1 text-[11px] text-foreground/70">
+                                                        <div className="flex items-center gap-1.5">
+                                                            <span className="font-medium">
+                                                                {t('sourceText')}
+                                                            </span>
+                                                            <button
+                                                                type="button"
+                                                                className="rounded p-0.5 text-foreground/60 transition-colors hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                                                onClick={() =>
+                                                                    setStackLayout(current =>
+                                                                        current === 'vertical'
+                                                                            ? 'horizontal'
+                                                                            : 'vertical'
+                                                                    )
+                                                                }
+                                                                aria-label={rightSidebarT(
+                                                                    'toggleLayout'
+                                                                )}
+                                                                title={rightSidebarT(
+                                                                    'toggleLayout'
+                                                                )}
+                                                            >
+                                                                {isVertical ? (
+                                                                    <Rows size={14} />
+                                                                ) : (
+                                                                    <Columns size={14} />
+                                                                )}
+                                                            </button>
+                                                        </div>
+                                                        <span className="uppercase tracking-wider">
+                                                            {sourceLanguage}
+                                                        </span>
+                                                    </div>
+                                                    {sourceLoading ||
+                                                    !sourceText ||
+                                                    String(sourceText).trim() === '' ? (
+                                                        <div className="space-y-3 p-4">
+                                                            <div className="space-y-2">
+                                                                <Skeleton className="h-4 w-full" />
+                                                                <Skeleton className="h-4 w-3/4" />
+                                                            </div>
+                                                            <div className="pt-2 text-center">
+                                                                <div className="text-sm text-muted-foreground">
+                                                                    {t('loadingSource')}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    ) : (
+                                                        <RichTextEditor
+                                                            key={`source-${activeDocumentItem.id}`}
+                                                            job="rawtext"
+                                                            editorId={activeDocumentItem.id}
+                                                            placeholder={t('editSourceHere')}
+                                                            initialContent={sourceText}
+                                                            readOnly={
+                                                                !(currentStage === 'NOT_STARTED')
+                                                            }
+                                                        />
+                                                    )}
+                                                </div>
+                                                <Separator
+                                                    orientation={
+                                                        isVertical ? 'horizontal' : 'vertical'
+                                                    }
+                                                    className={`${isVertical ? 'h-1 w-full' : 'h-full w-1'} z-100`}
+                                                />
+                                                <div
+                                                    className={`${isVertical ? 'w-full' : 'w-1/2'} flex-1 overflow-auto`}
+                                                >
+                                                    <div className="flex items-center justify-between border-b bg-muted/40 px-2 py-1 text-[11px] text-foreground/70">
+                                                        <span className="font-medium">
+                                                            {t('targetText')}
+                                                        </span>
+                                                        <span className="uppercase tracking-wider">
+                                                            {targetLanguage}
+                                                        </span>
+                                                    </div>
+                                                    <div className="relative">
+                                                        {isRunning && (
+                                                            <span className="absolute left-0 right-0 top-0 h-0.5 animate-progress bg-indigo-500" />
+                                                        )}
+                                                        {/* 空译文状态：运行中使用 DeepL 式轻量闪烁占位，未开始保留空态提示 */}
+                                                        {(!targetText ||
+                                                            String(targetText).trim() === '') &&
+                                                        isRunning ? (
+                                                            <TranslationPendingPlaceholder
+                                                                label={t('translatingTarget')}
+                                                            />
+                                                        ) : (!targetText ||
+                                                              String(targetText).trim() === '') &&
+                                                          currentStage === 'NOT_STARTED' ? (
+                                                            <div className="space-y-3 p-4">
+                                                                <div className="space-y-2">
+                                                                    <Skeleton className="h-4 w-full" />
+                                                                    <Skeleton className="h-4 w-3/4" />
+                                                                </div>
+                                                                <div className="pt-4 text-center">
+                                                                    <div className="text-sm text-muted-foreground">
+                                                                        {t(
+                                                                            'clickToStartTranslation'
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        ) : (
+                                                            <div className="h-full">
+                                                                <RichTextEditor
+                                                                    key={`target-${activeDocumentItem.id}`}
+                                                                    job="translation"
+                                                                    editorId={activeDocumentItem.id}
+                                                                    placeholder={t(
+                                                                        'editTargetHere'
+                                                                    )}
+                                                                    initialContent={targetText}
+                                                                    readOnly={
+                                                                        !(
+                                                                            (currentStage as any) ===
+                                                                            'POST_EDIT_REVIEW'
+                                                                        )
+                                                                    }
+                                                                />
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
                                         </div>
                                         {/* 右下角：上一条 / 下一条 / 面板切换 */}
                                         <div className="pointer-events-auto absolute bottom-2 right-2 z-20 flex items-center gap-2">
@@ -899,11 +932,7 @@ export default function ParallelEditor({ className }: { className?: string }) {
                         <>
                             <ResizableHandle className="h-1 bg-secondary" />
                             <ResizablePanel defaultSize={40} minSize={20} maxSize={60}>
-                                <TranslationProcessPanel
-                                    panelTab={panelTab}
-                                    setPanelTab={setPanelTab}
-                                    projectId={params.id as string}
-                                />
+                                <TranslationProcessPanel />
                             </ResizablePanel>
                         </>
                     )}

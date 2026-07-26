@@ -1,20 +1,32 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { ReactFlowProvider } from '@xyflow/react';
 import {
     ReactFlow,
-    addEdge,
     Background,
+    Controls,
     useNodesState,
     useEdgesState,
     BackgroundVariant,
 } from '@xyflow/react';
 import { useTheme } from 'next-themes';
 import { useAgentWorkflowSteps } from '@/hooks/useAgentWorkflowSteps';
+import { useTranslationState } from '@/hooks/useTranslation';
+import {
+    getWorkflowDiagramNodeState,
+    getWorkflowDiagramTerminalState,
+    isWorkflowDiagramComplete,
+} from '@/lib/workflow-diagram-state';
 import { nodeTypes } from './nodes';
 import { edgeTypes } from './edges';
 import { useWorkflowData } from './data/workflows';
+import { useTranslations } from 'next-intl';
+import {
+    preserveWorkflowPromptNodeClicks,
+    readOnlyWorkflowDiagramProps,
+    workflowDiagramFitViewOptions,
+} from './workflow-diagram-canvas';
 import '@xyflow/react/dist/style.css';
 
 export default function PostEditWorkflowPanel() {
@@ -22,57 +34,91 @@ export default function PostEditWorkflowPanel() {
     const [mounted, setMounted] = useState(false);
     const peStep = useAgentWorkflowSteps(s => s.peStep);
     const isPERunning = useAgentWorkflowSteps(s => s.isPERunning);
+    const { currentStage } = useTranslationState();
     const workflows = useWorkflowData();
     const flow = workflows['postedit'];
     const [nodes, setNodes, onNodesChange] = useNodesState(flow?.nodes || []);
     const [edges, setEdges, onEdgesChange] = useEdgesState(flow?.edges || []);
+    const t = useTranslations('IDE.workflowDiagram');
+    const isComplete = isWorkflowDiagramComplete('postedit', currentStage);
+    const activeNode = flow?.nodes?.find((node: any) => node.data?.stage === peStep);
+    const status = isComplete
+        ? t('completed')
+        : isPERunning
+          ? t('running', { step: String(activeNode?.data?.label || '') || t('preparing') })
+          : t('waiting');
 
-    // 监听 PE 状态变化，强制重新渲染节点
     useEffect(() => {
-        setNodes(nds =>
-            nds.map(node => ({
-                ...node,
-                data: {
-                    ...node.data,
-                    _forceUpdate: Date.now(), // 强制更新节点
-                },
-            }))
+        if (!flow?.nodes) return;
+        setNodes(
+            flow.nodes.map((node: any) => {
+                const workflowState =
+                    node.type === 'terminalNode'
+                        ? getWorkflowDiagramTerminalState({
+                              workflow: 'postedit',
+                              stage: currentStage,
+                              isRunning: isPERunning,
+                              terminal: node.data?.variant === 'end' ? 'end' : 'start',
+                          })
+                        : getWorkflowDiagramNodeState({
+                              workflow: 'postedit',
+                              stage: currentStage,
+                              isRunning: isPERunning,
+                              currentStep: peStep,
+                              nodeStep: node.data?.stage,
+                          });
+                return {
+                    ...node,
+                    data: {
+                        ...node.data,
+                        workflowState,
+                        isActive: workflowState === 'active',
+                        isRunning: workflowState === 'active',
+                        isCompleted: workflowState === 'completed',
+                    },
+                };
+            })
         );
-    }, [peStep, isPERunning, setNodes]);
-
-    const onConnect = useCallback(
-        (connection: any) => {
-            const edge = { ...connection, type: 'custom-edge' };
-            setEdges(eds => addEdge(edge, eds));
-        },
-        [setEdges]
-    );
+        setEdges(flow.edges || []);
+    }, [currentStage, flow?.edges, flow?.nodes, isPERunning, peStep, setEdges, setNodes]);
 
     useEffect(() => {
         setMounted(true);
     }, []);
-    if (!mounted) return <div className="h-72 w-full bg-muted/20" />;
+    if (!mounted) return <div className="size-full min-h-0 bg-muted/20" />;
 
     return (
         <ReactFlowProvider>
-            <div className="relative h-72 w-full overflow-hidden">
+            <section className="relative size-full min-h-0 overflow-hidden" aria-label={t('label')}>
+                <div
+                    className="pointer-events-none absolute left-2 top-2 z-10 inline-flex max-w-[calc(100%-1rem)] items-center rounded-md border bg-background/95 px-2 py-1 text-[11px] font-medium text-foreground shadow-sm"
+                    role="status"
+                    aria-live="polite"
+                    data-workflow-state={
+                        isComplete ? 'completed' : isPERunning ? 'active' : 'pending'
+                    }
+                >
+                    <span className="truncate">{status}</span>
+                </div>
                 <ReactFlow
                     nodes={nodes}
                     edges={edges}
                     onNodesChange={onNodesChange}
                     onEdgesChange={onEdgesChange}
-                    onConnect={onConnect}
+                    onNodeClick={preserveWorkflowPromptNodeClicks}
                     edgeTypes={edgeTypes}
                     nodeTypes={nodeTypes}
-                    fitView
-                    fitViewOptions={{ padding: 1.0 }}
-                    minZoom={0.2}
-                    maxZoom={2}
-                    defaultViewport={{ x: 0, y: 0, zoom: 0.4 }}
-                    nodesDraggable={false}
-                    nodesConnectable={false}
+                    {...readOnlyWorkflowDiagramProps}
+                    ariaLabelConfig={{ 'controls.fitView.ariaLabel': t('resetView') }}
                     className="node-sm h-full w-full"
                 >
+                    <Controls
+                        aria-label={t('controlsLabel')}
+                        position="bottom-right"
+                        showZoom={false}
+                        showInteractive={false}
+                        fitViewOptions={workflowDiagramFitViewOptions}
+                    />
                     <Background
                         color={theme === 'dark' ? '#334155' : '#94a3b8'}
                         gap={12}
@@ -80,7 +126,7 @@ export default function PostEditWorkflowPanel() {
                         variant={'dots' as BackgroundVariant}
                     />
                 </ReactFlow>
-            </div>
+            </section>
         </ReactFlowProvider>
     );
 }

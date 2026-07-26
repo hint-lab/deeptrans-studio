@@ -4,6 +4,7 @@ import {
     guardMessage,
     guardStatus,
     requireOwnedProjectDocument,
+    requireUser,
     requireWritableProject,
 } from '@/lib/guards';
 import { initStructuredKey, scopedProjectBatchId } from '@/lib/init-artifact-keys';
@@ -12,6 +13,10 @@ import {
     PARSE_MUTABLE_DOCUMENT_STATUSES,
     resolveProjectInitResumeTarget,
 } from '@/lib/document-init-status';
+import {
+    DOCUMENT_INIT_EMPTY_DOCUMENT_MESSAGE,
+    resolveDocumentInitParseOutcome,
+} from '@/lib/document-init-parse-state';
 import { createLogger } from '@/lib/logger';
 import { extractDocxFromUrl } from '@/lib/parsers/docx-parser';
 import { pdfParseToStructuredJson } from '@/lib/parsers/pdf-parser';
@@ -19,6 +24,7 @@ import { textToStructuredJson } from '@/lib/parsers/text-parser';
 import { getRedis } from '@/lib/redis';
 import { releaseOwnedRedisLock } from '@/lib/redis-lock';
 import { TTL_BATCH, TTL_PREVIEW, setTextWithTTL } from '@/lib/redis-ttl';
+import { getReadableDocumentSourceUrlForOwner } from '@/server/uploaded-object';
 import { DocumentStatus } from '@/types/enums';
 import { randomUUID } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
@@ -85,16 +91,18 @@ export async function POST(req: NextRequest, ctx: any) {
         if (!batchId) return NextResponse.json({ error: 'missing batchId' }, { status: 400 });
         const scopedBatchId = scopedProjectBatchId(projectIdFromParams, batchId);
 
-        const project = await requireWritableProject(projectIdFromParams);
+        const authCtx = await requireUser();
+        const project = await requireWritableProject(projectIdFromParams, authCtx);
         const only = docIdFromReq
-            ? await requireOwnedProjectDocument(projectIdFromParams, docIdFromReq)
+            ? await requireOwnedProjectDocument(projectIdFromParams, docIdFromReq, authCtx)
             : project.documents?.[0];
-        if (!only || !only.url)
+        if (!only || !only.name)
             return NextResponse.json({ error: 'document not found' }, { status: 404 });
         ownedDocumentId = only.id;
         if (!canWriteDocumentParseStatus(only.status)) {
             return NextResponse.json(alreadyInitializedPayload(only.status));
         }
+        const sourceUrl = await getReadableDocumentSourceUrlForOwner(only.name, authCtx);
         parseLockKey = `project-init:parse-lock:${only.id}`;
         parseLockValue = JSON.stringify({ token: randomUUID(), batchId });
         const lockAcquired = await redis.set(
@@ -131,31 +139,35 @@ export async function POST(req: NextRequest, ctx: any) {
                 TTL_BATCH
             );
         };
-        const { isText, isPdf, isDoc } = await extractFileTypeFromUrl(only.url);
+        const { isText, isPdf, isDoc } = await extractFileTypeFromUrl(sourceUrl);
+        let structured: any;
         try {
             if (isDoc) {
-                const { text, html, structured } = await extractDocxFromUrl(only.url);
+                const parsed = await extractDocxFromUrl(sourceUrl);
+                const { text, html } = parsed;
                 if (text || html) {
                     content = String(text || '').trim();
                     previewHtml = html;
                 }
-                await setStructuredArtifact(structured);
+                structured = parsed.structured;
             }
             if (isPdf) {
-                const { text, html, structured } = await pdfParseToStructuredJson(only.url);
+                const parsed = await pdfParseToStructuredJson(sourceUrl);
+                const { text, html } = parsed;
                 if (text || html) {
                     content = String(text || '').trim();
                     previewHtml = html;
                 }
-                await setStructuredArtifact(structured);
+                structured = parsed.structured;
             }
             if (isText) {
-                const { text, html, structured } = await textToStructuredJson(only.url);
+                const parsed = await textToStructuredJson(sourceUrl);
+                const { text, html } = parsed;
                 if (text || html) {
                     content = String(text || '').trim();
                     previewHtml = html;
                 }
-                await setStructuredArtifact(structured);
+                structured = parsed.structured;
             }
         } catch (parserError: any) {
             // 2. 捕获解析器特定的错误（如 MinerU 故障）
@@ -165,20 +177,38 @@ export async function POST(req: NextRequest, ctx: any) {
             // 而不是吞掉错误继续执行后续的 "if (!content)" 逻辑
             throw parserError;
         }
-        if (!content && !previewHtml) {
-            // 3. 确实没有内容，但也没有报错 -> 这是一个合法的空文档
-            // 这种情况下，可以写入 empty content 提示
+        const parseOutcome = resolveDocumentInitParseOutcome(content);
+        if (parseOutcome.kind === 'empty-document') {
+            // An empty parser shell cannot be segmented. Mark the document as
+            // recoverably failed before exposing the state to the client, so a
+            // stale tab cannot persist or segment it as though parsing worked.
+            const markedEmpty = await updateDocumentStatusIfCurrentDB(
+                only.id,
+                DocumentStatus.ERROR as any,
+                PARSE_MUTABLE_DOCUMENT_STATUSES
+            );
+            if (!markedEmpty) {
+                const latest = await findDocumentByIdDB(only.id);
+                return NextResponse.json(alreadyInitializedPayload(latest?.status));
+            }
             await setTextWithTTL(
                 redis,
                 `init.${scopedBatchId}.previewHtml`,
-                "<div class='p-4 text-gray-500'>文档内容为空</div>", // 稍微友好一点的提示
+                parseOutcome.previewMarker,
                 TTL_PREVIEW
             );
-            logger.warn('解析成功但文档内容为空');
-            const advanced = await commitParseStatus(only.id);
-            if (advanced) return NextResponse.json(advanced);
-            return NextResponse.json({ ok: true, step: 'parse' });
+            logger.warn('文档不含可用于翻译的文本，未推进解析流程');
+            return NextResponse.json(
+                {
+                    error: DOCUMENT_INIT_EMPTY_DOCUMENT_MESSAGE,
+                    code: parseOutcome.code,
+                    retryable: true,
+                    status: DocumentStatus.ERROR,
+                },
+                { status: 422 }
+            );
         }
+        await setStructuredArtifact(structured);
         if (!previewHtml) previewHtml = makePreviewHtmlFromText(content);
         const preview = content.slice(0, 1200);
         await setTextWithTTL(redis, `init.${scopedBatchId}.preview`, preview, TTL_PREVIEW);

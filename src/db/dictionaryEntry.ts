@@ -66,7 +66,7 @@ export const findDictionaryEntriesByDictionaryIdDB = async (
     return dbTry(() =>
         prisma.dictionaryEntry.findMany({
             where: { dictionaryId },
-            orderBy: { createdAt: 'desc' },
+            orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
             ...(typeof limit === 'number' && limit > 0 ? { take: limit } : {}),
         })
     );
@@ -88,7 +88,12 @@ export const findDictionaryEntriesDB = async (
         where = { dictionaryId: where };
     }
     return dbTry(() =>
-        prisma.dictionaryEntry.findMany({ where, orderBy: { createdAt: 'desc' }, skip, take })
+        prisma.dictionaryEntry.findMany({
+            where,
+            orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+            skip,
+            take,
+        })
     );
 };
 
@@ -246,9 +251,12 @@ export const findCandidateTranslationsForSourcesDB = async (
         prisma.dictionaryEntry.findMany({
             where: {
                 sourceText: { in: sourceList },
+                enabled: true,
+                targetText: { not: '' },
                 dictionary: dictWhere,
             },
             select: { sourceText: true, targetText: true, notes: true },
+            orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
             take: 10000,
         })
     );
@@ -260,9 +268,12 @@ export const findByScopeDB = async (
     orScopes: any[],
     limit: number
 ): Promise<Array<{
+    id: string;
+    dictionaryId: string;
     sourceText: string;
     targetText: string;
     notes: string | null;
+    origin: string | null;
     dictionary: { name: string; visibility: string };
 }> | null> => {
     const rows = await dbTry(() =>
@@ -275,34 +286,37 @@ export const findByScopeDB = async (
                 enabled: true,
                 dictionary: { OR: orScopes },
             },
-            orderBy: { createdAt: 'desc' },
+            orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
             take: limit,
             select: {
+                id: true,
+                dictionaryId: true,
                 sourceText: true,
                 targetText: true,
                 notes: true,
+                origin: true,
                 dictionary: { select: { name: true, visibility: true } },
             },
         })
     );
-    if (!rows)
-        return [] as Array<{
-            sourceText: string;
-            targetText: string;
-            notes: string | null;
-            dictionary: { name: string; visibility: string };
-        }>;
+    if (!rows) return null;
     const list = Array.isArray(rows) ? rows : [];
     return list.map(
         (r: {
+            id: string;
+            dictionaryId: string;
             sourceText: string;
             targetText: string;
             notes: string | null;
+            origin: string | null;
             dictionary: { name: string; visibility: string };
         }) => ({
+            id: r.id,
+            dictionaryId: r.dictionaryId,
             sourceText: r.sourceText,
             targetText: r.targetText,
             notes: r.notes,
+            origin: r.origin,
             dictionary: r.dictionary,
         })
     );
@@ -322,7 +336,7 @@ export const findExactByScopeDB = async (
         notes: string | null;
         origin: string | null;
         dictionary: { name: string; visibility: string };
-    }>
+    }> | null
 > => {
     const rows = await dbTry(() =>
         prisma.dictionaryEntry.findMany({
@@ -331,7 +345,7 @@ export const findExactByScopeDB = async (
                 enabled: true,
                 dictionary: { OR: orScopes },
             },
-            orderBy: { createdAt: 'desc' },
+            orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
             take: limit,
             select: {
                 id: true,
@@ -344,6 +358,6 @@ export const findExactByScopeDB = async (
             },
         })
     );
-    if (!rows) return [];
+    if (!rows) return null;
     return Array.isArray(rows) ? rows : [];
 };

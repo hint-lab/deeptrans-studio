@@ -2,47 +2,26 @@
 
 import { useState } from 'react';
 import { useLogger } from '@/hooks/useLogger';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
+import type { LogEntry } from '@/types/logEntry';
 
-type LogEntry = {
-    type: 'system' | 'agent' | 'error' | 'warning' | 'info';
-    message: string;
+type DisplayLogEntry = Omit<LogEntry, 'timestamp'> & {
     timestamp: Date;
 };
 
 type LoggingPanelProps = {
-    logs?: LogEntry[];
+    logs?: DisplayLogEntry[];
     onClear?: () => void;
 };
 
 export default function LoggingPanel({ logs: propLogs, onClear: propOnClear }: LoggingPanelProps) {
     const t = useTranslations('IDE.logging');
-    const [filter, setFilter] = useState<string>('all');
+    const locale = useLocale();
+    const [filter, setFilter] = useState<'all' | DisplayLogEntry['type']>('all');
     const { getLogsForUI, clearAllLogs } = useLogger();
 
-    // 如果没有提供logs，使用默认的演示日志
-    const [demoLogs] = useState<LogEntry[]>([
-        { type: 'system', message: t('demo.workflowInit'), timestamp: new Date() },
-        { type: 'agent', message: t('demo.documentLoaded'), timestamp: new Date() },
-        { type: 'system', message: t('demo.engineReady'), timestamp: new Date() },
-        { type: 'agent', message: t('demo.processing'), timestamp: new Date() },
-        { type: 'warning', message: t('demo.unknownFormat'), timestamp: new Date() },
-        { type: 'agent', message: t('demo.progress10'), timestamp: new Date() },
-        { type: 'info', message: t('demo.neuralTranslation'), timestamp: new Date() },
-        { type: 'agent', message: t('demo.progress25'), timestamp: new Date() },
-        { type: 'error', message: t('demo.parseError'), timestamp: new Date() },
-        { type: 'agent', message: t('demo.skipError'), timestamp: new Date() },
-        { type: 'agent', message: t('demo.progress50'), timestamp: new Date() },
-        { type: 'agent', message: t('demo.progress75'), timestamp: new Date() },
-        { type: 'system', message: t('demo.optimizing'), timestamp: new Date() },
-        { type: 'agent', message: t('demo.completed'), timestamp: new Date() },
-        { type: 'system', message: t('demo.generating'), timestamp: new Date() },
-        { type: 'info', message: t('demo.saved'), timestamp: new Date() },
-    ]);
-
-    // 使用 Redux 中的日志或者传入的日志，如果都没有则使用演示日志
     const reduxLogs = getLogsForUI();
-    const displayLogs = propLogs?.length ? propLogs : reduxLogs.length ? reduxLogs : demoLogs;
+    const displayLogs = propLogs ?? reduxLogs;
 
     // 处理清除日志
     const handleClearLogs = () => {
@@ -68,7 +47,7 @@ export default function LoggingPanel({ logs: propLogs, onClear: propOnClear }: L
     };
 
     const formatTime = (date: Date) => {
-        return date.toLocaleTimeString('zh-CN', {
+        return date.toLocaleTimeString(locale, {
             hour: '2-digit',
             minute: '2-digit',
             second: '2-digit',
@@ -83,11 +62,11 @@ export default function LoggingPanel({ logs: propLogs, onClear: propOnClear }: L
                 <select
                     className="mr-2 rounded border border-gray-300 bg-transparent px-1 py-0.5 text-xs dark:border-gray-700"
                     value={filter}
-                    onChange={e => setFilter(e.target.value)}
+                    onChange={e => setFilter(e.target.value as typeof filter)}
                 >
                     <option value="all">{t('filters.all')}</option>
                     <option value="system">{t('filters.system')}</option>
-                    <option value="translation">{t('filters.translation')}</option>
+                    <option value="agent">{t('filters.translation')}</option>
                     <option value="error">{t('filters.error')}</option>
                     <option value="warning">{t('filters.warning')}</option>
                     <option value="info">{t('filters.info')}</option>

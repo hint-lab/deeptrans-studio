@@ -1,17 +1,29 @@
 'use client';
-import { useState, useTransition } from 'react';
+import { useRef, useState, useTransition } from 'react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { emailLoginAction } from '@/actions/email-login';
 import { useTranslations } from 'next-intl';
 import { Icons } from '@/components/icons'; // 导入图标组件
+import {
+    getEmailVerificationFailureCode,
+    getEmailVerificationFailureMessage,
+    isEmailVerificationSent,
+} from '@/lib/email-verification-client';
 
-export function EmailLoginForm({ buttonText }: { buttonText?: string }) {
+export function EmailLoginForm({
+    buttonText,
+    callbackUrl,
+}: {
+    buttonText?: string;
+    callbackUrl?: string;
+}) {
     const [email, setEmail] = useState('');
     const [code, setCode] = useState('');
     const [cooldown, setCooldown] = useState(0);
     const [isPending, startTransition] = useTransition();
     const [isSendingCode, setIsSendingCode] = useState(false); // 新增：发送验证码加载状态
+    const otpRef = useRef<HTMLInputElement>(null);
     const t = useTranslations('Auth');
 
     const sendCode = async () => {
@@ -28,6 +40,7 @@ export function EmailLoginForm({ buttonText }: { buttonText?: string }) {
         }
 
         setIsSendingCode(true); // 开始发送，显示加载状态
+        let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
         try {
             const form = new FormData();
@@ -37,20 +50,20 @@ export function EmailLoginForm({ buttonText }: { buttonText?: string }) {
 
             // 添加超时处理
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 10000); // 10秒超时
+            timeoutId = setTimeout(() => controller.abort(), 10000); // 10秒超时
 
             const res = await fetch('/api/auth/send-email', {
                 method: 'POST',
                 body: form,
                 signal: controller.signal,
             });
+            const payload: unknown = await res.json().catch(() => null);
 
-            clearTimeout(timeoutId);
-
-            if (res.ok) {
+            if (res.ok && isEmailVerificationSent(payload)) {
                 toast.info(
                     process.env.NODE_ENV === 'development' ? t('codeSentDev') : t('codeSent')
                 );
+                otpRef.current?.focus();
                 setCooldown(60);
                 const timer = setInterval(() => {
                     setCooldown(s => {
@@ -62,16 +75,24 @@ export function EmailLoginForm({ buttonText }: { buttonText?: string }) {
                     });
                 }, 1000);
             } else {
-                const errorData = await res.json().catch(() => ({}));
-                toast.error(errorData.error || errorData.message || t('sendFailed'));
+                const failureCode = getEmailVerificationFailureCode(payload);
+                if (res.status === 404 && failureCode === 'USER_NOT_FOUND') {
+                    const params = new URLSearchParams({ email: email.trim() });
+                    if (callbackUrl) params.set('callbackUrl', callbackUrl);
+                    if (callbackUrl?.includes('desktop=1')) params.set('desktop', '1');
+                    window.location.assign(`/auth/register?${params.toString()}`);
+                    return;
+                }
+                toast.error(getEmailVerificationFailureMessage(payload, t('sendFailed')));
             }
-        } catch (e: any) {
-            if (e.name === 'AbortError') {
+        } catch (error: unknown) {
+            if (error instanceof DOMException && error.name === 'AbortError') {
                 toast.error(t('requestTimeout'));
             } else {
-                toast.error(`${t('sendFailed')}：${e.message}`);
+                toast.error(t('sendFailed'));
             }
         } finally {
+            if (timeoutId) clearTimeout(timeoutId);
             setIsSendingCode(false); // 结束发送，隐藏加载状态
         }
     };
@@ -79,7 +100,7 @@ export function EmailLoginForm({ buttonText }: { buttonText?: string }) {
     const onSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         startTransition(async () => {
-            const result = await emailLoginAction({ email, code }, null);
+            const result = await emailLoginAction({ email, code }, callbackUrl || null);
             if (result?.error) {
                 toast.error(t('loginFailed', { error: result.error }));
             }
@@ -98,6 +119,11 @@ export function EmailLoginForm({ buttonText }: { buttonText?: string }) {
                             id="email"
                             placeholder={t('enterEmail')}
                             type="email"
+                            autoCapitalize="none"
+                            autoComplete="email"
+                            autoCorrect="off"
+                            inputMode="email"
+                            spellCheck={false}
                             value={email}
                             onChange={e => setEmail(e.target.value)}
                             required
@@ -112,11 +138,17 @@ export function EmailLoginForm({ buttonText }: { buttonText?: string }) {
                     <div className="mb-1 text-sm">{t('verificationCode')}</div>
                     <div className="flex items-center justify-center space-x-4 rounded-full border border-muted p-1 hover:border hover:border-primary">
                         <input
+                            ref={otpRef}
                             id="otp"
                             placeholder={t('enterCode')}
                             type="text"
+                            autoComplete="one-time-code"
+                            inputMode="numeric"
+                            maxLength={6}
+                            pattern="[0-9]{6}"
                             value={code}
-                            onChange={e => setCode(e.target.value)}
+                            onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                            required
                             disabled={isSendingCode} // 发送时禁用验证码输入
                             className="mx-6 w-full border-none bg-transparent p-1 shadow-none outline-none hover:border-none hover:ring-0 focus-visible:border-none focus-visible:ring-0 disabled:cursor-not-allowed disabled:opacity-50"
                         />
@@ -152,7 +184,7 @@ export function EmailLoginForm({ buttonText }: { buttonText?: string }) {
                         type="submit"
                         variant="default"
                         className="w-full transition delay-150 duration-300"
-                        disabled={isPending || isSendingCode}
+                        disabled={isPending || isSendingCode || !email || code.length !== 6}
                     >
                         {isPending ? (
                             <div className="flex items-center gap-2">

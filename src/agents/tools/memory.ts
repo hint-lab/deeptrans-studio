@@ -1,14 +1,18 @@
 // Memory Tool - 记忆库查询工具
 import { createLogger } from '@/lib/logger';
+import { memorySearchPublicErrorMessage } from '@/lib/memory-search';
 import { type HybridSearchConfig } from '@/types/hybrid-search';
-const logger = createLogger({
-    type: 'agents:memory',
-}, {
-    json: false,// 开启json格式输出
-    pretty: false, // 关闭开发环境美化输出
-    colors: true, // 仅当json：false时启用颜色输出可用
-    includeCaller: false, // 日志不包含调用者
-});
+const logger = createLogger(
+    {
+        type: 'agents:memory',
+    },
+    {
+        json: false, // 开启json格式输出
+        pretty: false, // 关闭开发环境美化输出
+        colors: true, // 仅当json：false时启用颜色输出可用
+        includeCaller: false, // 日志不包含调用者
+    }
+);
 export interface MemoryHit {
     id: string;
     source: string;
@@ -26,6 +30,52 @@ export interface MemorySearchOptions {
         userId: string;
         tenantId?: string | null;
     };
+    // This value is only accepted from a server-resolved project binding.
+    // Browser callers never receive a path to widen the memory scope.
+    memoryIds?: string[];
+}
+
+function optionalFiniteNumber(value: unknown) {
+    if (value === null || value === undefined || value === '') return undefined;
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric : undefined;
+}
+
+type MemorySearchResponse = {
+    success?: unknown;
+    data?: unknown;
+    error?: unknown;
+};
+
+/**
+ * A retrieval outage is materially different from an honest empty result.
+ * Preserve that distinction through the agent layer so a post-edit workflow
+ * never tells a reviewer that no references exist when search did not run.
+ */
+export class MemorySearchError extends Error {
+    constructor(error?: unknown) {
+        super(memorySearchPublicErrorMessage(error));
+        this.name = 'MemorySearchError';
+    }
+}
+
+export function memoryHitsFromSearchResponse(response: unknown): MemoryHit[] {
+    const payload =
+        response && typeof response === 'object' ? (response as MemorySearchResponse) : undefined;
+    if (payload?.success !== true) {
+        throw new MemorySearchError(payload?.error);
+    }
+
+    const rows = Array.isArray(payload.data) ? payload.data : [];
+    return rows.map((item: any) => ({
+        id: item.id,
+        source: item.source ?? item.sourceText ?? '',
+        target: item.target ?? item.targetText ?? '',
+        score: optionalFiniteNumber(item.score) ?? 0,
+        vectorScore: optionalFiniteNumber(item.vectorScore),
+        keywordScore: optionalFiniteNumber(item.keywordScore),
+        searchMode: item.searchMode,
+    }));
 }
 
 export class MemoryTool {
@@ -45,36 +95,21 @@ export class MemoryTool {
 
         try {
             if (typeof window === 'undefined') {
-                if (!options?.owner?.userId) return [];
+                if (!options?.owner?.userId) {
+                    throw new MemorySearchError();
+                }
                 const { searchMemoryForOwner } = await import('@/server/memory');
                 const result = await searchMemoryForOwner(query, options.owner, {
                     limit: options?.limit || 5,
                     searchConfig: options?.searchConfig,
+                    memoryIds: options?.memoryIds,
                 });
-                const rows = result?.success && Array.isArray(result.data) ? result.data : [];
-                return rows.map((item: any) => ({
-                    id: item.id,
-                    source: item.source ?? item.sourceText ?? '',
-                    target: item.target ?? item.targetText ?? '',
-                    score: Number(item.score) || 0,
-                    vectorScore: item.vectorScore ? Number(item.vectorScore) : undefined,
-                    keywordScore: item.keywordScore ? Number(item.keywordScore) : undefined,
-                    searchMode: item.searchMode,
-                }));
+                return memoryHitsFromSearchResponse(result);
             }
 
-            // 构建完整的 API URL
-            let url = '/api/memories/hybrid-search';
-
-            // 在服务器端，需要使用完整的 URL
-            if (typeof window === 'undefined') {
-                // 服务器端环境
-                const baseUrl =
-                    this.apiBase || process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL
-                        ? `https://${process.env.VERCEL_URL}`
-                        : 'http://localhost:3000';
-                url = `${baseUrl}/api/memories/hybrid-search`;
-            }
+            const url = this.apiBase
+                ? `${this.apiBase}/api/memories/hybrid-search`
+                : '/api/memories/hybrid-search';
 
             // 使用新的混合检索 API
             const response = await fetch(url, {
@@ -90,26 +125,25 @@ export class MemoryTool {
                 }),
             });
 
-            if (!response.ok) {
-                logger.warn('Memory hybrid search failed:', response.statusText);
-                return [];
+            let data: unknown;
+            try {
+                data = await response.json();
+            } catch {
+                data = undefined;
             }
 
-            const data = await response.json();
-            const rows = Array.isArray(data?.data) ? data.data : [];
+            if (!response.ok) {
+                logger.warn('Memory hybrid search failed:', response.statusText);
+                const payload =
+                    data && typeof data === 'object' ? (data as MemorySearchResponse) : undefined;
+                throw new MemorySearchError(payload?.error);
+            }
 
-            return rows.map((item: any) => ({
-                id: item.id,
-                source: item.source ?? item.sourceText ?? '',
-                target: item.target ?? item.targetText ?? '',
-                score: Number(item.score) || 0,
-                vectorScore: item.vectorScore ? Number(item.vectorScore) : undefined,
-                keywordScore: item.keywordScore ? Number(item.keywordScore) : undefined,
-                searchMode: item.searchMode,
-            }));
+            return memoryHitsFromSearchResponse(data);
         } catch (error) {
             logger.error('Memory search failed:', error);
-            return [];
+            if (error instanceof MemorySearchError) throw error;
+            throw new MemorySearchError(error);
         }
     }
 

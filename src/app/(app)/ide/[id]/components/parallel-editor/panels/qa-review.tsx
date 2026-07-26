@@ -12,6 +12,16 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/componen
 import { useActiveDocumentItem } from '@/hooks/useActiveDocumentItem';
 import { useAgentWorkflowSteps } from '@/hooks/useAgentWorkflowSteps';
 import { useTranslationContent } from '@/hooks/useTranslation';
+import { resolveQaReviewErrorKey } from '@/lib/ide-review-error';
+import { getItemScopedValue, type ItemScopedValue } from '@/lib/item-scoped-state';
+import {
+    failedQaReviewResults,
+    idleQaReviewLoadState,
+    loadingQaReviewResults,
+    readyQaReviewResults,
+    resolveQaReviewLoadState,
+    type QaReviewLoadState,
+} from '@/lib/qa-review-load-state';
 import {
     isSyntaxEvaluationTargetCompatible,
     normalizeSyntaxQualityResult,
@@ -86,22 +96,36 @@ export default function QAPanel(_props: { projectId?: string }) {
         value: string | undefined
     ) => void;
 
-    const [baseline, setBaseline] = useState('');
+    const [baselineState, setBaselineState] = useState<ItemScopedValue<string> | null>(null);
+    const baseline = getItemScopedValue(baselineState, activeItemId) ?? '';
     const [showDiff, setShowDiff] = useState(false);
     const [loadingEmbedded, setLoadingEmbedded] = useState(false);
     const [savingSelection, setSavingSelection] = useState(false);
+    const [qaReviewLoadState, setQaReviewLoadState] =
+        useState<QaReviewLoadState>(idleQaReviewLoadState);
+    const [qaReviewLoadRetryVersion, setQaReviewLoadRetryVersion] = useState(0);
     const [isNarrow, setIsNarrow] = useState(false);
     const [activePanel, setActivePanel] = useState<QaPanelTab>('relations');
     const containerRef = useRef<HTMLDivElement>(null);
     const loadRequestRef = useRef(0);
     const selectionRequestRef = useRef(0);
+    const revisionRequestRef = useRef(0);
 
+    const qaSyntaxForActiveItem = qaItemId === activeItemId ? qaSyntax : undefined;
+    const qaBiTermForActiveItem = qaItemId === activeItemId ? qaBiTerm : undefined;
     const qaEmbeddedText = qaItemId === activeItemId ? storedEmbedded : undefined;
-    const hasRun = qaItemId === activeItemId && Boolean(qaSyntax || qaBiTerm);
+    const hasRun = Boolean(qaSyntaxForActiveItem || qaBiTermForActiveItem);
+    const currentQaReviewLoadState = resolveQaReviewLoadState(qaReviewLoadState, activeItemId);
+    const qaResultLoadMessage =
+        currentQaReviewLoadState.status === 'loading'
+            ? t('loadingResults')
+            : currentQaReviewLoadState.status === 'error'
+              ? t('loadFailed')
+              : null;
 
     const result = useMemo(() => {
-        const syntaxResult = normalizeSyntaxQualityResult(qaSyntax);
-        const alignmentResult = normalizeSyntaxQualityResult(qaBiTerm);
+        const syntaxResult = normalizeSyntaxQualityResult(qaSyntaxForActiveItem);
+        const alignmentResult = normalizeSyntaxQualityResult(qaBiTermForActiveItem);
         const relations = syntaxResult.relations.length
             ? syntaxResult.relations
             : alignmentResult.relations;
@@ -113,7 +137,7 @@ export default function QAPanel(_props: { projectId?: string }) {
                 relationCount: relations.length,
             },
         };
-    }, [qaBiTerm, qaSyntax]);
+    }, [qaBiTermForActiveItem, qaSyntaxForActiveItem]);
 
     const issues = useMemo(
         () =>
@@ -160,14 +184,18 @@ export default function QAPanel(_props: { projectId?: string }) {
     useEffect(() => {
         const requestId = ++loadRequestRef.current;
         selectionRequestRef.current += 1;
-        setBaseline('');
+        revisionRequestRef.current += 1;
+        setBaselineState(null);
         setShowDiff(false);
+        setLoadingEmbedded(false);
         setSavingSelection(false);
         setQaSyntaxEmbedded(undefined);
         if (!activeItemId) {
             setQAOutputs(undefined);
+            setQaReviewLoadState(idleQaReviewLoadState);
             return;
         }
+        setQaReviewLoadState(loadingQaReviewResults(activeItemId));
         setQAOutputs({ itemId: activeItemId, biTerm: undefined, syntax: undefined });
 
         void (async () => {
@@ -179,19 +207,25 @@ export default function QAPanel(_props: { projectId?: string }) {
                 ) {
                     return;
                 }
-                if (!stored) return;
+                if (!stored) {
+                    setQaReviewLoadState(readyQaReviewResults(activeItemId));
+                    return;
+                }
                 setQAOutputs({
                     itemId: activeItemId,
                     biTerm: stored.qualityAssureBiTerm,
                     syntax: stored.qualityAssureSyntax,
                 });
                 const normalized = normalizeSyntaxQualityResult(stored.qualityAssureSyntax);
-                setBaseline(
-                    normalized.evaluation?.baseTarget ||
-                        String(stored.targetText || stored.preTranslateEmbedded || '')
-                );
+                setBaselineState({
+                    itemId: activeItemId,
+                    value:
+                        normalized.evaluation?.baseTarget ||
+                        String(stored.targetText || stored.preTranslateEmbedded || ''),
+                });
                 const embedded = stored.qualityAssureSyntaxEmbedded;
                 setQaSyntaxEmbedded(typeof embedded === 'string' ? embedded : undefined);
+                setQaReviewLoadState(readyQaReviewResults(activeItemId));
             } catch {
                 if (
                     requestId === loadRequestRef.current &&
@@ -199,6 +233,7 @@ export default function QAPanel(_props: { projectId?: string }) {
                 ) {
                     setQAOutputs({ itemId: activeItemId, biTerm: undefined, syntax: undefined });
                     setQaSyntaxEmbedded(undefined);
+                    setQaReviewLoadState(failedQaReviewResults(activeItemId));
                     toast.error(t('loadFailed'));
                 }
             }
@@ -210,13 +245,22 @@ export default function QAPanel(_props: { projectId?: string }) {
         };
         // Store action wrappers are intentionally excluded; they are recreated on every render.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [activeItemId]);
+    }, [activeItemId, qaReviewLoadRetryVersion]);
 
     useEffect(() => {
         if (!baseline && hasRun) {
-            setBaseline(result.evaluation?.baseTarget || String(targetText || ''));
+            setBaselineState({
+                itemId: activeItemId,
+                value: result.evaluation?.baseTarget || String(targetText || ''),
+            });
         }
-    }, [baseline, hasRun, result.evaluation?.baseTarget, targetText]);
+    }, [activeItemId, baseline, hasRun, result.evaluation?.baseTarget, targetText]);
+
+    const retryQaResultLoad = () => {
+        if (!activeItemId) return;
+        setQaReviewLoadState(loadingQaReviewResults(activeItemId));
+        setQaReviewLoadRetryVersion(version => version + 1);
+    };
 
     const saveSelection = async (nextSelectedIds: string[]) => {
         const evaluationId = result.evaluation?.id;
@@ -238,9 +282,9 @@ export default function QAPanel(_props: { projectId?: string }) {
                 return;
             }
             setQAOutputs({ itemId, syntax: nextSyntax });
-        } catch {
+        } catch (error) {
             if (requestId === selectionRequestRef.current) {
-                toast.error(t('selectionSaveFailed'));
+                toast.error(t(resolveQaReviewErrorKey(error, 'selectionSaveFailed')));
             }
         } finally {
             if (requestId === selectionRequestRef.current) setSavingSelection(false);
@@ -281,6 +325,7 @@ export default function QAPanel(_props: { projectId?: string }) {
             return;
         }
         const itemId = activeItemId;
+        const requestId = ++revisionRequestRef.current;
         setLoadingEmbedded(true);
         try {
             const generated = await embedSelectedSyntaxIssuesAction(
@@ -289,15 +334,19 @@ export default function QAPanel(_props: { projectId?: string }) {
                 selectedIds,
                 locale
             );
-            if (activeItemIdRef.current !== itemId) return;
+            if (activeItemIdRef.current !== itemId || requestId !== revisionRequestRef.current) {
+                return;
+            }
             setQAOutputs({ itemId, syntax: generated.syntax });
             setQaSyntaxEmbedded(generated.text || '');
             setShowDiff(true);
             toast.success(t('revisionGenerated'));
         } catch (error) {
-            toast.error(error instanceof Error ? error.message : t('generateFailed'));
+            if (requestId === revisionRequestRef.current) {
+                toast.error(t(resolveQaReviewErrorKey(error, 'generateFailed')));
+            }
         } finally {
-            setLoadingEmbedded(false);
+            if (requestId === revisionRequestRef.current) setLoadingEmbedded(false);
         }
     };
 
@@ -314,7 +363,7 @@ export default function QAPanel(_props: { projectId?: string }) {
             setTargetTranslationText(applied.text);
             toast.success(t('applied'));
         } catch (error) {
-            toast.error(error instanceof Error ? error.message : t('applyFailed'));
+            toast.error(t(resolveQaReviewErrorKey(error, 'applyFailed')));
         }
     };
 
@@ -375,6 +424,35 @@ export default function QAPanel(_props: { projectId?: string }) {
                     </div>
                 )}
             </div>
+
+            {currentQaReviewLoadState.status === 'loading' && (
+                <div
+                    role="status"
+                    className="mt-2 flex items-center gap-1.5 rounded-md border border-purple-200 bg-white/80 px-2.5 py-2 text-[11px] text-muted-foreground dark:border-purple-900 dark:bg-slate-950/80"
+                >
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                    {t('loadingResults')}
+                </div>
+            )}
+
+            {currentQaReviewLoadState.status === 'error' && (
+                <div
+                    role="alert"
+                    className="mt-2 flex flex-wrap items-center gap-2 rounded-md border border-red-200 bg-red-50 px-2.5 py-2 text-[11px] text-red-800 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200"
+                >
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                    <span className="min-w-0 flex-1">{t('loadFailed')}</span>
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 border-red-300 bg-background px-2 text-[10px] text-foreground hover:bg-red-100 dark:border-red-800 dark:hover:bg-red-950"
+                        onClick={retryQaResultLoad}
+                    >
+                        {t('retryLoad')}
+                    </Button>
+                </div>
+            )}
 
             {hasRun && (
                 <div className="mt-2 flex flex-wrap gap-1" aria-label={t('dimensionsLabel')}>
@@ -487,7 +565,9 @@ export default function QAPanel(_props: { projectId?: string }) {
                     </div>
                     <div className="min-h-0 flex-1 space-y-2 overflow-auto pr-1 text-xs">
                         {!hasRun ? (
-                            <div className="text-muted-foreground">{t('notRun')}</div>
+                            <div className="text-muted-foreground">
+                                {qaResultLoadMessage || t('notRun')}
+                            </div>
                         ) : result.status === 'failed' ? (
                             <div className="rounded border border-red-200 bg-red-50 p-2 text-red-700">
                                 {t('invalidResult')}
@@ -602,7 +682,9 @@ export default function QAPanel(_props: { projectId?: string }) {
                     </div>
                     <div className="min-h-0 flex-1 space-y-2 overflow-auto pr-1 text-xs">
                         {!hasRun ? (
-                            <div className="text-muted-foreground">{t('notDetected')}</div>
+                            <div className="text-muted-foreground">
+                                {qaResultLoadMessage || t('notDetected')}
+                            </div>
                         ) : issues.length ? (
                             issues.map(issue => {
                                 const selected = result.selectedMap[issue.id] === true;
@@ -777,7 +859,9 @@ export default function QAPanel(_props: { projectId?: string }) {
                         aria-live="polite"
                     >
                         {!baseText && !proposalText && (
-                            <div className="text-muted-foreground">{t('noResults')}</div>
+                            <div className="text-muted-foreground">
+                                {qaResultLoadMessage || t('noResults')}
+                            </div>
                         )}
                         {baseText && (
                             <div

@@ -1,7 +1,7 @@
 'use client';
 
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { toggle } from '@/store/features/bottomPanelSlice';
+import { setOpen, toggle } from '@/store/features/bottomPanelSlice';
 
 export const useBottomPanel = () => {
     const dispatch = useAppDispatch();
@@ -10,6 +10,7 @@ export const useBottomPanel = () => {
     );
 
     const toggleBottomPanel = () => dispatch(toggle());
+    const setBottomPanelOpen = (isOpen: boolean) => dispatch(setOpen(isOpen));
 
-    return { isBottomPanelOpen, toggleBottomPanel };
+    return { isBottomPanelOpen, toggleBottomPanel, setBottomPanelOpen };
 };

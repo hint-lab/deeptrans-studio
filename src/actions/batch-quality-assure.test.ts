@@ -1,13 +1,16 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import type { AuthContext } from '@/lib/guards';
 import { sourceRevision } from '@/lib/source-revision';
 import { SYNTAX_CATEGORIES } from '@/lib/syntax-quality';
+import { requestBatchQACancelWithRedis } from '@/lib/batch-qa-cancellation';
 import {
     createBatchQAId,
     getBatchQAStaleReason,
     isBatchQAEligibleStatus,
     isBatchQATerminal,
     persistBatchQAResultsWithDeps,
+    resolveBatchQAPromptSnapshot,
 } from './batch-quality-assure';
 
 class FakeRedis {
@@ -40,9 +43,30 @@ class FakeRedis {
         return deleted;
     }
 
-    async eval(_script: string, _keyCount: number, key: string, token: string) {
-        if (this.values.get(key) !== token) return 0;
-        this.values.delete(key);
+    async eval(script: string, keyCount: number, ...args: Array<string | number>) {
+        const keys = args.slice(0, keyCount).map(String);
+        const values = args.slice(keyCount).map(String);
+
+        if (script.includes('batch-qa-acquire-persist-lock')) {
+            const [cancelKey, lockKey] = keys;
+            const [lockToken] = values;
+            if (this.values.get(cancelKey!) === '1') return 'CANCELED';
+            if (this.values.has(lockKey!)) return 'LOCKED';
+            this.values.set(lockKey!, lockToken!);
+            return 'ACQUIRED';
+        }
+
+        if (script.includes('batch-qa-request-cancel')) {
+            const [lockKey, cancelKey] = keys;
+            if (this.values.has(lockKey!)) return 'PERSISTING';
+            this.values.set(cancelKey!, '1');
+            return 'CANCELED';
+        }
+
+        const [key] = keys;
+        const [token] = values;
+        if (this.values.get(key!) !== token) return 0;
+        this.values.delete(key!);
         return 1;
     }
 }
@@ -95,8 +119,8 @@ function writableItem(status = 'MT_REVIEW') {
     };
 }
 
-test('allows only MT and MT_REVIEW as batch QA input states', () => {
-    assert.equal(isBatchQAEligibleStatus('MT'), true);
+test('allows only MT_REVIEW as a batch QA input state', () => {
+    assert.equal(isBatchQAEligibleStatus('MT'), false);
     assert.equal(isBatchQAEligibleStatus('MT_REVIEW'), true);
     assert.equal(isBatchQAEligibleStatus('QA'), false);
     assert.equal(isBatchQAEligibleStatus('QA_REVIEW'), false);
@@ -115,6 +139,18 @@ test('adds a random suffix to timestamp-based batch IDs', () => {
     assert.notEqual(createBatchQAId(123, 'suffix-a'), createBatchQAId(123, 'suffix-b'));
 });
 
+test('freezes the owner-resolved QA prompt before jobs are enqueued', async () => {
+    const snapshot = await resolveBatchQAPromptSnapshot(authCtx, async (ctx, key) => {
+        assert.equal(ctx.userId, authCtx.userId);
+        assert.equal(key, 'syntax-evaluate');
+        return 'identify only reviewable syntax issues';
+    });
+
+    assert.deepEqual(snapshot, {
+        syntaxEvaluatePrompt: 'identify only reviewable syntax issues',
+    });
+});
+
 test('classifies advanced status and changed text as stale', () => {
     const data = cachedResult('item-1');
     assert.equal(getBatchQAStaleReason(data, writableItem('QA_REVIEW')), 'STATUS_CHANGED');
@@ -126,7 +162,7 @@ test('classifies advanced status and changed text as stale', () => {
         getBatchQAStaleReason(data, { ...writableItem(), targetText: 'new target' }),
         'TARGET_CHANGED'
     );
-    assert.equal(getBatchQAStaleReason(data, writableItem('MT')), undefined);
+    assert.equal(getBatchQAStaleReason(data, writableItem('MT')), 'STATUS_CHANGED');
 });
 
 test('rejects persistence before every worker job reaches a terminal state', async () => {
@@ -138,7 +174,7 @@ test('rejects persistence before every worker job reaches a terminal state', asy
         persistBatchQAResultsWithDeps(batchId, {
             connection: redis,
             authCtx,
-            loadWritableItem: async () => writableItem(),
+            requireWritableDocumentItem: async () => writableItem(),
             persistItemAtomically: async () => true,
             lockToken: 'lock-incomplete',
         }),
@@ -148,14 +184,65 @@ test('rejects persistence before every worker job reaches a terminal state', asy
     assert.equal(redis.values.has(`qa.${batchId}.userId`), true);
 });
 
+test('a successful cancel fences persist before any segment status can change', async () => {
+    const batchId = 'cancel-wins';
+    const redis = terminalRedis(batchId);
+    const canceled = await requestBatchQACancelWithRedis(batchId, redis, 60);
+    let itemReads = 0;
+    let writes = 0;
+
+    assert.deepEqual(canceled, { canceled: true });
+    assert.equal(redis.values.get(`qa.${batchId}.cancel`), '1');
+    await assert.rejects(
+        persistBatchQAResultsWithDeps(batchId, {
+            connection: redis,
+            authCtx,
+            requireWritableDocumentItem: async () => {
+                itemReads += 1;
+                return writableItem();
+            },
+            persistItemAtomically: async () => {
+                writes += 1;
+                return true;
+            },
+            lockToken: 'lock-cancel-wins',
+        }),
+        /已取消/
+    );
+
+    assert.equal(itemReads, 0);
+    assert.equal(writes, 0);
+    assert.equal(redis.values.has(`qa.${batchId}.item.item-1`), true);
+    assert.equal(redis.values.has(`qa.${batchId}.userId`), true);
+    assert.equal(redis.values.has(`qa.${batchId}.cancel`), true);
+});
+
+test('cancel is rejected when persist has already acquired the serialization lock', async () => {
+    const batchId = 'persist-wins';
+    const redis = terminalRedis(batchId);
+    redis.values.set(`qa.${batchId}.persist.lock`, 'existing-persist');
+
+    assert.deepEqual(await requestBatchQACancelWithRedis(batchId, redis, 60), {
+        canceled: false,
+        reason: 'persisting',
+    });
+    assert.equal(redis.values.get(`qa.${batchId}.cancel`), '0');
+});
+
 test('atomically persisted results are consumed and batch metadata is cleaned', async () => {
     const batchId = 'success';
     const redis = terminalRedis(batchId);
     let writes = 0;
+    let guardedItemId = '';
+    let guardedAuthCtx: AuthContext | undefined;
     const result = await persistBatchQAResultsWithDeps(batchId, {
         connection: redis,
         authCtx,
-        loadWritableItem: async () => writableItem('MT_REVIEW'),
+        requireWritableDocumentItem: async (itemId, receivedAuthCtx) => {
+            guardedItemId = itemId;
+            guardedAuthCtx = receivedAuthCtx;
+            return writableItem('MT_REVIEW');
+        },
         persistItemAtomically: async () => {
             writes += 1;
             return true;
@@ -164,6 +251,8 @@ test('atomically persisted results are consumed and batch metadata is cleaned', 
     });
 
     assert.equal(writes, 1);
+    assert.equal(guardedItemId, 'item-1');
+    assert.equal(guardedAuthCtx, authCtx);
     assert.deepEqual(result.updatedIds, ['item-1']);
     assert.equal(result.complete, true);
     assert.equal(redis.values.has(`qa.${batchId}.item.item-1`), false);
@@ -187,7 +276,7 @@ test('returns the real item IDs for terminal worker failures', async () => {
     const result = await persistBatchQAResultsWithDeps(batchId, {
         connection: redis,
         authCtx,
-        loadWritableItem: async () => {
+        requireWritableDocumentItem: async () => {
             throw new Error('should not load a failed item');
         },
         persistItemAtomically: async () => false,
@@ -205,7 +294,7 @@ test('transient item persistence failures retain the result and batch metadata',
     const result = await persistBatchQAResultsWithDeps(batchId, {
         connection: redis,
         authCtx,
-        loadWritableItem: async () => writableItem('MT'),
+        requireWritableDocumentItem: async () => writableItem('MT_REVIEW'),
         persistItemAtomically: async () => {
             throw new Error('database temporarily unavailable');
         },
@@ -227,7 +316,7 @@ test('explicitly stale results are discarded without regressing item status', as
     const result = await persistBatchQAResultsWithDeps(batchId, {
         connection: redis,
         authCtx,
-        loadWritableItem: async () => writableItem('POST_EDIT'),
+        requireWritableDocumentItem: async () => writableItem('POST_EDIT'),
         persistItemAtomically: async () => {
             writes += 1;
             return true;
@@ -242,13 +331,34 @@ test('explicitly stale results are discarded without regressing item status', as
     assert.equal(redis.values.has(`qa.${batchId}.userId`), false);
 });
 
+test('refuses an MT item at persist time without promoting it to QA review', async () => {
+    const batchId = 'mt-not-reviewable';
+    const redis = terminalRedis(batchId);
+    let writes = 0;
+
+    const result = await persistBatchQAResultsWithDeps(batchId, {
+        connection: redis,
+        authCtx,
+        requireWritableDocumentItem: async () => writableItem('MT'),
+        persistItemAtomically: async () => {
+            writes += 1;
+            return true;
+        },
+        lockToken: 'lock-mt-not-reviewable',
+    });
+
+    assert.equal(writes, 0);
+    assert.deepEqual(result.staleIds, ['item-1']);
+    assert.equal(redis.values.has(`qa.${batchId}.item.item-1`), false);
+});
+
 test('a failed conditional update is treated as a stale race and consumed', async () => {
     const batchId = 'atomic-race';
     const redis = terminalRedis(batchId);
     const result = await persistBatchQAResultsWithDeps(batchId, {
         connection: redis,
         authCtx,
-        loadWritableItem: async () => writableItem('MT_REVIEW'),
+        requireWritableDocumentItem: async () => writableItem('MT_REVIEW'),
         persistItemAtomically: async () => false,
         lockToken: 'lock-atomic-race',
     });
@@ -266,7 +376,7 @@ test('a concurrent persistence call cannot consume the same batch', async () => 
         persistBatchQAResultsWithDeps(batchId, {
             connection: redis,
             authCtx,
-            loadWritableItem: async () => writableItem(),
+            requireWritableDocumentItem: async () => writableItem(),
             persistItemAtomically: async () => true,
             lockToken: 'our-lock',
         }),

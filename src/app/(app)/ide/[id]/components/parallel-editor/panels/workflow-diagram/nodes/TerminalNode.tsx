@@ -11,18 +11,33 @@ export function TerminalNode({ data }: any) {
     const variant: TerminalVariant =
         data?.variant === 'end' || data?.label === t('end') ? 'end' : 'start';
     const isStart = variant === 'start';
+    const workflowState = ['pending', 'active', 'completed'].includes(
+        String(data?.workflowState || '')
+    )
+        ? String(data.workflowState)
+        : undefined;
+    const isCompleted = workflowState === 'completed';
+    const isActive = workflowState === 'active';
+    const terminalClass = !workflowState
+        ? isStart
+            ? 'border-rose-600 bg-gradient-to-r from-rose-500 to-fuchsia-500 text-white'
+            : 'border-emerald-600 bg-gradient-to-r from-emerald-500 to-teal-500 text-white'
+        : isCompleted
+          ? 'border-emerald-600 bg-gradient-to-r from-emerald-500 to-teal-500 text-white'
+          : isActive
+            ? 'border-indigo-600 bg-gradient-to-r from-indigo-500 to-violet-500 text-white'
+            : 'border-border bg-muted text-muted-foreground';
 
     return (
         <div
             className={cn(
                 'flex w-24 select-none items-center justify-center gap-1.5 rounded-full border px-3 py-1.5 text-xs shadow-sm',
-                isStart
-                    ? 'border-rose-600 bg-gradient-to-r from-rose-500 to-fuchsia-500 text-white'
-                    : 'border-emerald-600 bg-gradient-to-r from-emerald-500 to-teal-500 text-white'
+                terminalClass
             )}
+            data-workflow-state={workflowState}
         >
             <Handle type="target" position={Position.Left} id="input" className="!opacity-0" />
-            {isStart ? (
+            {isStart && !isCompleted ? (
                 <Play className="h-3.5 w-3.5 opacity-90" />
             ) : (
                 <CheckCircle2 className="h-3.5 w-3.5 opacity-90" />

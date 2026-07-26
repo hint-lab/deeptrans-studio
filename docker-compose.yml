@@ -1,3 +1,6 @@
+# Legacy compatibility compose file. Do not use `docker compose up` here for
+# local development: use the guarded `npm run local:setup` path, which owns
+# docker-compose.dev.yml. Production deployment uses docker-compose-prod.yml.
 services:
     db:
         build:

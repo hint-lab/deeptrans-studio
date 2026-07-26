@@ -51,7 +51,11 @@ export default function Header() {
                     />
                 </Link>
             ) : null}
-            <SidebarToggle isOpen={isSidebarOpen} onToggle={toggleSidebar} />
+            <SidebarToggle
+                isOpen={isSidebarOpen}
+                onToggle={toggleSidebar}
+                controlsId="dashboard-sidebar"
+            />
             <div className="ml-auto flex items-center space-x-4 px-3">
                 <LocaleSwitcher />
                 <Button

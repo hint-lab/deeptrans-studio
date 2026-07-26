@@ -63,11 +63,12 @@ export class DiscourseEvaluateAgent extends BaseAgent<
         const sourceText = i18n.getUserPrompt('source_text', { text: input.source || '' });
         const targetText = i18n.getUserPrompt('target_text', { text: input.target || '' });
         const currentTask = i18n.getAgentPrompt('discourse_evaluate', 'current_task');
+        const userPref = await this.buildUserPref(input.prompt);
 
         if (contextHits.length === 0) {
             // 如果没有参考语段，只能做基础评估
             const noReferenceNote = i18n.getAgentPrompt('discourse_evaluate', 'no_reference_note');
-            const userContent = `${currentTask}\n${sourceText}\n${targetText}\n\n${noReferenceNote}`;
+            const userContent = `${userPref}${currentTask}\n${sourceText}\n${targetText}\n\n${noReferenceNote}`;
             const messages = this.messages(systemPrompt, userContent);
             return this.json(messages, { maxTokens: 1200 });
         }
@@ -85,7 +86,7 @@ export class DiscourseEvaluateAgent extends BaseAgent<
             'discourse_evaluate',
             'evaluation_instruction'
         );
-        const userContent = `${context}\n\n${currentTask}\n${sourceText}\n${targetText}\n\n${evaluationInstruction}`;
+        const userContent = `${userPref}${context}\n\n${currentTask}\n${sourceText}\n${targetText}\n\n${evaluationInstruction}`;
 
         const messages = this.messages(systemPrompt, userContent);
         return this.json(messages, { maxTokens: 1200 });

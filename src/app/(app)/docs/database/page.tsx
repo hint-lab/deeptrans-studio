@@ -1,4 +1,4 @@
-import { Database, Layers, Code, Key } from 'lucide-react';
+import { Database, Layers, Code, Key, Lightbulb } from 'lucide-react';
 import { getPageTranslations, getPageT } from '../i18n';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { CodeBlock } from '../components/code-block';
@@ -123,9 +123,13 @@ export default async function DatabasePage() {
                                 )}
 
                                 {model.notes && (
-                                    <div className="border-t pt-2">
+                                    <div className="flex items-start gap-2 border-t pt-2">
+                                        <Lightbulb
+                                            className="mt-0.5 h-4 w-4 shrink-0 text-amber-500"
+                                            aria-hidden="true"
+                                        />
                                         <p className="text-xs italic text-muted-foreground">
-                                            💡 {model.notes}
+                                            {model.notes}
                                         </p>
                                     </div>
                                 )}

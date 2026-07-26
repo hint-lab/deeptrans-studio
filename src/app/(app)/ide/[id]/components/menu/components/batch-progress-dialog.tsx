@@ -1,17 +1,14 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { cancelJobAction, clearJobAction, startJobAction } from '@/actions/job';
 import { Coffee } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
 export function BatchProgressDialog({
     open,
     onOpenChange,
-    jobId,
     percent,
     onCancel,
     title,
@@ -24,21 +21,19 @@ export function BatchProgressDialog({
     title?: string;
 }) {
     const t = useTranslations('IDE.menus.batchProgress');
-    const [starting, setStarting] = useState(false);
     const p = Math.max(0, Math.min(100, Math.round(percent || 0)));
 
-    useEffect(() => {
-        if (open && jobId) {
-            setStarting(true);
-            startJobAction(jobId).finally(() => setStarting(false));
-        }
-        if (!open && jobId) {
-            clearJobAction(jobId).catch(() => {});
-        }
-    }, [open, jobId]);
-
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog
+            open={open}
+            onOpenChange={nextOpen => {
+                if (!nextOpen && open) {
+                    onCancel();
+                    return;
+                }
+                onOpenChange(nextOpen);
+            }}
+        >
             <DialogContent className="max-w-sm">
                 <DialogHeader>
                     <DialogTitle>{title || t('defaultTitle')}</DialogTitle>
@@ -57,7 +52,7 @@ export function BatchProgressDialog({
                         </div>
                     </div>
                     <div className="flex justify-end gap-2 pt-1">
-                        <Button variant="outline" onClick={onCancel} disabled={starting}>
+                        <Button variant="outline" onClick={onCancel}>
                             {t('cancel')}
                         </Button>
                     </div>

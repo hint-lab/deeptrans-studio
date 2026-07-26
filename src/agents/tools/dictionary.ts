@@ -1,14 +1,18 @@
 // Dictionary Tool - 术语库查询工具
 import { createLogger } from '@/lib/logger';
+import type { AuthContext } from '@/lib/guards';
 import { type DictEntry, type TermCandidate } from '@/types/terms';
-const logger = createLogger({
-    type: 'tools:dictionary',
-}, {
-    json: false,// 开启json格式输出
-    pretty: false, // 关闭开发环境美化输出
-    colors: true, // 仅当json：false时启用颜色输出可用
-    includeCaller: false, // 日志不包含调用者
-});
+const logger = createLogger(
+    {
+        type: 'tools:dictionary',
+    },
+    {
+        json: false, // 开启json格式输出
+        pretty: false, // 关闭开发环境美化输出
+        colors: true, // 仅当json：false时启用颜色输出可用
+        includeCaller: false, // 日志不包含调用者
+    }
+);
 export class DictionaryTool {
     private readonly apiBase: string;
 
@@ -20,7 +24,10 @@ export class DictionaryTool {
         this.apiBase = (apiBase || fromEnv || '').replace(/\/$/, '');
     }
 
-    async lookup(terms: TermCandidate[], options?: any): Promise<DictEntry[]> {
+    async lookup(
+        terms: TermCandidate[],
+        options?: { owner?: AuthContext; projectId?: string }
+    ): Promise<DictEntry[]> {
         logger.debug('DictionaryTool.lookup 开始:', {
             termsCount: terms?.length,
             apiBase: this.apiBase,
@@ -43,6 +50,7 @@ export class DictionaryTool {
                 if (!options?.owner) continue;
                 const result = await queryDictionaryEntriesExactWithOwner(term, options.owner, {
                     limit: 20,
+                    projectId: options.projectId,
                 });
                 const rows = result?.success && Array.isArray(result.data) ? result.data : [];
                 for (const item of rows as any[]) {
@@ -83,6 +91,7 @@ export class DictionaryTool {
                     ? new URL('/api/dictionary/lookup', baseUrl)
                     : new URL('/api/dictionary/lookup', 'http://localhost');
                 urlObj.searchParams.set('q', term);
+                if (options?.projectId) urlObj.searchParams.set('projectId', options.projectId);
                 const url = baseUrl ? urlObj.toString() : `${urlObj.pathname}${urlObj.search}`;
 
                 logger.debug('Dictionary lookup: Querying term', { termLength: term.length });

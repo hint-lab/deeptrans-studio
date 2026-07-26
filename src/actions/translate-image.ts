@@ -1,17 +1,22 @@
 // app/actions/translate-image.ts
-'use server'
+'use server';
+import { publicActionErrorMessage } from '@/lib/action-error-boundary';
 import { createLogger } from '@/lib/logger';
 import { requireUser } from '@/lib/guards';
 import { pdfParseToStructuredJson } from '@/lib/parsers/pdf-parser';
 import { chatText } from '@/lib/llm';
-const logger = createLogger({
-    type: 'actions:translate-image',
-}, {
-    json: false,// 开启json格式输出
-    pretty: false, // 关闭开发环境美化输出
-    colors: true, // 仅当json：false时启用颜色输出可用
-    includeCaller: false, // 日志不包含调用者
-});
+import { nonBlankImageTranslation } from '@/lib/image-translation-output';
+const logger = createLogger(
+    {
+        type: 'actions:translate-image',
+    },
+    {
+        json: false, // 开启json格式输出
+        pretty: false, // 关闭开发环境美化输出
+        colors: true, // 仅当json：false时启用颜色输出可用
+        includeCaller: false, // 日志不包含调用者
+    }
+);
 // 配置语言支持
 const SUPPORTED_LANGUAGES = {
     auto: ['auto', '自动检测'],
@@ -23,37 +28,40 @@ const SUPPORTED_LANGUAGES = {
     fr: ['latin', '法语'],
     es: ['latin', '西班牙语'],
     de: ['latin', '德语'],
-} as const
+} as const;
 
-type SupportedLang = keyof typeof SUPPORTED_LANGUAGES
+type SupportedLang = keyof typeof SUPPORTED_LANGUAGES;
 
 interface TranslateImageOptions {
-    sourceLang?: SupportedLang | string
-    targetLang?: SupportedLang | string
-    enhanceImage?: boolean
-    timeout?: number
+    sourceLang?: SupportedLang | string;
+    targetLang?: SupportedLang | string;
+    enhanceImage?: boolean;
+    timeout?: number;
 }
 
 type OcrActionResult =
     | {
-          success: true
-          text: string
-          data: unknown
-          language: string
+          success: true;
+          text: string;
+          language: string;
       }
     | {
-          success: false
-          error: string
-          data?: unknown
-      }
+          success: false;
+          error: string;
+      };
+
+function imageRecognitionPublicErrorMessage(error: unknown) {
+    if (error instanceof Error && error.name === 'AbortError') return '图片识别超时';
+    return publicActionErrorMessage(error, '图片识别服务暂不可用，请稍后重试');
+}
 
 function normalizeOcrLanguage(language?: string) {
-    if (!language || language === 'auto') return process.env.MINERU_LANGUAGE || 'ch'
-    if (language === 'zh-CN' || language === 'zh') return 'ch'
+    if (!language || language === 'auto') return process.env.MINERU_LANGUAGE || 'ch';
+    if (language === 'zh-CN' || language === 'zh') return 'ch';
     if (language in SUPPORTED_LANGUAGES) {
-        return SUPPORTED_LANGUAGES[language as SupportedLang][0]
+        return SUPPORTED_LANGUAGES[language as SupportedLang][0];
     }
-    return language
+    return language;
 }
 
 function getLanguageName(language?: string) {
@@ -78,28 +86,28 @@ function getLanguageName(language?: string) {
 
 function readPath(value: unknown, path: string[]) {
     return path.reduce<unknown>((current, key) => {
-        if (!current || typeof current !== 'object') return undefined
-        return (current as Record<string, unknown>)[key]
-    }, value)
+        if (!current || typeof current !== 'object') return undefined;
+        return (current as Record<string, unknown>)[key];
+    }, value);
 }
 
 function collectText(value: unknown): string {
-    if (typeof value === 'string') return value.trim()
+    if (typeof value === 'string') return value.trim();
     if (Array.isArray(value)) {
         return value
             .map(item => {
-                if (typeof item === 'string') return item
-                if (!item || typeof item !== 'object') return ''
-                const record = item as Record<string, unknown>
-                if (record.type && record.type !== 'text' && !record.text) return ''
-                return collectText(record.text ?? record.content ?? record.value)
+                if (typeof item === 'string') return item;
+                if (!item || typeof item !== 'object') return '';
+                const record = item as Record<string, unknown>;
+                if (record.type && record.type !== 'text' && !record.text) return '';
+                return collectText(record.text ?? record.content ?? record.value);
             })
             .filter(Boolean)
             .join('\n')
-            .trim()
+            .trim();
     }
     if (value && typeof value === 'object') {
-        const record = value as Record<string, unknown>
+        const record = value as Record<string, unknown>;
         return collectText(
             record.text ??
                 record.content ??
@@ -108,20 +116,20 @@ function collectText(value: unknown): string {
                 record.lines ??
                 record.items ??
                 record.blocks
-        )
+        );
     }
-    return ''
+    return '';
 }
 
 function parseTextPayload(value: unknown): string {
-    const text = collectText(value)
-    if (!text) return ''
+    const text = collectText(value);
+    if (!text) return '';
 
     try {
-        const parsed = JSON.parse(text)
-        return collectText(parsed) || text
+        const parsed = JSON.parse(text);
+        return collectText(parsed) || text;
     } catch {
-        return text
+        return text;
     }
 }
 
@@ -137,14 +145,14 @@ function extractOcrText(data: unknown): string {
         ['result'],
         ['text'],
         ['content'],
-    ]
+    ];
 
     for (const path of candidatePaths) {
-        const text = parseTextPayload(readPath(data, path))
-        if (text) return text
+        const text = parseTextPayload(readPath(data, path));
+        if (text) return text;
     }
 
-    return parseTextPayload(data)
+    return parseTextPayload(data);
 }
 
 export async function fetchTextFromImg(
@@ -152,55 +160,48 @@ export async function fetchTextFromImg(
     options?: TranslateImageOptions
 ): Promise<OcrActionResult> {
     await requireUser();
-    const language = normalizeOcrLanguage(options?.sourceLang || 'auto')
-    const shouldEnhance = options?.enhanceImage ?? true
-    const timeout = options?.timeout || 60000
+    const language = normalizeOcrLanguage(options?.sourceLang || 'auto');
+    const shouldEnhance = options?.enhanceImage ?? true;
+    const timeout = options?.timeout || 60000;
 
     try {
-        logger.info('MinerU image OCR started:', { language, enhanceImage: shouldEnhance })
+        logger.info('MinerU image OCR started:', { language, enhanceImage: shouldEnhance });
         const data = await pdfParseToStructuredJson(imageUrl, {
             language,
             isOcr: true,
             enableTable: true,
             enableFormula: false,
             timeoutMs: timeout,
-        })
+        });
 
-        const text = extractOcrText(data)
+        const text = extractOcrText(data);
         if (!text) {
-            logger.error('MinerU image OCR returned empty text:', { source: data?.structured?.source })
+            logger.error('MinerU image OCR returned empty text:', {
+                source: data?.structured?.source,
+            });
             return {
                 success: false,
                 error: '未识别到图片文字',
-                data,
-            }
+            };
         }
 
         logger.info('MinerU image OCR completed:', {
             chars: text.length,
             language,
             source: data?.structured?.source,
-        })
+        });
         return {
             success: true,
             text,
-            data,
             language,
         };
     } catch (error) {
-        const message =
-            error instanceof Error && error.name === 'AbortError'
-                ? '图片识别超时'
-                : error instanceof Error
-                  ? error.message
-                  : '图片识别失败'
         logger.error('MinerU图片识别错误:', error);
         return {
             success: false,
-            error: message,
-        }
+            error: imageRecognitionPublicErrorMessage(error),
+        };
     }
-
 }
 
 export async function translateRecognizedImageText(
@@ -233,15 +234,17 @@ export async function translateRecognizedImageText(
             { temperature: 0.1, maxTokens: 2000 }
         );
 
-        return {
-            success: true,
-            translation: translation || content,
-        };
+        const output = nonBlankImageTranslation(translation);
+        if (!output) {
+            return { success: false, error: '图片翻译未返回有效译文' };
+        }
+
+        return { success: true, translation: output };
     } catch (error) {
         logger.error('图片文本翻译失败:', error);
         return {
             success: false,
-            error: error instanceof Error ? error.message : '图片文本翻译失败',
+            error: publicActionErrorMessage(error, '图片翻译服务暂不可用，请稍后重试'),
         };
     }
 }
@@ -252,6 +255,6 @@ export async function getSupportedLanguages() {
         code,
         tessCode,
         name,
-        displayName: name
-    }))
+        displayName: name,
+    }));
 }

@@ -18,6 +18,8 @@ import {
     CheckCircle2,
     Coffee,
     Eye,
+    FileCode2,
+    FileSpreadsheet,
     FileText,
     Loader2,
     Settings,
@@ -34,12 +36,10 @@ export function ImportDictionaryDialog({
     dictionaries,
     onImported,
     modeContext,
-    userId,
 }: {
     dictionaries?: DictLite[];
     onImported?: () => void;
     modeContext: 'private' | 'project';
-    userId?: string;
 }) {
     const [open, setOpen] = useState(false);
     const [file, setFile] = useState<File | null>(null);
@@ -59,7 +59,10 @@ export function ImportDictionaryDialog({
     // 启用预览功能
     const enablePreview = true;
 
-    const isProject = modeContext === 'project';
+    // `PROJECT` is the persisted visibility value, but this global dashboard
+    // surface represents a tenant/team-shared dictionary rather than a binding
+    // to one selected project.
+    const isTeamShared = modeContext === 'project';
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const f = e.target.files?.[0] || null;
@@ -138,12 +141,12 @@ export function ImportDictionaryDialog({
                         setParsedEntries([]);
                     }
                 } else if (active) {
-                    setPreview([`❌ 不支持的文件类型: ${ext}`]);
+                    setPreview([t('unsupportedImportFile')]);
                     setParsedEntries([]);
                 }
-            } catch (error) {
+            } catch {
                 if (active) {
-                    setPreview([`❌ 预览失败: ${String(error)}`]);
+                    setPreview([t('importPreviewFailed')]);
                     setParsedEntries([]);
                 }
             }
@@ -157,7 +160,7 @@ export function ImportDictionaryDialog({
 
     const handleImport = async () => {
         if (!file) {
-            toast('请选择文件（支持 .xlsx / .tbx）');
+            toast.error(t('pleaseSelectFile'));
             return;
         }
         if (isExcel && parsedEntries.length === 0) {
@@ -168,12 +171,15 @@ export function ImportDictionaryDialog({
             setLoading(true);
 
             const baseName =
-                file.name.replace(/\.[^.]+$/, '') || (isProject ? 'project-dict' : 'private-dict');
+                file.name.replace(/\.[^.]+$/, '') ||
+                t(isTeamShared ? 'teamSharedFallbackName' : 'privateFallbackName');
             const importRes = await createDictionaryFromImportAction({
                 name: baseName,
-                description: isProject ? '项目共享词库' : '私有项目词库',
+                description: t(
+                    isTeamShared ? 'importTeamSharedDescription' : 'importPrivateDescription'
+                ),
                 domain: 'general',
-                visibility: isProject ? 'PROJECT' : 'PRIVATE',
+                visibility: isTeamShared ? 'PROJECT' : 'PRIVATE',
                 file,
                 sourceLang: 'auto',
                 targetLang: 'auto',
@@ -181,14 +187,19 @@ export function ImportDictionaryDialog({
                 targetKey,
                 notesKey,
             });
-            if (!importRes?.success) throw new Error(importRes?.error || '导入失败');
-            toast(
-                `${isProject ? '项目词库导入成功' : '私有词库导入成功'}：“${baseName}”，导入 ${importRes?.data?.total ?? 0} 条`
+            if (!importRes?.success) {
+                toast.error(t('importFailed'), {
+                    description: importRes?.error || undefined,
+                });
+                return;
+            }
+            toast.success(
+                t('importSuccess', { name: baseName, count: importRes?.data?.total ?? 0 })
             );
             onImported?.();
             setOpen(false);
-        } catch (e) {
-            toast.error('导入出错', { description: String(e) });
+        } catch {
+            toast.error(t('importFailed'));
         } finally {
             setLoading(false);
         }
@@ -196,8 +207,9 @@ export function ImportDictionaryDialog({
 
     const getFileTypeIcon = () => {
         if (!file) return <FileText className="h-4 w-4" />;
-        if (isExcel) return <span className="text-green-600">📊</span>;
-        if (isTbx) return <span className="text-blue-600">📋</span>;
+        if (isExcel)
+            return <FileSpreadsheet aria-hidden="true" className="h-4 w-4 text-green-600" />;
+        if (isTbx) return <FileCode2 aria-hidden="true" className="h-4 w-4 text-blue-600" />;
         return <FileText className="h-4 w-4" />;
     };
 
@@ -205,13 +217,13 @@ export function ImportDictionaryDialog({
         <>
             <Button variant="outline" onClick={() => setOpen(true)}>
                 <Upload className="mr-2 h-4 w-4" />
-                {isProject ? t('importProjectDictionary') : t('importPrivateDictionary')}
+                {isTeamShared ? t('importTeamSharedDictionary') : t('importPrivateDictionary')}
             </Button>
             <Dialog open={open} onOpenChange={setOpen}>
                 <DialogContent className="flex max-h-[90vh] max-w-4xl flex-col">
                     <DialogHeader className="flex-shrink-0">
                         <DialogTitle className="flex items-center gap-2">
-                            {isProject ? (
+                            {isTeamShared ? (
                                 <Building2 className="h-5 w-5 text-blue-600" />
                             ) : (
                                 <User className="h-5 w-5 text-purple-600" />
@@ -219,9 +231,11 @@ export function ImportDictionaryDialog({
                             {t('importAIEnhancedDictionary')}
                         </DialogTitle>
                         <DialogDescription>
-                            {isProject
-                                ? '创建项目共享词库并导入数据，支持语义检索与智能匹配'
-                                : '创建私有项目词库并导入数据，仅自己可见'}
+                            {t(
+                                isTeamShared
+                                    ? 'importTeamSharedDescription'
+                                    : 'importPrivateDescription'
+                            )}
                         </DialogDescription>
                     </DialogHeader>
 
@@ -232,9 +246,7 @@ export function ImportDictionaryDialog({
                                 <CardContent className="flex items-center gap-3 py-4">
                                     <Coffee className="h-5 w-5 text-amber-600" />
                                     <Loader2 className="h-4 w-4 animate-spin text-amber-600" />
-                                    <span className="text-amber-800">
-                                        正在导入词库，请稍等片刻…
-                                    </span>
+                                    <span className="text-amber-800">{t('importLoading')}</span>
                                 </CardContent>
                             </Card>
                         )}
@@ -243,7 +255,11 @@ export function ImportDictionaryDialog({
                             <CardHeader className="pb-3">
                                 <CardTitle className="flex items-center gap-2 text-base">
                                     <Settings className="h-4 w-4" />
-                                    {isProject ? '项目词库配置' : '私有词库配置'}
+                                    {t(
+                                        isTeamShared
+                                            ? 'teamSharedDictionaryConfig'
+                                            : 'privateDictionaryConfig'
+                                    )}
                                 </CardTitle>
                             </CardHeader>
                             <CardContent className="space-y-4">
@@ -285,18 +301,18 @@ export function ImportDictionaryDialog({
                                     </p>
                                 </div>
 
-                                {isProject && (
+                                {isTeamShared && (
                                     <div className="rounded-lg bg-blue-100 p-3 text-sm">
                                         <div className="flex items-start gap-2">
                                             <Building2 className="mt-0.5 h-4 w-4 text-blue-600" />
                                             <div>
                                                 <p className="font-medium text-blue-800">
-                                                    项目智能词库特性
+                                                    {t('teamSharedDictionaryFeatures')}
                                                 </p>
                                                 <ul className="mt-1 space-y-1 text-xs text-blue-700">
-                                                    <li>• AI 增强的语义检索</li>
-                                                    <li>• 支持模糊匹配和上下文理解</li>
-                                                    <li>• 项目共享，云端存储</li>
+                                                    <li>{t('teamSharedFeatureSemanticSearch')}</li>
+                                                    <li>{t('teamSharedFeatureFuzzyMatching')}</li>
+                                                    <li>{t('teamSharedFeatureCloudStorage')}</li>
                                                 </ul>
                                             </div>
                                         </div>
@@ -422,12 +438,14 @@ export function ImportDictionaryDialog({
                                     </span>
                                 ) : (
                                     <span className="inline-flex items-center gap-2">
-                                        {isProject ? (
+                                        {isTeamShared ? (
                                             <Building2 className="h-4 w-4" />
                                         ) : (
                                             <User className="h-4 w-4" />
                                         )}
-                                        {isProject ? '导入项目词库' : '导入私有词库'}
+                                        {isTeamShared
+                                            ? t('importTeamSharedDictionary')
+                                            : t('importPrivateDictionary')}
                                     </span>
                                 )}
                             </Button>

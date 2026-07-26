@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
     Dialog,
     DialogContent,
@@ -20,17 +20,26 @@ import {
 import { toast } from 'sonner';
 import { updateMemoryLanguagesAction } from '@/actions/memories';
 import { LANGUAGES } from '@/constants/languages';
+import {
+    buildMemoryLanguageUpdateInput,
+    hasMemoryLanguageUpdate,
+    normalizeMemoryLanguagePair,
+} from '@/lib/memory-language-settings';
 import { useTranslations } from 'next-intl';
 
 export function MemorySettingsDialog({
     open,
     onOpenChange,
     memoryId,
+    sourceLanguage,
+    targetLanguage,
     onUpdated,
 }: {
     open: boolean;
     onOpenChange: (v: boolean) => void;
     memoryId: string;
+    sourceLanguage?: string | null;
+    targetLanguage?: string | null;
     onUpdated?: () => void;
 }) {
     const m = useTranslations('Dashboard.Memories.SettingsDialog');
@@ -39,19 +48,49 @@ export function MemorySettingsDialog({
     const [sourceLang, setSourceLang] = useState<string>('');
     const [targetLang, setTargetLang] = useState<string>('');
     const [saving, setSaving] = useState(false);
+    const [formReady, setFormReady] = useState(false);
+
+    const initialLanguagePair = useMemo(
+        () =>
+            normalizeMemoryLanguagePair({
+                sourceLang: sourceLanguage,
+                targetLang: targetLanguage,
+            }),
+        [sourceLanguage, targetLanguage]
+    );
 
     const languages = LANGUAGES;
 
+    useEffect(() => {
+        setFormReady(false);
+        if (!open) return;
+
+        setSourceLang(initialLanguagePair.sourceLang);
+        setTargetLang(initialLanguagePair.targetLang);
+        setFormReady(true);
+    }, [open, memoryId, initialLanguagePair.sourceLang, initialLanguagePair.targetLang]);
+
+    const hasChanges = hasMemoryLanguageUpdate(initialLanguagePair, { sourceLang, targetLang });
+
     const handleSave = async () => {
+        const input = buildMemoryLanguageUpdateInput(initialLanguagePair, {
+            sourceLang,
+            targetLang,
+        });
+        if (!Object.keys(input).length) return;
+
         try {
             setSaving(true);
-            const res = await updateMemoryLanguagesAction(memoryId, { sourceLang, targetLang });
-            if (!res.success) throw new Error(res.error || m('updateFailed'));
+            const res = await updateMemoryLanguagesAction(memoryId, input);
+            if (!res.success) {
+                toast.error(common('error'), { description: m('updateRetry') });
+                return;
+            }
             toast.success(m('updatedLanguagePair'));
             onUpdated?.();
             onOpenChange(false);
-        } catch (e: any) {
-            toast.error(common('error'), { description: e?.message || String(e) });
+        } catch {
+            toast.error(common('error'), { description: m('updateRetry') });
         } finally {
             setSaving(false);
         }
@@ -103,7 +142,10 @@ export function MemorySettingsDialog({
                     <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
                         {common('cancel')}
                     </Button>
-                    <Button onClick={handleSave} disabled={saving || !memoryId}>
+                    <Button
+                        onClick={handleSave}
+                        disabled={saving || !memoryId || !formReady || !hasChanges}
+                    >
                         {common('save')}
                     </Button>
                 </DialogFooter>

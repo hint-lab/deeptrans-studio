@@ -198,23 +198,27 @@
         },
         "migrations": {
             "title": "数据库迁移",
-            "description": "使用 Prisma Migrate 管理数据库架构变更：",
+            "description": "隔离本地启动应先使用受管启动器。下列 Prisma 命令属于高级、环境特定的维护命令，绝不能指向任意 shell 数据库：",
             "commands": [
                 {
+                    "command": "npm run local:setup && npm run local:check",
+                    "description": "唯一受支持的隔离本地初始化：启动受管依赖、迁移 deeptrans_local、创建演示数据，然后验证就绪状态"
+                },
+                {
                     "command": "yarn prisma migrate dev",
-                    "description": "开发环境创建新迁移"
+                    "description": "仅可针对已明确批准的开发数据库创建迁移，不属于安全本地启动路径"
                 },
                 {
                     "command": "yarn prisma migrate deploy",
-                    "description": "生产环境应用迁移"
+                    "description": "仅通过已批准的生产部署流程应用迁移"
                 },
                 {
                     "command": "yarn prisma generate",
-                    "description": "生成 Prisma Client"
+                    "description": "生成 Prisma Client，不会修改数据库"
                 },
                 {
                     "command": "yarn prisma studio",
-                    "description": "打开 Prisma Studio 可视化数据库"
+                    "description": "高级查看命令；不要使用任意环境 URL 启动"
                 }
             ]
         }

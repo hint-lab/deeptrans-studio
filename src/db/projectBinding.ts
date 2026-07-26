@@ -50,7 +50,10 @@ export const listProjectMemoryBindingsDB = async (projectId: string) => {
     return dbTry(() =>
         (prisma as any).projectMemory.findMany({
             where: { projectId },
-            select: { memoryId: true, memory: { select: { id: true, name: true } } },
+            select: {
+                memoryId: true,
+                memory: { select: { id: true, name: true, userId: true } },
+            },
             orderBy: { createdAt: 'desc' },
         })
     );

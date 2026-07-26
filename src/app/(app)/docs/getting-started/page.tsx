@@ -11,6 +11,7 @@ import {
     CheckCircle,
     ArrowRight,
     AlertCircle,
+    Lightbulb,
 } from 'lucide-react';
 import { getPageTranslations, getPageT } from '../i18n';
 
@@ -92,7 +93,11 @@ export default async function GettingStartedPage() {
                                     )}
                                     {/* 提示信息 */}
                                     <div className="space-y-2">
-                                        <p className="text-sm font-medium">
+                                        <p className="flex items-center gap-1.5 text-sm font-medium">
+                                            <Lightbulb
+                                                aria-hidden="true"
+                                                className="h-4 w-4 shrink-0 text-amber-500"
+                                            />
                                             {t('gettingStarted.tipsLabel')}
                                         </p>
                                         <ul className="list-inside list-disc space-y-1 text-sm text-muted-foreground">

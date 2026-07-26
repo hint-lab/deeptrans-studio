@@ -2,28 +2,28 @@
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
+import { SanitizedHtml } from '@/components/sanitized-html';
+import { resolveDocumentInitParsePreviewState } from '@/lib/document-init-parse-state';
 import { AlertCircle, Loader2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
 
-export default function ParsePanel({
-    previewHtml,
-}: {
-    previewHtml: string;
-}) {
+export default function ParsePanel({ previewHtml }: { previewHtml: string }) {
     const t = useTranslations('Dashboard.Init');
 
     // 引入本地状态来屏蔽“旧错误数据的闪烁”
     const [isRetrying, setIsRetrying] = useState(false);
-    const isParseError = previewHtml === 'ERROR:PARSER_FAILED';
-    const showLoading = !previewHtml || isRetrying;
+    const previewState = resolveDocumentInitParsePreviewState(previewHtml);
+    const isEmptyDocument = previewState === 'empty-document';
+    const isParseError = previewState === 'empty-document' || previewState === 'failed';
+    const showLoading = previewState === 'loading' || isRetrying;
     // 监听数据变化：只有当真正的“成功内容”回来时，才结束 Loading
     useEffect(() => {
         // 如果内容存在，且不是错误标记，说明解析成功了，结束重试状态
-        if (previewHtml && previewHtml !== 'ERROR:PARSER_FAILED') {
+        if (previewState === 'ready') {
             setIsRetrying(false);
         }
-    }, [previewHtml]);
+    }, [previewState]);
 
     function limitPreviewHtml(html: string): string {
         const maxParas = 100;
@@ -35,7 +35,7 @@ export default function ParsePanel({
             if (paras.length > 0) {
                 out = paras.slice(0, maxParas).join('');
             }
-        } catch { }
+        } catch {}
         if (out.length > maxChars) out = out.slice(0, maxChars);
         return out;
     }
@@ -45,12 +45,15 @@ export default function ParsePanel({
         <section className="space-y-2" id="step-parse">
             <div className="text-xs font-medium text-muted-foreground">{t('parseResult')}</div>
 
-            <div className={`overflow-hidden rounded-lg border bg-white p-0 shadow-sm dark:bg-gray-900 ${isParseError && !isRetrying ? 'border-red-200 dark:border-red-900' : ''}`}>
-
+            <div
+                className={`overflow-hidden rounded-lg border bg-white p-0 shadow-sm dark:bg-gray-900 ${isParseError && !isRetrying ? 'border-red-200 dark:border-red-900' : ''}`}
+            >
                 <div className="flex items-center justify-between border-b bg-white px-4 py-2 text-xs text-muted-foreground dark:bg-gray-900">
                     <div>
                         {isParseError && !isRetrying
-                            ? t('parseFailedTitle', { defaultValue: '解析异常' })
+                            ? isEmptyDocument
+                                ? t('emptyDocumentTitle')
+                                : t('parseFailedTitle', { defaultValue: '解析异常' })
                             : t('htmlPreviewNote')}
                     </div>
 
@@ -59,7 +62,11 @@ export default function ParsePanel({
                             <Label htmlFor="toggle-full" className="text-xs text-muted-foreground">
                                 {t('showFull')}
                             </Label>
-                            <Switch id="toggle-full" checked={showFull} onCheckedChange={setShowFull} />
+                            <Switch
+                                id="toggle-full"
+                                checked={showFull}
+                                onCheckedChange={setShowFull}
+                            />
                         </div>
                     )}
                 </div>
@@ -77,10 +84,19 @@ export default function ParsePanel({
                                 <AlertCircle className="h-6 w-6 text-red-600 dark:text-red-400" />
                             </div>
                             <h3 className="mb-1 text-sm font-medium text-gray-900 dark:text-gray-100">
-                                {t('parseFailedMessage', { defaultValue: '文档解析服务暂时不可用' })}
+                                {isEmptyDocument
+                                    ? t('emptyDocumentMessage')
+                                    : t('parseFailedMessage', {
+                                          defaultValue: '文档解析服务暂时不可用',
+                                      })}
                             </h3>
-                            <p className="mb-4 text-xs text-gray-500 dark:text-gray-400 max-w-xs">
-                                {t('parseFailedDescription', { defaultValue: '可能是由于网络连接问题或文件格式异常。请尝试重新解析。' })}
+                            <p className="mb-4 max-w-xs text-xs text-gray-500 dark:text-gray-400">
+                                {isEmptyDocument
+                                    ? t('emptyDocumentDescription')
+                                    : t('parseFailedDescription', {
+                                          defaultValue:
+                                              '可能是由于网络连接问题或文件格式异常。请尝试重新解析。',
+                                      })}
                             </p>
                         </div>
                     ) : showLoading ? (
@@ -100,11 +116,10 @@ export default function ParsePanel({
                         </div>
                     ) : (
                         // 3. 成功内容 UI
-                        <div
+                        <SanitizedHtml
                             className="prose prose-sm dark:prose-invert prose-headings:font-semibold prose-p:leading-7 prose-img:rounded-md prose-hr:my-6 max-w-none px-5 py-4"
-                            dangerouslySetInnerHTML={{
-                                __html: showFull ? previewHtml : limitPreviewHtml(previewHtml),
-                            }}
+                            html={showFull ? previewHtml : limitPreviewHtml(previewHtml)}
+                            profile="document"
                         />
                     )}
 

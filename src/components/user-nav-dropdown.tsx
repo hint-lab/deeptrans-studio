@@ -12,20 +12,12 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useSession, signOut } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { AVATARS } from '@/constants/avatars';
 import { useTranslations } from 'next-intl';
 
-export function UnifiedUserNavDropDown({
-    size = 'md',
-    redirectPath = '/',
-}: {
-    size?: 'sm' | 'md';
-    redirectPath?: string;
-}) {
+export function UnifiedUserNavDropDown({ size = 'md' }: { size?: 'sm' | 'md' }) {
     const t = useTranslations('Common');
-    const router = useRouter();
     const { data: session } = useSession();
 
     const storageKey = useMemo(() => {
@@ -98,7 +90,11 @@ export function UnifiedUserNavDropDown({
                 <DropdownMenuItem
                     onClick={() => {
                         // Let NextAuth handle redirect after sign out
-                        signOut({ callbackUrl: '/' });
+                        const callbackUrl =
+                            document.documentElement.dataset.deeptransDesktop === 'true'
+                                ? '/auth/login?desktop=1&callbackUrl=%2Fdashboard%3Fdesktop%3D1'
+                                : '/';
+                        signOut({ callbackUrl });
                     }}
                 >
                     退出

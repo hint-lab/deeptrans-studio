@@ -15,13 +15,10 @@ import { nodeTypes } from './nodes';
 import { edgeTypes } from './edges';
 import { useWorkflowData, type WorkflowKey } from './data/workflows';
 import { useTranslationState } from '@/hooks/useTranslation';
+import type { WorkflowNodeData } from '@/lib/workflow-node-semantics';
 import '@xyflow/react/dist/style.css';
 
-export interface AgentNodeData {
-    label: string;
-    description?: string;
-    [key: string]: unknown; // 添加索引签名
-}
+export type AgentNodeData = WorkflowNodeData;
 
 export default function WorkflowDiagramPanel() {
     const { theme } = useTheme();

@@ -1,16 +1,176 @@
 import { createLogger } from '@/lib/logger';
 import nodemailer from 'nodemailer';
-const logger = createLogger({
-    type: 'lib:mail',
-}, {
-    json: false,// 开启json格式输出
-    pretty: false, // 关闭开发环境美化输出
-    colors: true, // 仅当json：false时启用颜色输出可用
-    includeCaller: false, // 日志不包含调用者
-});
+
+const logger = createLogger(
+    {
+        type: 'lib:mail',
+    },
+    {
+        json: false, // 开启json格式输出
+        pretty: false, // 关闭开发环境美化输出
+        colors: true, // 仅当json：false时启用颜色输出可用
+        includeCaller: false, // 日志不包含调用者
+    }
+);
+
+type MailEnvironment = Partial<Record<'EMAIL_SERVER' | 'EMAIL_FROM', string | undefined>>;
+
+type MailConfiguration = {
+    server: string;
+    from: string;
+};
+
+export type MailDeliveryFailureKind = 'authentication' | 'unavailable';
+
+export type SafeMailFailure = {
+    code:
+        | 'EMAIL_CONFIGURATION_INVALID'
+        | 'EMAIL_AUTHENTICATION_FAILED'
+        | 'EMAIL_DELIVERY_UNAVAILABLE';
+    error: string;
+};
+
+export class MailConfigurationError extends Error {
+    constructor() {
+        super('邮件服务配置无效或未完成');
+        this.name = 'MailConfigurationError';
+    }
+}
+
+export class MailDeliveryError extends Error {
+    readonly kind: MailDeliveryFailureKind;
+
+    constructor(kind: MailDeliveryFailureKind = 'unavailable') {
+        super('邮件服务暂不可用，请稍后重试');
+        this.name = 'MailDeliveryError';
+        this.kind = kind;
+    }
+}
+
+function getConfiguredSmtpPort(url: URL): number | undefined {
+    const queryPorts = url.searchParams.getAll('port');
+    if (queryPorts.length > 1 || (url.port && queryPorts.length > 0)) {
+        throw new MailConfigurationError();
+    }
+
+    const rawPort = url.port || queryPorts[0];
+    if (!rawPort) return undefined;
+    if (!/^\d+$/.test(rawPort)) throw new MailConfigurationError();
+
+    const port = Number(rawPort);
+    if (!Number.isSafeInteger(port) || port < 1 || port > 65535) {
+        throw new MailConfigurationError();
+    }
+    return port;
+}
+
+function assertSmtpTlsSemantics(url: URL) {
+    const isImplicitTls = url.protocol === 'smtps:';
+    const port = getConfiguredSmtpPort(url);
+    const allowedPorts = isImplicitTls ? [465] : [25, 587];
+
+    // An omitted port is valid: Nodemailer applies 587 for smtp and 465 for
+    // smtps. Do not require URL.port because Node may normalize a default port
+    // to an empty string.
+    if (port !== undefined && !allowedPorts.includes(port)) {
+        throw new MailConfigurationError();
+    }
+
+    const secureOptions = url.searchParams.getAll('secure');
+    if (secureOptions.length > 1) throw new MailConfigurationError();
+    if (secureOptions.length === 1) {
+        const rawSecure = secureOptions[0]?.trim().toLowerCase();
+        if (rawSecure !== 'true' && rawSecure !== 'false') {
+            throw new MailConfigurationError();
+        }
+        if ((rawSecure === 'true') !== isImplicitTls) {
+            throw new MailConfigurationError();
+        }
+    }
+}
+
+function getSafeSmtpErrorMetadata(error: unknown): {
+    errorCode?: string;
+    responseCode?: number;
+} {
+    if (!error || typeof error !== 'object') return {};
+    const smtpError = error as { code?: unknown; responseCode?: unknown };
+    const rawCode = typeof smtpError.code === 'string' ? smtpError.code.trim() : '';
+    const errorCode = /^[A-Za-z0-9_]{1,32}$/.test(rawCode) ? rawCode.toUpperCase() : undefined;
+    const numericResponseCode = Number(smtpError.responseCode);
+    const responseCode =
+        Number.isInteger(numericResponseCode) &&
+        numericResponseCode >= 100 &&
+        numericResponseCode <= 599
+            ? numericResponseCode
+            : undefined;
+    return { errorCode, responseCode };
+}
+
+export function classifyMailDeliveryError(error: unknown): MailDeliveryError {
+    const { errorCode, responseCode } = getSafeSmtpErrorMetadata(error);
+    const smtpError = error as { command?: unknown; message?: unknown } | null;
+    const command = typeof smtpError?.command === 'string' ? smtpError.command : '';
+    const message = typeof smtpError?.message === 'string' ? smtpError.message : '';
+    const authenticationFailure =
+        errorCode === 'EAUTH' ||
+        responseCode === 535 ||
+        /^AUTH(?:\s|$)/i.test(command) ||
+        /\b535\b/.test(message);
+
+    return new MailDeliveryError(authenticationFailure ? 'authentication' : 'unavailable');
+}
+
+export function getSafeMailFailure(error: unknown): SafeMailFailure {
+    if (error instanceof MailConfigurationError) {
+        return {
+            code: 'EMAIL_CONFIGURATION_INVALID',
+            error: '邮件服务配置无效，请联系管理员检查 SMTP 服务地址、端口、TLS 模式和授权码。',
+        };
+    }
+    if (error instanceof MailDeliveryError && error.kind === 'authentication') {
+        return {
+            code: 'EMAIL_AUTHENTICATION_FAILED',
+            error: '邮件服务认证失败，请联系管理员确认已开启 SMTP 服务、使用授权码而非邮箱密码，并检查端口和 TLS 模式。',
+        };
+    }
+    return {
+        code: 'EMAIL_DELIVERY_UNAVAILABLE',
+        error: '邮件服务暂不可用，请稍后重试。',
+    };
+}
+
+/**
+ * Validates only the shape of the SMTP settings. It deliberately never exposes
+ * or logs the URL, mailbox, or authorization code.
+ */
+export function getMailConfiguration(env?: MailEnvironment): MailConfiguration {
+    const server = (env?.EMAIL_SERVER ?? process.env.EMAIL_SERVER)?.trim();
+    const from = (env?.EMAIL_FROM ?? process.env.EMAIL_FROM)?.trim();
+
+    if (!server || !from || from === '<your-email-from>' || from === 'no-reply@example.com') {
+        throw new MailConfigurationError();
+    }
+
+    try {
+        const url = new URL(server);
+        const supportedProtocol = url.protocol === 'smtp:' || url.protocol === 'smtps:';
+
+        if (!supportedProtocol || !url.hostname || !url.username || !url.password) {
+            throw new MailConfigurationError();
+        }
+        assertSmtpTlsSemantics(url);
+    } catch (error) {
+        if (error instanceof MailConfigurationError) throw error;
+        throw new MailConfigurationError();
+    }
+
+    return { server, from };
+}
+
 function createTransporter() {
-    if (!process.env.EMAIL_SERVER) return null;
-    return nodemailer.createTransport(process.env.EMAIL_SERVER);
+    const { server, from } = getMailConfiguration();
+    return { transporter: nodemailer.createTransport(server), from };
 }
 
 function buildVerificationEmail(code: string) {
@@ -39,18 +199,33 @@ function buildVerificationEmail(code: string) {
     return { subject, text, html };
 }
 
+/**
+ * Nodemailer only reports a successful SMTP hand-off when the requested
+ * mailbox appears in `accepted`. Do not treat a response for another
+ * recipient as success.
+ */
+export function isVerificationRecipientAccepted(info: unknown, recipient: string): boolean {
+    if (!info || typeof info !== 'object' || !recipient) return false;
+    const accepted = (info as { accepted?: unknown }).accepted;
+    if (!Array.isArray(accepted)) return false;
+
+    const normalizedRecipient = recipient.trim().toLowerCase();
+    return accepted.some(
+        address =>
+            typeof address === 'string' && address.trim().toLowerCase() === normalizedRecipient
+    );
+}
+
 export async function sendVerificationEmail(to: string, code: string) {
     // 验证参数
     if (!to || typeof to !== 'string') {
-        logger.error('❌ 收件人邮箱无效:', { to, type: typeof to });
-        throw new Error(`收件人邮箱无效: ${to}`);
+        logger.error('Invalid verification-email recipient', {
+            recipientType: typeof to,
+            recipientLength: typeof to === 'string' ? to.length : 0,
+        });
+        throw new Error('收件人邮箱无效');
     }
-    const transporter = createTransporter();
-    if (!transporter) {
-        logger.error('EMAIL_SERVER is not configured');
-        throw new Error('EMAIL_SERVER 未配置，无法发送邮件');
-    }
-    const from = process.env.EMAIL_FROM || 'no-reply@example.com';
+    const { transporter, from } = createTransporter();
     const { subject, text, html } = buildVerificationEmail(code);
     logger.debug('mail params validated', { recipientLength: to.length, codeLength: code.length });
     try {
@@ -61,14 +236,20 @@ export async function sendVerificationEmail(to: string, code: string) {
         if (process.env.NODE_ENV !== 'production') {
             // 仅输出关键字段，避免泄露敏感信息
             logger.debug('[mail] sendMail info:', {
-                messageId: (info as any)?.messageId,
-                acceptedCount: Array.isArray((info as any)?.accepted) ? (info as any).accepted.length : 0,
-                rejectedCount: Array.isArray((info as any)?.rejected) ? (info as any).rejected.length : 0,
-                response: (info as any)?.response,
+                acceptedCount: Array.isArray((info as any)?.accepted)
+                    ? (info as any).accepted.length
+                    : 0,
+                rejectedCount: Array.isArray((info as any)?.rejected)
+                    ? (info as any).rejected.length
+                    : 0,
             });
         }
         return info;
-    } catch (e: any) {
-        throw new Error(`发送失败：${e?.message || e}`);
+    } catch (error: unknown) {
+        const metadata = getSafeSmtpErrorMetadata(error);
+        logger.error('SMTP delivery failed', {
+            ...metadata,
+        });
+        throw classifyMailDeliveryError(error);
     }
 }

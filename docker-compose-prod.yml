@@ -12,6 +12,11 @@ services:
             - '${DB_PORT:-5432}:5432'
         volumes:
             - postgres_data:/var/lib/postgresql
+        healthcheck:
+            test: ['CMD-SHELL', 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+            interval: 5s
+            timeout: 5s
+            retries: 20
         restart: unless-stopped
         networks:
             - app_local
@@ -34,7 +39,7 @@ services:
             - '--api.dashboard=true'
             - '--providers.docker=true'
             - '--providers.docker.exposedbydefault=false'
-            - '--providers.docker.network=deeptrans-studio_web' # 使用完整的网络名称
+            - '--providers.docker.network=${COMPOSE_PROJECT_NAME:-deeptrans-studio}_web'
             - '--entrypoints.web.address=:80'
             - '--entrypoints.web.http.redirections.entrypoint.to=websecure'
             - '--entrypoints.web.http.redirections.entrypoint.scheme=https'
@@ -59,9 +64,32 @@ services:
             - '6379:6379'
         volumes:
             - valkey-data:/data
+        healthcheck:
+            test: ['CMD', 'valkey-cli', 'ping']
+            interval: 5s
+            timeout: 5s
+            retries: 20
         restart: unless-stopped
         networks:
             - app_local
+
+    migrate:
+        build:
+            context: .
+            dockerfile: Dockerfile
+            target: migrator
+        image: deeptrans-studio-migrate:latest
+        env_file:
+            # New deployments set DEPLOY_ENV_FILE=.env.production explicitly. Keep the
+            # legacy .env fallback so an existing host does not silently lose SMTP and
+            # other runtime settings during an upgrade.
+            - ${DEPLOY_ENV_FILE:-.env}
+        depends_on:
+            db:
+                condition: service_healthy
+        networks:
+            - app_local
+        restart: 'no'
 
     app:
         build:
@@ -70,7 +98,7 @@ services:
         image: deeptrans-studio:latest
         container_name: deeptrans-app
         env_file:
-            - .env
+            - ${DEPLOY_ENV_FILE:-.env}
         environment:
             STORAGE_TYPE: cos
             STORAGE_USE_SSL: 'true'
@@ -82,8 +110,12 @@ services:
             COS_DOMAIN: ${COS_DOMAIN:-}
             COS_USE_SSL: ${COS_USE_SSL:-true}
         depends_on:
-            - db
-            - valkey
+            db:
+                condition: service_healthy
+            valkey:
+                condition: service_healthy
+            migrate:
+                condition: service_completed_successfully
         networks:
             - web
             - app_local
@@ -104,7 +136,7 @@ services:
         image: deeptrans-studio-worker:latest
         container_name: deeptrans-app_worker
         env_file:
-            - .env
+            - ${DEPLOY_ENV_FILE:-.env}
         environment:
             STORAGE_TYPE: cos
             STORAGE_USE_SSL: 'true'
@@ -116,8 +148,12 @@ services:
             COS_DOMAIN: ${COS_DOMAIN:-}
             COS_USE_SSL: ${COS_USE_SSL:-true}
         depends_on:
-            - db
-            - valkey
+            db:
+                condition: service_healthy
+            valkey:
+                condition: service_healthy
+            migrate:
+                condition: service_completed_successfully
         networks:
             - app_local
         restart: unless-stopped

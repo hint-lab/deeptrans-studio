@@ -11,6 +11,22 @@ const logger = createLogger({
     includeCaller: false, // 日志不包含调用者
 });
 
+export function textToSafePreviewHtml(text: string): string {
+    const escapeHtml = (value: string) =>
+        String(value)
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#39;');
+
+    return String(text || '')
+        .split(/\r\n\s*\r\n|\n\s*\n|\r\s*\r/)
+        .filter(paragraph => paragraph.length > 0)
+        .map(paragraph => `<p>${escapeHtml(paragraph).replace(/\r\n|\r|\n/g, '<br/>')}</p>`)
+        .join('');
+}
+
 export async function textToStructuredJson(url: string): Promise<{ text: string; html?: string; contentType?: string; structured?: any }> {
     const controller = new AbortController();
     let buffer: Buffer;
@@ -40,7 +56,9 @@ export async function textToStructuredJson(url: string): Promise<{ text: string;
                 placeholderSpans: Array<{ index: number; text: string; start: number; end: number }>;
             }>,
         };
-        const html = fullText;
+        // Plain-text uploads are untrusted input. A preview must be text nodes,
+        // never an opportunity for a .txt file to supply HTML.
+        const html = textToSafePreviewHtml(fullText);
         const structured = result;
         const text = fullText;
         for (const para of paragraphs) {

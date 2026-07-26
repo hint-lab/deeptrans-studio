@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict';
 import { prisma } from '@/lib/db';
 import {
   type AuthContext,
@@ -13,6 +14,7 @@ import {
   requireWritableDocumentItem,
   requireWritableProject,
 } from '@/lib/guards';
+import { searchMemoryForOwner } from '@/server/memory';
 
 type Check = {
   label: string;
@@ -37,6 +39,9 @@ const standaloneProjectDictionaryAId = `${prefix}-dict-project-standalone-a`;
 const mismatchedProjectDictionaryAId = `${prefix}-dict-project-mismatched-a`;
 const publicDictionaryId = `${prefix}-dict-public`;
 const memoryAId = `${prefix}-memory-a`;
+const memoryBId = `${prefix}-memory-b`;
+const memoryATargetOnly = `target-owner-a-${stamp}`;
+const memoryBTargetOnly = `target-owner-b-${stamp}`;
 
 const ctxA: AuthContext = { userId: userAId, tenantId: tenantAId, role: 'USER' };
 const ctxA2: AuthContext = { userId: userA2Id, tenantId: tenantAId, role: 'USER' };
@@ -158,6 +163,34 @@ async function seed() {
       userId: userAId,
       tenantId: tenantAId,
     },
+  });
+  await prisma.translationMemory.create({
+    data: {
+      id: memoryBId,
+      name: `${prefix} Memory B`,
+      sourceText: 'en',
+      targetText: 'zh',
+      userId: userBId,
+      tenantId: tenantBId,
+    },
+  });
+  await prisma.translationMemoryEntry.createMany({
+    data: [
+      {
+        memoryId: memoryAId,
+        sourceText: `source-owner-a-${stamp}`,
+        targetText: memoryATargetOnly,
+        createdById: userAId,
+        updatedById: userAId,
+      },
+      {
+        memoryId: memoryBId,
+        sourceText: `source-owner-b-${stamp}`,
+        targetText: memoryBTargetOnly,
+        createdById: userBId,
+        updatedById: userBId,
+      },
+    ],
   });
 }
 
@@ -323,6 +356,20 @@ const checks: Check[] = [
   {
     label: 'cross tenant cannot access memory',
     run: () => expectDenied('cross tenant cannot access memory', () => requireOwnedMemory(memoryAId, ctxB)),
+  },
+  {
+    label: 'owner semantic fallback finds target-only text and never returns another owner memory',
+    run: async () => {
+      const result = await searchMemoryForOwner(memoryATargetOnly, ctxA, {
+        limit: 10,
+        searchConfig: { mode: 'keyword' },
+      });
+      assert.ok(result.success, result.success ? undefined : result.error);
+      if (!result.success) return;
+      assert.ok(result.data.some((hit: { target: string }) => hit.target === memoryATargetOnly));
+      assert.ok(result.data.every((hit: { target: string }) => hit.target !== memoryBTargetOnly));
+      console.log('PASS owner semantic fallback finds target-only text and never returns another owner memory');
+    },
   },
 ];
 

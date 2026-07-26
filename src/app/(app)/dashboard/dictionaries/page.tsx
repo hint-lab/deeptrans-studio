@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { BookOpenText, FolderPlus, Layers3 } from 'lucide-react';
 import { Button } from 'src/components/ui/button';
 import { Separator } from 'src/components/ui/separator';
 import { Skeleton } from 'src/components/ui/skeleton';
@@ -16,6 +17,10 @@ import type { Dictionary as UIDictionary } from './components/dictionary-artwork
 import { DictionaryArtwork } from './components/dictionary-artwork';
 import { DictionaryImportHelpDialog } from './components/dictionary-import-guide';
 import ImportDictionaryDialog from './components/import-dictionary-dialog';
+
+const dictionaryGridClassName =
+    'grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4';
+
 const logger = createLogger(
     {
         type: 'dashboard:dictionaries',
@@ -37,6 +42,8 @@ export default function DictionariesPage() {
     const searchParams = useSearchParams();
     const [loading, setLoading] = useState(true);
     const [authenticatedUserId, setAuthenticatedUserId] = useState<string>();
+    const [isAdmin, setIsAdmin] = useState(false);
+    const canManageDictionaries = Boolean(authenticatedUserId);
 
     // 加载词典数据
     const loadDictionaries = async () => {
@@ -45,6 +52,7 @@ export default function DictionariesPage() {
             const result = await fetchDictionaryDashboardAction();
             if (!result.success || !result.data) throw new Error(result.error || 'load failed');
             setAuthenticatedUserId(result.data.userId);
+            setIsAdmin(result.data.userRole === 'ADMIN');
 
             const mapDictionary = (
                 dictionary: any,
@@ -148,7 +156,7 @@ export default function DictionariesPage() {
 
     if (loading) {
         return (
-            <div className="mx-auto w-full max-w-7xl p-6">
+            <div className="mx-auto w-full max-w-7xl px-4 py-5 sm:p-6">
                 <div className="space-y-4">
                     <div className="flex items-center justify-between">
                         <div className="space-y-2">
@@ -160,9 +168,9 @@ export default function DictionariesPage() {
                             <Skeleton className="h-9 w-28" />
                         </div>
                     </div>
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    <div className={dictionaryGridClassName}>
                         {Array.from({ length: 6 }).map((_, i) => (
-                            <Skeleton key={i} className="h-[116px] w-full" />
+                            <Skeleton key={i} className="h-[96px] w-full" />
                         ))}
                     </div>
                 </div>
@@ -171,25 +179,27 @@ export default function DictionariesPage() {
     }
 
     return (
-        <div className="mx-auto w-full max-w-7xl p-6">
-            <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="mx-auto w-full max-w-7xl px-4 py-5 sm:p-6">
+            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                    <h1 className="mb-1 text-3xl font-bold text-gray-900 dark:text-white">
+                    <h1 className="mb-1 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
                         {t('title')}
                     </h1>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">{t('description')}</p>
+                    <p className="text-sm text-muted-foreground">{t('description')}</p>
                 </div>
                 <DictionaryImportHelpDialog />
             </div>
 
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full space-y-4">
-                <div className="space-between flex items-center">
-                    <TabsList>
-                        <TabsTrigger value="public" className="relative">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full space-y-3">
+                <div className="flex items-center">
+                    <TabsList className="h-9 bg-muted/55 p-1">
+                        <TabsTrigger value="public" className="relative px-3 text-xs">
                             {t('publicDictionaries')}
                         </TabsTrigger>
-                        <TabsTrigger value="private">{t('privateDictionaries')}</TabsTrigger>
-                        <TabsTrigger value="project" className="relative">
+                        <TabsTrigger value="private" className="px-3 text-xs">
+                            {t('privateDictionaries')}
+                        </TabsTrigger>
+                        <TabsTrigger value="project" className="relative px-3 text-xs">
                             {t('projectDictionaries')}
                         </TabsTrigger>
                     </TabsList>
@@ -197,22 +207,28 @@ export default function DictionariesPage() {
 
                 {/* 公共词库 */}
                 <TabsContent value="public" className="border-none p-0 outline-none">
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                         <div className="space-y-1">
                             <p className="text-sm text-muted-foreground">
                                 {t('publicDescription')}
                             </p>
                         </div>
-                        <div className="ml-auto flex items-center gap-2">
-                            <AddPublicDictionaryDialog
-                                onDictionaryAdded={handlePublicDictionaryAdded}
-                                userId={authenticatedUserId}
-                            />
-                        </div>
+                        {isAdmin ? (
+                            <div className="ml-auto flex items-center gap-2">
+                                <AddPublicDictionaryDialog
+                                    onDictionaryAdded={handlePublicDictionaryAdded}
+                                    userId={authenticatedUserId}
+                                />
+                            </div>
+                        ) : (
+                            <p className="text-xs text-muted-foreground">
+                                {t('publicManagedByAdmin')}
+                            </p>
+                        )}
                     </div>
-                    <Separator className="my-4" />
+                    <Separator className="my-2.5" />
                     {publicDictionaries.length > 0 ? (
-                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                        <div className={dictionaryGridClassName}>
                             {publicDictionaries.map(dictionary => (
                                 <DictionaryArtwork
                                     key={dictionary.id}
@@ -222,24 +238,36 @@ export default function DictionariesPage() {
                                     }}
                                     className="h-full"
                                     onClick={() => handleDictionarySelect(dictionary)}
-                                    onDelete={undefined}
-                                    onEdit={undefined}
-                                    showDeleteButton={false}
-                                    showEditButton={false}
+                                    onDelete={
+                                        dictionary.canWrite ? handleDictionaryDeleted : undefined
+                                    }
+                                    onEdit={
+                                        dictionary.canWrite ? handleDictionaryEdited : undefined
+                                    }
+                                    showDeleteButton={dictionary.canWrite === true}
+                                    showEditButton={dictionary.canWrite === true}
                                 />
                             ))}
                         </div>
                     ) : (
-                        <div className="py-8 text-center">
+                        <div className="rounded-md border border-dashed bg-muted/15 p-6 text-center">
                             <div className="space-y-4">
                                 <div className="text-muted-foreground">
-                                    <p className="mb-2">{t('publicEmptyTitle')}</p>
+                                    <BookOpenText
+                                        className="mx-auto mb-2 h-5 w-5 text-primary"
+                                        aria-hidden="true"
+                                    />
+                                    <p className="mb-1 text-sm font-medium text-foreground">
+                                        {t('publicEmptyTitle')}
+                                    </p>
                                     <p className="text-sm">{t('publicEmptyDesc')}</p>
                                 </div>
-                                <AddPublicDictionaryDialog
-                                    onDictionaryAdded={handlePublicDictionaryAdded}
-                                    userId={authenticatedUserId}
-                                />
+                                {isAdmin ? (
+                                    <AddPublicDictionaryDialog
+                                        onDictionaryAdded={handlePublicDictionaryAdded}
+                                        userId={authenticatedUserId}
+                                    />
+                                ) : null}
                             </div>
                         </div>
                     )}
@@ -250,37 +278,38 @@ export default function DictionariesPage() {
                     value="private"
                     className="h-full flex-col border-none p-0 data-[state=active]:flex"
                 >
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                         <div className="space-y-1">
                             <p className="text-sm text-muted-foreground">
-                                {authenticatedUserId
+                                {canManageDictionaries
                                     ? t('privateDescription')
                                     : t('privateLoginRequired')}
                             </p>
                         </div>
-                        <div className="ml-auto flex items-center gap-2">
-                            <ImportDictionaryDialog
-                                modeContext="private"
-                                dictionaries={undefined}
-                                userId={authenticatedUserId}
-                                onImported={() => {
-                                    void loadDictionaries();
-                                    toast.success(t('importComplete'), {
-                                        description: t('projectImported') as string,
-                                    });
-                                }}
-                            />
-                            <CreateDictionaryDialog
-                                onDictionaryCreated={d =>
-                                    handleDictionaryCreated(d as unknown as UIDictionary)
-                                }
-                                userId={authenticatedUserId}
-                                visibility="PRIVATE"
-                            />
-                        </div>
+                        {canManageDictionaries ? (
+                            <div className="ml-auto flex items-center gap-2">
+                                <ImportDictionaryDialog
+                                    modeContext="private"
+                                    dictionaries={undefined}
+                                    onImported={() => {
+                                        void loadDictionaries();
+                                        toast.success(t('importComplete'), {
+                                            description: t('privateImported') as string,
+                                        });
+                                    }}
+                                />
+                                <CreateDictionaryDialog
+                                    onDictionaryCreated={d =>
+                                        handleDictionaryCreated(d as unknown as UIDictionary)
+                                    }
+                                    userId={authenticatedUserId}
+                                    visibility="PRIVATE"
+                                />
+                            </div>
+                        ) : null}
                     </div>
-                    <Separator className="my-4" />
-                    {!authenticatedUserId ? (
+                    <Separator className="my-2.5" />
+                    {!canManageDictionaries ? (
                         <div className="py-8 text-center">
                             <p className="mb-4 text-muted-foreground">{t('loginRequired')}</p>
                             <Button asChild>
@@ -288,7 +317,7 @@ export default function DictionariesPage() {
                             </Button>
                         </div>
                     ) : privateDictionaries.length > 0 ? (
-                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                        <div className={dictionaryGridClassName}>
                             {privateDictionaries.map(dictionary => (
                                 <DictionaryArtwork
                                     key={dictionary.id}
@@ -306,16 +335,21 @@ export default function DictionariesPage() {
                             ))}
                         </div>
                     ) : (
-                        <div className="py-8 text-center">
+                        <div className="rounded-md border border-dashed bg-muted/15 p-6 text-center">
                             <div className="space-y-4">
                                 <div className="text-muted-foreground">
-                                    <p className="mb-2">{t('privateEmptyTitle')}</p>
+                                    <FolderPlus
+                                        className="mx-auto mb-2 h-5 w-5 text-primary"
+                                        aria-hidden="true"
+                                    />
+                                    <p className="mb-1 text-sm font-medium text-foreground">
+                                        {t('privateEmptyTitle')}
+                                    </p>
                                     <p className="text-sm">{t('privateEmptyDesc')}</p>
                                 </div>
                                 <ImportDictionaryDialog
                                     modeContext="private"
                                     dictionaries={undefined}
-                                    userId={authenticatedUserId}
                                     onImported={() => {
                                         void loadDictionaries();
                                         toast.success(t('importComplete'), {
@@ -328,38 +362,41 @@ export default function DictionariesPage() {
                     )}
                 </TabsContent>
 
-                {/* 项目词库 */}
+                {/* 团队共享词库（持久化为 PROJECT 可见性） */}
                 <TabsContent value="project" className="border-none p-0 outline-none">
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                         <div className="space-y-1">
                             <p className="text-sm text-muted-foreground">
-                                {t('projectDescription')}
+                                {canManageDictionaries
+                                    ? t('projectDescription')
+                                    : t('projectLoginRequired')}
                             </p>
                         </div>
-                        <div className="ml-auto flex items-center gap-2">
-                            <ImportDictionaryDialog
-                                modeContext="project"
-                                dictionaries={undefined}
-                                userId={authenticatedUserId}
-                                onImported={() => {
-                                    void loadDictionaries();
-                                    toast.success(t('importComplete'), {
-                                        description: t('projectImported') as string,
-                                    });
-                                }}
-                            />
+                        {canManageDictionaries ? (
+                            <div className="ml-auto flex items-center gap-2">
+                                <ImportDictionaryDialog
+                                    modeContext="project"
+                                    dictionaries={undefined}
+                                    onImported={() => {
+                                        void loadDictionaries();
+                                        toast.success(t('importComplete'), {
+                                            description: t('projectImported') as string,
+                                        });
+                                    }}
+                                />
 
-                            <CreateDictionaryDialog
-                                onDictionaryCreated={d =>
-                                    handleDictionaryCreated(d as unknown as UIDictionary)
-                                }
-                                userId={authenticatedUserId}
-                                visibility="PROJECT"
-                            />
-                        </div>
+                                <CreateDictionaryDialog
+                                    onDictionaryCreated={d =>
+                                        handleDictionaryCreated(d as unknown as UIDictionary)
+                                    }
+                                    userId={authenticatedUserId}
+                                    visibility="PROJECT"
+                                />
+                            </div>
+                        ) : null}
                     </div>
-                    <Separator className="my-4" />
-                    {!authenticatedUserId ? (
+                    <Separator className="my-2.5" />
+                    {!canManageDictionaries ? (
                         <div className="py-8 text-center">
                             <p className="mb-4 text-muted-foreground">
                                 {t('projectLoginRequired')}
@@ -369,7 +406,7 @@ export default function DictionariesPage() {
                             </Button>
                         </div>
                     ) : projectDictionaries.length > 0 ? (
-                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                        <div className={dictionaryGridClassName}>
                             {projectDictionaries.map(dictionary => (
                                 <DictionaryArtwork
                                     key={dictionary.id}
@@ -389,17 +426,22 @@ export default function DictionariesPage() {
                             ))}
                         </div>
                     ) : (
-                        <div className="py-8 text-center">
+                        <div className="rounded-md border border-dashed bg-muted/15 p-6 text-center">
                             <div className="space-y-4">
                                 <div className="text-muted-foreground">
-                                    <p className="mb-2">{t('projectEmptyTitle')}</p>
+                                    <Layers3
+                                        className="mx-auto mb-2 h-5 w-5 text-primary"
+                                        aria-hidden="true"
+                                    />
+                                    <p className="mb-1 text-sm font-medium text-foreground">
+                                        {t('projectEmptyTitle')}
+                                    </p>
                                     <p className="text-sm">{t('projectEmptyDesc')}</p>
                                 </div>
                                 <div className="flex justify-center gap-2">
                                     <ImportDictionaryDialog
                                         modeContext="project"
                                         dictionaries={undefined}
-                                        userId={authenticatedUserId}
                                         onImported={() => {
                                             void loadDictionaries();
                                             toast.success(t('importComplete'), {

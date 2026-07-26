@@ -1,6 +1,6 @@
 import { queryDictionaryEntriesExactByScope } from '@/actions/dictionary';
 import { uploadFileAction } from '@/actions/upload';
-import { updateDocumentStructuredIfCurrentDB } from '@/db/document';
+import { findDocumentByIdDB, updateDocumentStructuredIfCurrentDB } from '@/db/document';
 import { DOCUMENT_TERMS_RUN_ERROR, resolveDocumentTermsStatus } from '@/lib/document-term-job';
 import {
     DEFAULT_SEGMENT_GRANULARITY,
@@ -25,12 +25,14 @@ import { NextRequest, NextResponse } from 'next/server';
 
 async function handlePersist(only: any, batchId: string, projectIdFromParams: string) {
     if (!canPersistDocumentParseArtifacts(only?.status)) {
+        const latest = await findDocumentByIdDB(String(only?.id || ''));
+        const status = String(latest?.status || only?.status || '');
         return NextResponse.json({
             ok: true,
             skipped: true,
             step: 'already-initialized',
-            status: String(only?.status || ''),
-            resumeTarget: resolveProjectInitResumeTarget(only?.status),
+            status,
+            resumeTarget: resolveProjectInitResumeTarget(status),
         });
     }
     const redis = await getRedis();
@@ -92,12 +94,17 @@ async function handlePersist(only: any, batchId: string, projectIdFromParams: st
     };
     const persisted = await updateDocumentStructuredIfCurrentDB(only.id, stored, ['PARSING']);
     if (!persisted) {
+        const latest = await findDocumentByIdDB(docId);
+        const status = String(latest?.status || '');
+        if (canPersistDocumentParseArtifacts(status)) {
+            throw new Error('parse artifacts were not persisted');
+        }
         return NextResponse.json({
             ok: true,
             skipped: true,
             step: 'already-initialized',
-            status: String(only?.status || ''),
-            resumeTarget: resolveProjectInitResumeTarget(only?.status),
+            status,
+            resumeTarget: resolveProjectInitResumeTarget(status),
         });
     }
     return NextResponse.json({ ok: true, step: 'persist', artifacts: stored });
@@ -204,6 +211,7 @@ export async function GET(req: NextRequest, ctx: any) {
                 tD,
                 termsFailed,
                 termsError,
+                termsCanceled,
                 preview,
                 termsJson,
                 previewHtmlStored,
@@ -216,6 +224,7 @@ export async function GET(req: NextRequest, ctx: any) {
                 redis.get(`docTerms.${scopedBatchId}.done`),
                 redis.get(`docTerms.${scopedBatchId}.failed`),
                 redis.get(`docTerms.${scopedBatchId}.error`),
+                redis.get(`docTerms.${scopedBatchId}.cancel`),
                 redis.get(`init.${scopedBatchId}.preview`),
                 redis.get(`docTerms.${scopedBatchId}.item.terms.all`),
                 redis.get(`init.${scopedBatchId}.previewHtml`),
@@ -224,7 +233,7 @@ export async function GET(req: NextRequest, ctx: any) {
             ]);
             const segProgress = toPct(segT, segD);
             const termsProgress = toPct(tT, tD);
-            const termsStatus = resolveDocumentTermsStatus(tT, tD, termsFailed);
+            const termsStatus = resolveDocumentTermsStatus(tT, tD, termsFailed, termsCanceled);
             let terms: Array<{ term: string; count: number; score?: number }> = [];
             let dict: Array<{
                 term: string;
@@ -300,7 +309,12 @@ export async function GET(req: NextRequest, ctx: any) {
                     source?: string;
                 }> = [];
                 const results = await Promise.all(
-                    uniqueTerms.map(t => queryDictionaryEntriesExactByScope(t, { limit: 10 }))
+                    uniqueTerms.map(t =>
+                        queryDictionaryEntriesExactByScope(t, {
+                            limit: 10,
+                            projectId: projectIdFromParams,
+                        })
+                    )
                 );
                 for (const r of results) {
                     if (r?.success && Array.isArray(r.data) && r.data.length) {
@@ -318,6 +332,7 @@ export async function GET(req: NextRequest, ctx: any) {
                 segProgress,
                 termsProgress,
                 termsStatus,
+                termsCanceled: termsStatus === 'canceled',
                 termsError:
                     termsStatus === 'failed'
                         ? String(termsError || DOCUMENT_TERMS_RUN_ERROR)
@@ -341,14 +356,16 @@ export async function GET(req: NextRequest, ctx: any) {
         if (waitMs > 0) {
             const start = Date.now();
             while (Date.now() - start < waitMs) {
-                const [segT, segD, tT, tD, termsFailed, parsePreviewReady] = await Promise.all([
-                    redis.get(`seg.${segBatch}.total`),
-                    redis.get(`seg.${segBatch}.done`),
-                    redis.get(`docTerms.${scopedBatchId}.total`),
-                    redis.get(`docTerms.${scopedBatchId}.done`),
-                    redis.get(`docTerms.${scopedBatchId}.failed`),
-                    redis.get(`init.${scopedBatchId}.previewHtml`),
-                ]);
+                const [segT, segD, tT, tD, termsFailed, termsCanceled, parsePreviewReady] =
+                    await Promise.all([
+                        redis.get(`seg.${segBatch}.total`),
+                        redis.get(`seg.${segBatch}.done`),
+                        redis.get(`docTerms.${scopedBatchId}.total`),
+                        redis.get(`docTerms.${scopedBatchId}.done`),
+                        redis.get(`docTerms.${scopedBatchId}.failed`),
+                        redis.get(`docTerms.${scopedBatchId}.cancel`),
+                        redis.get(`init.${scopedBatchId}.previewHtml`),
+                    ]);
                 const curSeg = toPct(segT, segD);
                 const curTerms = toPct(tT, tD);
                 // 不再因 curSeg>=100 无条件提前返回，避免进入高频短轮询
@@ -362,6 +379,10 @@ export async function GET(req: NextRequest, ctx: any) {
                     return NextResponse.json(status);
                 }
                 if (Number(termsFailed) > 0) {
+                    const status = await readStatus();
+                    return NextResponse.json(status);
+                }
+                if (Number(termsCanceled) > 0) {
                     const status = await readStatus();
                     return NextResponse.json(status);
                 }

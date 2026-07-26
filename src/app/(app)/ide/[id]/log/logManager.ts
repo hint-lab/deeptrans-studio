@@ -26,16 +26,16 @@ class LogManager {
             if (storedLogs) {
                 this.logs = JSON.parse(storedLogs);
             }
-        } catch (error) {
-            console.error('加载日志失败:', error);
+        } catch {
+            console.error('加载日志失败');
         }
     }
 
     private saveLogs(): void {
         try {
             localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.logs));
-        } catch (error) {
-            console.error('保存日志失败:', error);
+        } catch {
+            console.error('保存日志失败');
         }
     }
 

@@ -8,7 +8,7 @@
         },
         "introduction": {
             "title": "Troubleshooting Guide",
-            "description": "This document helps you diagnose and resolve common issues you may encounter while using DeepTrans Studio. If the problem persists, please check logs or submit an Issue."
+            "description": "For a first local install, use the guarded order: create .env.local, run npm run local:setup, then npm run local:check, npm run dev, and (when needed) npm run worker. local:setup starts the owned dependencies itself; local:up is only for restarting an already-initialized profile during recovery. Do not substitute raw Compose, Prisma, PostgreSQL, or Valkey commands. A local start is not an end-to-end verification; test the workflow you need. If the problem persists, capture the guarded command output and submit an Issue."
         },
         "categories": [
             {
@@ -44,18 +44,18 @@
                         ]
                     },
                     {
-                        "title": "Docker Compose Service Startup Failure",
+                        "title": "Managed Local Setup Failure",
                         "Problems": [
-                            "docker compose up reports errors",
-                            "Containers cannot start",
-                            "Ports are occupied"
+                            "npm run local:setup reports errors",
+                            "Guarded local dependency services cannot start",
+                            "Owned local ports are occupied"
                         ],
                         "solutions": [
-                            "Check if Docker and Docker Compose are correctly installed",
-                            "Check port occupancy: `lsof -i :5432` (PostgreSQL), `lsof -i :6379` (Valkey)",
-                            "View container logs: `docker compose logs [service-name]`",
-                            "Try restarting service: `docker compose restart [service-name]`",
-                            "Clean and recreate: `docker compose down -v && docker compose up -d`"
+                            "Confirm .env.local was copied from .env.local.example and AUTH_SECRET was replaced; local:setup reports configuration failures before it starts containers.",
+                            "Ensure Docker Desktop is running, but do not run project Compose commands directly.",
+                            "Check whether unrelated processes occupy the owned loopback ports 55432, 56379, 59002, or 59003.",
+                            "After correcting the cause, retry `npm run local:setup`; after it succeeds, run `npm run local:check`.",
+                            "Do not run volume-removal or raw Compose cleanup commands. For a production incident, use the production runbook instead of the local runner."
                         ]
                     },
                     {
@@ -66,11 +66,11 @@
                             "API calls return authentication errors"
                         ],
                         "solutions": [
-                            "Check if .env.local file exists and format is correct",
-                            "Verify DATABASE_URL format: `postgresql://user:password@host:port/database`",
-                            "Verify REDIS_URL format: `redis://host:port`",
-                            "Check if AUTH_SECRET is set (run `openssl rand -base64 32` to generate)",
-                            "Restart development server for environment variables to take effect"
+                            "Create .env.local from .env.local.example; do not reuse .env or .env.production.",
+                            "For a fresh profile, run `npm run local:setup`, then `npm run local:check` instead of validating database or Valkey URLs by hand.",
+                            "Replace AUTH_SECRET in .env.local with a random local value.",
+                            "With LOCAL_ALLOW_REMOTE_AI=no, remote-model functions are expected to be unavailable; enable them only with local development credentials.",
+                            "Restart through `npm run dev` or `npm run worker` after changing the local profile."
                         ]
                     }
                 ]
@@ -87,39 +87,39 @@
                             "Database query timeout"
                         ],
                         "solutions": [
-                            "Check if PostgreSQL service is running: `docker compose ps db`",
-                            "Verify DATABASE_URL environment variable is correct",
-                            "Test database connection: `psql $DATABASE_URL`",
-                            "Check if database is created: `psql -l`",
-                            "View database logs: `docker compose logs db`"
+                            "For a fresh profile, run `npm run local:setup`; it starts owned dependencies, applies the local schema, and creates demo data.",
+                            "After setup succeeds, run `npm run local:check` to verify that the database is the owned deeptrans_local instance.",
+                            "If an already-initialized profile's dependencies stopped, use `npm run local:up` rather than a raw Compose command, then run `npm run local:check`.",
+                            "Read the guarded command output rather than connecting with psql or another shell client.",
+                            "For production database diagnosis, use the approved production procedure, not the local commands."
                         ]
                     },
                     {
-                        "title": "Prisma Migration Failure",
+                        "title": "Local Migration or Setup Failure",
                         "Problems": [
-                            "yarn prisma migrate deploy execution fails",
+                            "npm run local:setup execution fails",
                             "Database schema mismatch",
                             "Migration file conflicts"
                         ],
                         "solutions": [
-                            "Check if database connection is normal",
-                            "View migration history: `yarn prisma migrate status`",
-                            "Reset database (development environment): `yarn prisma migrate reset`",
-                            "Manually apply migrations: `yarn prisma migrate deploy`",
-                            "Regenerate Prisma Client: `yarn prisma generate`"
+                            "Retry `npm run local:setup`; it owns the complete first-install path and starts dependencies itself.",
+                            "After a successful setup, run `npm run local:check` to verify the isolated profile and migration state.",
+                            "Do not run raw Prisma migrate, deploy, or reset commands against a shell-provided DATABASE_URL.",
+                            "Keep the guarded-command error output for diagnosis instead of editing migration state manually.",
+                            "Only start the app with `npm run dev` after local setup succeeds."
                         ]
                     },
                     {
-                        "title": "Prisma Studio Cannot Open",
+                        "title": "Local Data Inspection Is Unavailable",
                         "Problems": [
-                            "yarn prisma studio command no response",
-                            "Browser cannot access Prisma Studio"
+                            "The local app is running but expected data is absent",
+                            "A direct database inspection tool is unavailable"
                         ],
                         "solutions": [
-                            "Check database connection",
-                            "Confirm port 5555 is not occupied",
-                            "Try using another port: `yarn prisma studio --port 5556`",
-                            "Check firewall settings"
+                            "Run `npm run local:check` to confirm the owned local database and migration state.",
+                            "Use the supported application screens to inspect project and memory data.",
+                            "Do not start Prisma Studio or another direct client with an arbitrary environment URL.",
+                            "Escalate a required production inspection through the approved production access procedure."
                         ]
                     }
                 ]
@@ -136,11 +136,11 @@
                             "Worker cannot consume tasks"
                         ],
                         "solutions": [
-                            "Check if Valkey service is running: `docker compose ps valkey`",
-                            "Verify REDIS_URL environment variable",
-                            "Test Valkey connection: `redis-cli -u $REDIS_URL ping`",
-                            "View Valkey logs: `docker compose logs valkey`",
-                            "Check Valkey memory usage: `redis-cli info memory`"
+                            "Run `npm run local:check` to validate the owned local Valkey service.",
+                            "Use `npm run local:up` when the local dependencies are not running.",
+                            "Start or restart the guarded Worker with `npm run worker` after the check passes.",
+                            "Do not test, flush, or inspect a shell-provided Redis URL with redis-cli.",
+                            "Use the Worker output and application job state to diagnose the queue."
                         ]
                     },
                     {
@@ -151,11 +151,11 @@
                             "Worker processing speed cannot keep up"
                         ],
                         "solutions": [
-                            "Check if Worker service is running normally",
-                            "Increase number of Worker instances",
-                            "View queue status: `yarn queue:ui` (if Bull Board is configured)",
-                            "Check Valkey memory usage",
-                            "Clean failed tasks: `redis-cli FLUSHDB` (use with caution)"
+                            "Confirm the guarded Worker is running with `npm run worker`.",
+                            "Run `npm run local:check` before assuming a queue or Valkey failure.",
+                            "Review the in-app workflow and job history for the affected task.",
+                            "Do not clear Valkey with FLUSHDB or another broad Redis command; it can remove unrelated state.",
+                            "For persistent failures, keep the Worker output and escalate with the task identifier."
                         ]
                     },
                     {
@@ -166,11 +166,11 @@
                             "Task status remains PENDING"
                         ],
                         "solutions": [
-                            "View Worker logs: `docker compose logs app_worker`",
+                            "Review the terminal output from `npm run worker`.",
                             "Check if task data format is correct",
                             "Verify PostgreSQL/pgvector/PGroonga, Valkey, object storage, MinerU PDF parsing, and API keys are healthy",
                             "Check if API keys and configuration are correct",
-                            "View failed tasks in Valkey: `redis-cli KEYS 'bull:*:failed'`"
+                            "Use the in-app task history; do not query Valkey keys directly from a shell."
                         ]
                     }
                 ]
@@ -187,11 +187,11 @@
                             "PostgreSQL vector extension is unavailable"
                         ],
                         "solutions": [
-                            "Check if PostgreSQL is running: `docker compose ps db`",
-                            "Verify DATABASE_URL and vector extension migration",
-                            "View database logs: `docker compose logs db`",
-                            "Check whether `CREATE EXTENSION vector` migration has run",
-                            "Use Prisma Studio or SQL to inspect TranslationMemoryEntry embeddings"
+                            "Run `npm run local:setup` to apply the local schema and create required extensions.",
+                            "After setup succeeds, run `npm run local:check` to verify the owned PostgreSQL instance and migration state.",
+                            "Verify the local profile rather than manually changing DATABASE_URL or extension state.",
+                            "Review the guarded app or Worker output for the failing workflow.",
+                            "Do not inspect or alter embeddings with direct SQL from a local shell."
                         ]
                     },
                     {
@@ -201,9 +201,10 @@
                             "TranslationMemoryEntry.embedding is empty after import"
                         ],
                         "solutions": [
-                            "Start a missing-vector backfill job for the target memory; do not re-import text rows that already exist",
-                            "Verify EMBEDDING_MODEL, EMBEDDING_API_PATH, and EMBEDDING_DIMENSIONS=2048",
-                            "Check PostgreSQL vector and PGroonga extensions with SQL"
+                            "Start a missing-vector backfill job for the target memory; do not re-import text rows that already exist.",
+                            "With LOCAL_ALLOW_REMOTE_AI=no, model-backed embeddings are expected to be unavailable.",
+                            "If embeddings are intentionally enabled, keep provider settings in .env.local and validate the profile with `npm run local:check`.",
+                            "Do not use direct SQL to change extension or vector state."
                         ]
                     },
                     {
@@ -233,7 +234,7 @@
                             "Parsing tasks remain in PENDING status"
                         ],
                         "solutions": [
-                            "Check application logs: `docker compose logs app`",
+                            "Review the terminal output from `npm run dev` and, for queued parsing, `npm run worker`.",
                             "Verify MINERU_API_MODE is agent, standard, or precise",
                             "For agent mode, verify MINERU_AGENT_BASE_URL is reachable",
                             "For standard/precise mode, configure MINERU_API_TOKEN and verify MINERU_API_BASE_URL",
@@ -282,7 +283,7 @@
                             "Insufficient storage space error"
                         ],
                         "solutions": [
-                            "For local MinIO, check disk space and Docker volume permissions",
+                            "For the managed local MinIO service, check disk space and the local runner output",
                             "For Tencent COS, check bucket quota, region, credentials, and CORS/policy settings",
                             "Check file size limits",
                             "Verify STORAGE_TYPE and object storage configuration"
@@ -297,17 +298,17 @@
                     {
                         "title": "Worker Cannot Start",
                         "Problems": [
-                            "docker compose up worker fails",
-                            "Local yarn worker reports errors",
+                            "npm run worker reports errors",
+                            "The guarded local Worker reports errors",
                             "Worker process exits immediately"
                         ],
                         "solutions": [
-                            "Check environment variable configuration",
-                            "Verify Valkey connection",
-                            "View Worker logs: `docker compose logs app_worker`",
+                            "Run `npm run local:check` to validate the local profile and dependencies",
+                            "Verify the guarded Valkey service through the check",
+                            "Review the terminal output from `npm run worker`",
                             "Check Node.js version",
                             "Verify dependencies are correctly installed",
-                            "Check build artifacts: `yarn build:worker`"
+                            "Check build artifacts with `npm run build:worker`"
                         ]
                     },
                     {
@@ -384,40 +385,40 @@
             "tips": [
                 {
                     "title": "View Logs",
-                    "description": "View log information for each service",
+                    "description": "Use guarded local process output; production logs belong to the production runbook",
                     "commands": [
-                        "docker compose logs [service-name] -f",
-                        "docker compose logs --tail=100 [service-name]",
-                        "View Next.js console output",
+                        "npm run dev",
+                        "npm run worker",
+                        "View the guarded process output",
                         "View browser developer tools Console"
                     ]
                 },
                 {
                     "title": "Check Service Status",
-                    "description": "Verify if each service is running normally",
+                    "description": "Verify that the local services are the owned isolated dependencies",
                     "commands": [
-                        "docker compose ps",
-                        "docker compose top",
-                        "Check port occupancy: lsof -i :PORT",
-                        "Test service connection: curl http://localhost:PORT"
+                        "npm run local:check",
+                        "npm run local:up",
+                        "Check port occupancy: lsof -i :55432, :56379, :59002, or :59003",
+                        "Do not probe an arbitrary database or cache URL from a shell"
                     ]
                 },
                 {
                     "title": "Database Debugging",
-                    "description": "Use Prisma Studio to view and debug database",
+                    "description": "Validate the managed local database before inspecting application state",
                     "commands": [
-                        "yarn prisma studio",
-                        "yarn prisma migrate status",
-                        "psql $DATABASE_URL (direct database connection)"
+                        "npm run local:check",
+                        "npm run local:setup",
+                        "Use supported application screens for local data inspection"
                     ]
                 },
                 {
                     "title": "Queue Debugging",
-                    "description": "Monitor and debug BullMQ queues",
+                    "description": "Inspect queue state through the guarded Worker and application workflow history",
                     "commands": [
-                        "yarn queue:ui (if Bull Board is configured)",
-                        "redis-cli KEYS 'bull:*'",
-                        "redis-cli GET 'bull:queue:job:ID'"
+                        "npm run worker",
+                        "Review the in-app task and workflow history",
+                        "Do not run redis-cli FLUSHDB, KEYS, or GET against a shell-provided URL"
                     ]
                 }
             ]

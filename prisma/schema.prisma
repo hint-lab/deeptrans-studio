@@ -32,16 +32,38 @@ model User {
   dictionaryEntriesUpdated DictionaryEntry[] @relation("DictionaryEntryUpdatedBy")
 
   // Translation Memory
-  translationMemories        TranslationMemory[]      @relation("TranslationMemoryCreatedBy")
-  translationMemoriesUpdated TranslationMemory[]      @relation("TranslationMemoryUpdatedBy")
-  memoryEntriesCreated       TranslationMemoryEntry[] @relation("MemoryEntryCreatedBy")
-  memoryEntriesUpdated       TranslationMemoryEntry[] @relation("MemoryEntryUpdatedBy")
+  translationMemories        TranslationMemory[]              @relation("TranslationMemoryCreatedBy")
+  translationMemoriesUpdated TranslationMemory[]              @relation("TranslationMemoryUpdatedBy")
+  memoryEntriesCreated       TranslationMemoryEntry[]         @relation("MemoryEntryCreatedBy")
+  memoryEntriesUpdated       TranslationMemoryEntry[]         @relation("MemoryEntryUpdatedBy")
+  memoryImportReceipts       TranslationMemoryImportReceipt[] @relation("TranslationMemoryImportReceiptUser")
+  memoryImportAmbiguities    TranslationMemoryImportAmbiguity[] @relation("TranslationMemoryImportAmbiguityUser")
+  memoryImportReservations   TranslationMemoryImportReservation[] @relation("TranslationMemoryImportReservationUser")
 
   // Timeline
   translationStageRecords TranslationStageRecord[] @relation("TranslationStageRecordCreatedBy")
+  workflowPrompts         UserWorkflowPrompt[]
+  chatConversationScopes  ChatConversationScope[]  @relation("ChatConversationScopeUser")
+  chatConversations       ChatConversation[]       @relation("ChatConversationUser")
 
   @@index([email])
   @@index([tenantId])
+}
+
+model UserWorkflowPrompt {
+  id        String   @id @default(cuid())
+  userId    String
+  nodeKey   String
+  content   String
+  enabled   Boolean  @default(true)
+  version   Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, nodeKey])
+  @@index([userId])
 }
 
 model Tenant {
@@ -91,9 +113,10 @@ model Project {
   tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   user   User?   @relation("ProjectCreatedBy", fields: [userId], references: [id], onDelete: Cascade)
 
-  documents           Document[]
-  projectDictionaries ProjectDictionary[]
-  projectMemories     ProjectMemory[]
+  documents              Document[]
+  projectDictionaries    ProjectDictionary[]
+  projectMemories        ProjectMemory[]
+  chatConversationScopes ChatConversationScope[] @relation("ChatConversationScopeProject")
 
   @@index([userId, date])
   @@index([tenantId])
@@ -148,6 +171,7 @@ model DocumentItem {
   user     User?    @relation("DocumentItemCreatedBy", fields: [userId], references: [id], onDelete: SetNull)
 
   translationStageTimelines TranslationStageRecord[] @relation("TranslationStageRecordDocumentItem")
+  chatConversationScopes    ChatConversationScope[]  @relation("ChatConversationScopeDocumentItem")
 
   @@unique([documentId, order])
 }
@@ -213,8 +237,11 @@ model TranslationMemory {
   user      User?   @relation("TranslationMemoryCreatedBy", fields: [userId], references: [id], onDelete: SetNull)
   updatedBy User?   @relation("TranslationMemoryUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
 
-  entries         TranslationMemoryEntry[]
-  projectBindings ProjectMemory[]
+  entries            TranslationMemoryEntry[]
+  projectBindings    ProjectMemory[]
+  importReceipts     TranslationMemoryImportReceipt[]
+  importAmbiguities  TranslationMemoryImportAmbiguity[]
+  importReservation  TranslationMemoryImportReservation?
 
   @@index([userId])
   @@index([tenantId])
@@ -240,6 +267,121 @@ model TranslationMemoryEntry {
 
   @@index([memoryId])
   @@index([sourceLang, targetLang])
+}
+
+// A durable acknowledgement of one queue import. The BullMQ job can be
+// retried after the database write but before Redis records completion; this
+// receipt makes that retry a read rather than a second import.
+model TranslationMemoryImportReceipt {
+  jobId            String   @id
+  inputFingerprint String
+  memoryId         String
+  userId           String?
+  fileKey          String
+  total            Int
+  indexed          Int
+  completedAt      DateTime @default(now())
+
+  user   User?             @relation("TranslationMemoryImportReceiptUser", fields: [userId], references: [id], onDelete: SetNull)
+  memory TranslationMemory @relation(fields: [memoryId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, memoryId, inputFingerprint])
+  @@index([memoryId])
+  @@index([userId])
+}
+
+// A legacy queue job can claim completion after an older worker wrote rows
+// but before the durable receipt protocol existed. Keep that uncertainty at
+// the server boundary so it survives browser storage cleanup and requires an
+// explicit owner acknowledgement before another import can target the memory.
+model TranslationMemoryImportAmbiguity {
+  jobId          String    @id
+  memoryId       String
+  userId         String?
+  detectedAt     DateTime  @default(now())
+  acknowledgedAt DateTime?
+
+  user   User?             @relation("TranslationMemoryImportAmbiguityUser", fields: [userId], references: [id], onDelete: SetNull)
+  memory TranslationMemory @relation(fields: [memoryId], references: [id], onDelete: Cascade)
+
+  @@index([userId, memoryId, acknowledgedAt])
+  @@index([memoryId, acknowledgedAt])
+}
+
+// A reservation is created before a new queue job is accepted. It provides a
+// single, database-backed import owner per memory until the receipt-backed
+// transaction succeeds or the uncertain outcome becomes an ambiguity gate.
+model TranslationMemoryImportReservation {
+  jobId            String   @id
+  memoryId         String   @unique
+  userId           String?
+  fileKey          String
+  inputFingerprint String
+  createdAt        DateTime @default(now())
+
+  user   User?             @relation("TranslationMemoryImportReservationUser", fields: [userId], references: [id], onDelete: SetNull)
+  memory TranslationMemory @relation(fields: [memoryId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+// IDE chat is intentionally separate from document/workflow metadata. A
+// user-owned scope row serializes first-conversation creation and owns the
+// active thread pointer. Conversations remain independently selectable inside
+// that exact project/segment scope; no tenant-wide transcript is shared.
+model ChatConversationScope {
+  id                   String   @id @default(cuid())
+  userId               String
+  scopeKey             String
+  projectId            String?
+  documentItemId       String?
+  activeConversationId String?  @unique
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  user               User               @relation("ChatConversationScopeUser", fields: [userId], references: [id], onDelete: Cascade)
+  project            Project?           @relation("ChatConversationScopeProject", fields: [projectId], references: [id], onDelete: Cascade)
+  documentItem       DocumentItem?      @relation("ChatConversationScopeDocumentItem", fields: [documentItemId], references: [id], onDelete: Cascade)
+  activeConversation ChatConversation?  @relation("ChatConversationScopeActiveConversation", fields: [activeConversationId], references: [id], onDelete: SetNull)
+  conversations      ChatConversation[] @relation("ChatConversationScopeConversations")
+
+  @@unique([userId, scopeKey])
+  @@index([userId, projectId, documentItemId])
+  @@index([projectId])
+  @@index([documentItemId])
+}
+
+model ChatConversation {
+  id                  String    @id @default(cuid())
+  userId              String
+  scopeId             String
+  nextMessageSequence Int       @default(0)
+  generationToken     String?
+  generationStartedAt DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  user            User                    @relation("ChatConversationUser", fields: [userId], references: [id], onDelete: Cascade)
+  scope           ChatConversationScope   @relation("ChatConversationScopeConversations", fields: [scopeId], references: [id], onDelete: Cascade)
+  activeForScope  ChatConversationScope?  @relation("ChatConversationScopeActiveConversation")
+  messages        ChatConversationMessage[]
+
+  @@index([userId, scopeId, updatedAt])
+  @@index([scopeId, updatedAt])
+}
+
+model ChatConversationMessage {
+  id             String                      @id @default(cuid())
+  conversationId String
+  sequence       Int
+  role           ChatConversationMessageRole
+  content        String
+  createdAt      DateTime                    @default(now())
+
+  conversation ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, sequence])
 }
 
 model TranslationStageRecord {
@@ -282,6 +424,11 @@ enum DictionaryVisibility {
   PUBLIC
   PROJECT
   PRIVATE
+}
+
+enum ChatConversationMessageRole {
+  USER
+  ASSISTANT
 }
 
 enum UserRole {

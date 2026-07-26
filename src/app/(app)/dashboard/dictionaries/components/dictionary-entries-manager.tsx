@@ -7,11 +7,15 @@ import {
     fetchDictionaryEntriesPagedAction,
     updateDictionaryEntryAction,
 } from '@/actions/dictionary';
+import {
+    DICTIONARY_ENTRY_PAGE_SIZE_OPTIONS,
+    dictionaryEntryPageCount,
+} from '@/lib/dictionary-entry-pagination';
 import { createLogger } from '@/lib/logger';
 import type { Dictionary, DictionaryEntry } from '@prisma/client';
 import { Edit, Plus, Search, Trash2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from 'src/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from 'src/components/ui/card';
@@ -38,6 +42,13 @@ interface DictionaryEntriesManagerProps {
     onDictionaryEdited?: (dictionaryId: string, updatedData: Partial<Dictionary>) => void;
 }
 
+type EntryLoadOptions = {
+    page?: number;
+    pageSize?: number;
+    term?: string;
+    origin?: string;
+};
+
 export function DictionaryEntriesManager({
     dictionary,
     onDictionaryDeleted,
@@ -50,67 +61,134 @@ export function DictionaryEntriesManager({
     const [searchTerm, setSearchTerm] = useState('');
     const [originFilter, setOriginFilter] = useState<string>('');
     const [editingEntry, setEditingEntry] = useState<string | null>(null);
-    const [loading, setLoading] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
+    const [isLoadingEntries, setIsLoadingEntries] = useState(true);
+    const [listError, setListError] = useState<string | null>(null);
+    const loadSequence = useRef(0);
+    const activeDictionaryIdRef = useRef(dictionary.id);
+    const [loadedDictionaryId, setLoadedDictionaryId] = useState<string | null>(
+        dictionary.id
+    );
+    activeDictionaryIdRef.current = dictionary.id;
     const t = useTranslations('Dashboard.Dictionaries');
-    const canWrite = dictionary.visibility !== 'PUBLIC' && dictionary.canWrite === true;
+    const canWrite = dictionary.canWrite === true;
     const [editForm, setEditForm] = useState({
         sourceText: '',
         targetText: '',
         notes: '',
     });
+    // Keep a previous dictionary's rows invisible while route metadata for a
+    // new dictionary is resolving. This also locks mutations during that
+    // handoff, so an old row can never be edited through a new dictionary UI.
+    const listBelongsToCurrentDictionary = loadedDictionaryId === dictionary.id;
+    const visibleEntries = listBelongsToCurrentDictionary ? entries : [];
+    const visibleTotal = listBelongsToCurrentDictionary ? total : 0;
+    const visiblePage = listBelongsToCurrentDictionary ? page : 1;
+    const visibleListError = listBelongsToCurrentDictionary ? listError : null;
+    const pageCount = dictionaryEntryPageCount(visibleTotal, pageSize);
+    const shouldShowLoading = isLoadingEntries || !listBelongsToCurrentDictionary;
+    const isBusy = isSaving || shouldShowLoading;
+    const isListLocked = isBusy || Boolean(editingEntry);
 
-    // 加载词典条目（分页）
-    const loadEntries = async (opts?: { page?: number; pageSize?: number; term?: string }) => {
+    // A response from an earlier search/filter must never overwrite the most
+    // recent list. This is deliberately client-side because a Server Action
+    // call cannot be aborted once dispatched.
+    const loadEntries = async (opts?: EntryLoadOptions) => {
+        const requestId = ++loadSequence.current;
+        const requestDictionaryId = dictionary.id;
+        const curPage = opts?.page ?? page;
+        const curSize = opts?.pageSize ?? pageSize;
+        const term = opts?.term ?? searchTerm;
+        const origin = opts?.origin ?? originFilter;
+        setIsLoadingEntries(true);
+        setListError(null);
         try {
-            const curPage = opts?.page ?? page;
-            const curSize = opts?.pageSize ?? pageSize;
-            const term = opts?.term ?? (searchTerm || '');
             const result = await fetchDictionaryEntriesPagedAction(
-                dictionary.id,
+                requestDictionaryId,
                 curPage,
                 curSize,
                 term,
-                originFilter || undefined
+                origin || undefined
             );
-            if (result.success && result.data) {
-                setEntries(
-                    result.data.map((entry: any) => ({
-                        id: entry.id,
-                        sourceText: entry.sourceText,
-                        targetText: entry.targetText,
-                        notes: entry.notes ?? null,
-                        explanation: entry.explanation ?? null,
-                        context: entry.context ?? null,
-                        createdById: entry.createdById ?? null,
-                        updatedById: entry.updatedById ?? null,
-                        createdAt: new Date(entry.createdAt as any),
-                        updatedAt: new Date(entry.updatedAt as any),
-                        dictionaryId: entry.dictionaryId,
-                        enabled: entry.enabled === true,
-                        origin: entry.origin ?? null,
-                    }))
-                );
-                setTotal((result as any).total || 0);
-                if (opts?.page) setPage(opts.page);
-                if (opts?.pageSize) setPageSize(opts.pageSize);
+            if (!result.success || !result.data) {
+                throw new Error(result.error || t('entryLoadFailed'));
             }
+            if (
+                requestId !== loadSequence.current ||
+                requestDictionaryId !== activeDictionaryIdRef.current
+            ) {
+                return false;
+            }
+
+            setEntries(
+                result.data.map((entry: any) => ({
+                    id: entry.id,
+                    sourceText: entry.sourceText,
+                    targetText: entry.targetText,
+                    notes: entry.notes ?? null,
+                    explanation: entry.explanation ?? null,
+                    context: entry.context ?? null,
+                    createdById: entry.createdById ?? null,
+                    updatedById: entry.updatedById ?? null,
+                    createdAt: new Date(entry.createdAt as any),
+                    updatedAt: new Date(entry.updatedAt as any),
+                    dictionaryId: entry.dictionaryId,
+                    enabled: entry.enabled === true,
+                    origin: entry.origin ?? null,
+                }))
+            );
+            setLoadedDictionaryId(requestDictionaryId);
+            setTotal((result as any).total ?? 0);
+            setPage((result as any).page ?? curPage);
+            setPageSize((result as any).pageSize ?? curSize);
+            return true;
         } catch (error) {
+            if (
+                requestId !== loadSequence.current ||
+                requestDictionaryId !== activeDictionaryIdRef.current
+            ) {
+                return false;
+            }
             logger.error('加载词典条目失败:', error);
-            toast.error('加载词典条目失败');
+            setListError(t('entryLoadFailed'));
+            return false;
+        } finally {
+            if (
+                requestId === loadSequence.current &&
+                requestDictionaryId === activeDictionaryIdRef.current
+            ) {
+                setIsLoadingEntries(false);
+            }
         }
     };
 
     useEffect(() => {
+        // Reset drafts and visible pagination immediately when the manager is
+        // retargeted. The guarded loader below will fill in the new rows.
+        loadSequence.current += 1;
+        setLoadedDictionaryId(null);
+        setEntries([]);
+        setTotal(0);
+        setPage(1);
+        setEditingEntry(null);
+        setEditForm({ sourceText: '', targetText: '', notes: '' });
+        setListError(null);
+    }, [dictionary.id]);
+
+    useEffect(() => {
         const delay = searchTerm || originFilter ? 300 : 0;
         const timer = setTimeout(() => {
-            void loadEntries({ page: 1, pageSize });
+            void loadEntries({ page: 1, pageSize, term: searchTerm, origin: originFilter });
         }, delay);
 
-        return () => clearTimeout(timer);
-    }, [dictionary.id, searchTerm, originFilter]);
+        return () => {
+            clearTimeout(timer);
+            loadSequence.current += 1;
+        };
+    }, [dictionary.id, searchTerm, originFilter, pageSize]);
 
     const handleAddEntry = () => {
-        if (!canWrite) return;
+        if (!canWrite || isBusy) return;
         const newEntry: DictionaryEntry = {
             id: `temp-${Date.now()}`,
             sourceText: '',
@@ -127,13 +205,13 @@ export function DictionaryEntriesManager({
             origin: null as any,
         };
 
-        setEntries([newEntry, ...entries]);
+        setEntries(current => [newEntry, ...current]);
         setEditingEntry(newEntry.id);
         setEditForm({ sourceText: '', targetText: '', notes: '' });
     };
 
     const handleEditEntry = (entry: DictionaryEntry) => {
-        if (!canWrite) return;
+        if (!canWrite || isBusy) return;
         setEditingEntry(entry.id);
         setEditForm({
             sourceText: entry.sourceText,
@@ -145,13 +223,15 @@ export function DictionaryEntriesManager({
     const handleSaveEntry = async (entryId: string) => {
         if (!canWrite) return;
         if (!editForm.sourceText.trim() || !editForm.targetText.trim()) {
-            toast.error('源语言和目标语言不能为空');
+            toast.error(t('entryRequired'));
             return;
         }
 
-        setLoading(true);
+        const isNewEntry = entryId.startsWith('temp-');
+        let saved = false;
+        setIsSaving(true);
         try {
-            if (entryId.startsWith('temp-')) {
+            if (isNewEntry) {
                 // 新建条目
                 const result = await createDictionaryEntryAction({
                     sourceText: editForm.sourceText,
@@ -161,10 +241,10 @@ export function DictionaryEntriesManager({
                 });
 
                 if (result.success && result.data) {
-                    toast.success('词条创建成功！');
-                    await loadEntries();
+                    saved = true;
+                    toast.success(t('entryCreated'));
                 } else {
-                    toast.error(result.error ?? '创建词条失败');
+                    toast.error(result.error ?? t('entryCreateFailed'));
                 }
             } else {
                 // 更新现有条目
@@ -175,49 +255,58 @@ export function DictionaryEntriesManager({
                 });
 
                 if (result.success && result.data) {
-                    toast.success('词条更新成功！');
-                    await loadEntries();
+                    saved = true;
+                    toast.success(t('entryUpdated'));
                 } else {
-                    toast.error(result.error ?? '更新词条失败');
+                    toast.error(result.error ?? t('entryUpdateFailed'));
                 }
             }
 
-            setEditingEntry(null);
-            setEditForm({ sourceText: '', targetText: '', notes: '' });
+            // A failed mutation keeps the draft open. Clearing it would turn a
+            // temporary outage into irreversible user data loss.
+            if (saved) {
+                setEditingEntry(null);
+                setEditForm({ sourceText: '', targetText: '', notes: '' });
+                await loadEntries({ page: isNewEntry ? 1 : page });
+            }
         } catch (error) {
             logger.error('保存词条失败:', error);
-            toast.error('保存词条时发生错误');
+            toast.error(t('entrySaveFailed'));
         } finally {
-            setLoading(false);
+            setIsSaving(false);
         }
     };
 
-    const handleCancelEdit = () => {
+    const handleCancelEdit = (entryId: string | null = editingEntry) => {
         setEditingEntry(null);
         setEditForm({ sourceText: '', targetText: '', notes: '' });
 
-        // 如果是临时条目，从列表中移除
-        setEntries(entries.filter(entry => !entry.id.startsWith('temp-')));
+        if (entryId?.startsWith('temp-')) {
+            setEntries(current => current.filter(entry => entry.id !== entryId));
+        }
     };
 
     const handleDeleteEntry = async (entryId: string) => {
         if (!canWrite) return;
         if (entryId.startsWith('temp-')) {
-            setEntries(entries.filter(entry => entry.id !== entryId));
+            setEntries(current => current.filter(entry => entry.id !== entryId));
             return;
         }
 
+        setIsSaving(true);
         try {
             const result = await deleteDictionaryEntryAction(entryId);
             if (result.success) {
-                toast.success('词条删除成功！');
+                toast.success(t('entryDeleted'));
                 await loadEntries();
             } else {
-                toast.error(result.error ?? '删除词条失败');
+                toast.error(result.error ?? t('entryDeleteFailed'));
             }
         } catch (error) {
             logger.error('删除词条失败:', error);
-            toast.error('删除词条时发生错误');
+            toast.error(t('entryDeleteFailed'));
+        } finally {
+            setIsSaving(false);
         }
     };
 
@@ -228,45 +317,52 @@ export function DictionaryEntriesManager({
     const handleToggleEnabled = async (entry: DictionaryEntry, value: boolean) => {
         if (!canWrite) return;
         try {
-            setLoading(true);
+            setIsSaving(true);
             const result = await updateDictionaryEntryAction(entry.id, { enabled: value });
             if (result.success) {
                 setEntries(prev =>
                     prev.map(e => (e.id === entry.id ? { ...e, enabled: value } : e))
                 );
-                toast.success(value ? '已启用词条' : '已禁用词条');
+                toast.success(value ? t('entryEnabled') : t('entryDisabled'));
             } else {
-                toast.error(result.error ?? '更新状态失败');
+                toast.error(result.error ?? t('entryStateUpdateFailed'));
             }
         } catch (error) {
             logger.error('切换启用状态失败:', error);
-            toast.error('切换启用状态时发生错误');
+            toast.error(t('entryStateUpdateFailed'));
         } finally {
-            setLoading(false);
+            setIsSaving(false);
         }
     };
 
     return (
-        <Card>
-            <CardHeader>
-                <div className="flex items-center justify-between">
-                    <div>
-                        <CardTitle className="text-lg">
-                            {t('termItem')}，{t('total')} {total} {t('entries')}（{page} /{' '}
-                            {Math.max(1, Math.ceil(total / Math.max(1, pageSize)))} {t('pages')}）
+        <Card className="overflow-hidden border-border/80 shadow-sm">
+            <CardHeader className="gap-4 border-b border-border/70 bg-muted/25 px-4 py-4 sm:px-6">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                        <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
+                            {t('termItem')}
+                        </p>
+                        <CardTitle className="mt-1 text-xl tracking-tight">
+                            {visibleTotal.toLocaleString()} {t('entries')}
                         </CardTitle>
+                        <p className="mt-1 text-sm text-muted-foreground" aria-live="polite">
+                            {visiblePage} / {pageCount} {t('pages')}
+                            {shouldShowLoading ? ` · ${t('entryLoading')}` : ''}
+                        </p>
                     </div>
-                    <div className="flex space-x-2">
+                    <div className="flex flex-wrap gap-2">
                         {canWrite && (
                             <ImportDictionaryEntriesDialog
                                 dictionaryId={dictionary.id}
-                                onCompleted={() => loadEntries()}
+                                onCompleted={() => void loadEntries({ page: 1 })}
+                                disabled={isListLocked}
                             />
                         )}
                         <Button
                             onClick={handleAddEntry}
                             size="sm"
-                            disabled={loading || !canWrite}
+                            disabled={isListLocked || !canWrite}
                             title={!canWrite ? t('readOnlyDictionary') : undefined}
                         >
                             <Plus className="mr-2 h-4 w-4" />
@@ -276,306 +372,317 @@ export function DictionaryEntriesManager({
                             <Button
                                 variant="destructive"
                                 size="sm"
-                                disabled={loading}
+                                disabled={isListLocked}
                                 onClick={async () => {
                                     if (
-                                        confirm(
-                                            `确定要删除词库 "${dictionary.name}" 吗？此操作将同时删除该词库中的所有词条，且无法撤销。`
+                                        !confirm(
+                                            t('DeleteDialog.description', {
+                                                name: dictionary.name,
+                                                count: visibleTotal.toLocaleString(),
+                                            })
                                         )
                                     ) {
-                                        setLoading(true);
-                                        try {
-                                            const result = await deleteDictionaryAction(
-                                                dictionary.id
-                                            );
-                                            if (result.success) {
-                                                onDictionaryDeleted(dictionary.id);
-                                                toast.success('词典删除成功！');
-                                            } else {
-                                                toast.error(result.error ?? '删除词典失败');
-                                            }
-                                        } catch (error) {
-                                            logger.error('删除词典失败:', error);
-                                            toast.error('删除词典时发生错误');
-                                        } finally {
-                                            setLoading(false);
+                                        return;
+                                    }
+                                    setIsSaving(true);
+                                    try {
+                                        const result = await deleteDictionaryAction(dictionary.id);
+                                        if (result.success) {
+                                            onDictionaryDeleted(dictionary.id);
+                                            toast.success(t('deleteSuccess'));
+                                        } else {
+                                            toast.error(result.error ?? t('DeleteDialog.deleteFailed'));
                                         }
+                                    } catch (error) {
+                                        logger.error('删除词典失败:', error);
+                                        toast.error(t('DeleteDialog.deleteError'));
+                                    } finally {
+                                        setIsSaving(false);
                                     }
                                 }}
                             >
                                 <Trash2 className="mr-2 h-4 w-4" />
-                                删除词库
+                                {t('deleteDictionary')}
                             </Button>
                         )}
-                        {/* <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={loading}
-                            onClick={() => {
-                                // 这里可以触发编辑词典的对话框
-                                // 暂时使用简单的提示
-                                alert("编辑词典功能将在词典卡片中提供")
-                            }}
-                        >
-                            <Edit3 className="mr-2 h-4 w-4" />
-                            编辑词库
-                        </Button> */}
                     </div>
                 </div>
-                <div className="relative mt-4">
-                    <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
-                    <Input
-                        type="text"
-                        placeholder={`${t('searchItem')}...`}
-                        value={searchTerm}
-                        onChange={e => setSearchTerm(e.target.value)}
-                        className="pl-8"
-                        disabled={loading}
-                    />
-                    <div className="mt-2 flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground">{t('origin')}</span>
+                <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_11rem]">
+                    <div className="relative">
+                        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                            id={`dictionary-${dictionary.id}-search`}
+                            type="search"
+                            placeholder={`${t('searchItem')}...`}
+                            value={searchTerm}
+                            onChange={e => setSearchTerm(e.target.value)}
+                            className="h-9 bg-background pl-9"
+                            disabled={isSaving || Boolean(editingEntry)}
+                        />
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <Label
+                            htmlFor={`dictionary-${dictionary.id}-origin`}
+                            className="shrink-0 text-xs text-muted-foreground"
+                        >
+                            {t('origin')}
+                        </Label>
                         <select
+                            id={`dictionary-${dictionary.id}-origin`}
                             value={originFilter}
                             onChange={e => setOriginFilter(e.target.value)}
-                            className="rounded border bg-background px-2 py-1 text-sm"
+                            className="h-9 min-w-0 flex-1 rounded-md border border-input bg-background px-2 text-sm outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                            disabled={isSaving || Boolean(editingEntry)}
                         >
                             <option value="">{t('all')}</option>
                             <option value="manual">{t('manual')}</option>
                             <option value="import:xlsx">{t('importExcel')}</option>
                             <option value="import:tbx">{t('importTbx')}</option>
+                            <option value="import:client">{t('importClient')}</option>
                             <option value="apply:new">{t('applyNew')}</option>
                             <option value="apply:copied">{t('applyCopied')}</option>
+                            <option value="apply:user">{t('applyUser')}</option>
+                            <option value="apply:mt">{t('applyMachineTranslation')}</option>
                         </select>
                     </div>
                 </div>
             </CardHeader>
-            <CardContent>
-                <ScrollArea className="h-96">
-                    <div className="space-y-3">
-                        {entries.map(entry => (
-                            <div key={entry.id} className="rounded-lg border p-4">
-                                {editingEntry === entry.id ? (
-                                    // 编辑模式
-                                    <div className="space-y-3">
-                                        <div className="grid grid-cols-2 gap-3">
-                                            <div>
-                                                <Label htmlFor={`source-${entry.id}`}>
-                                                    {t('sourceLanguage')}
-                                                </Label>
-                                                <Input
-                                                    id={`source-${entry.id}`}
-                                                    value={editForm.sourceText}
-                                                    onChange={e =>
-                                                        handleInputChange(
-                                                            'sourceText',
-                                                            e.target.value
-                                                        )
-                                                    }
-                                                    placeholder={t('enterSourceLanguageTerm')}
-                                                    disabled={loading}
-                                                />
-                                            </div>
-                                            <div>
-                                                <Label htmlFor={`target-${entry.id}`}>
-                                                    {t('targetLanguage')}
-                                                </Label>
-                                                <Input
-                                                    id={`target-${entry.id}`}
-                                                    value={editForm.targetText}
-                                                    onChange={e =>
-                                                        handleInputChange(
-                                                            'targetText',
-                                                            e.target.value
-                                                        )
-                                                    }
-                                                    placeholder={t('enterTargetLanguageTerm')}
-                                                    disabled={loading}
-                                                />
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <Label htmlFor={`notes-${entry.id}`}>
-                                                {t('notes')}
-                                            </Label>
-                                            <Textarea
-                                                id={`notes-${entry.id}`}
-                                                value={editForm.notes}
-                                                onChange={e =>
-                                                    handleInputChange('notes', e.target.value)
-                                                }
-                                                placeholder={t('enterNotes')}
-                                                rows={2}
-                                                disabled={loading}
-                                            />
-                                        </div>
-                                        <div className="flex justify-end space-x-2">
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                onClick={handleCancelEdit}
-                                                disabled={loading}
-                                            >
-                                                {t('cancel')}
-                                            </Button>
-                                            <Button
-                                                size="sm"
-                                                onClick={() => handleSaveEntry(entry.id)}
-                                                disabled={loading}
-                                            >
-                                                {loading ? '保存中...' : '保存'}
-                                            </Button>
-                                        </div>
-                                    </div>
-                                ) : (
-                                    // 显示模式
-                                    <div className="flex items-center justify-between">
-                                        <div className="flex-1">
-                                            <div className="grid grid-cols-2 gap-4">
+            <CardContent className="p-4 sm:p-6" aria-busy={shouldShowLoading}>
+                {visibleListError ? (
+                    <div
+                        role="alert"
+                        className="flex min-h-48 flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-destructive/35 bg-destructive/5 p-6 text-center"
+                    >
+                        <p className="text-sm text-destructive">{visibleListError}</p>
+                        <Button variant="outline" size="sm" onClick={() => loadEntries()}>
+                            {t('retry')}
+                        </Button>
+                    </div>
+                ) : (
+                    <ScrollArea className="h-[min(52vh,34rem)] pr-3">
+                        <div className="space-y-2">
+                            {visibleEntries.map(entry => (
+                                <div
+                                    key={entry.id}
+                                    className="rounded-xl border border-border/80 bg-background p-3 transition-colors hover:bg-muted/20 sm:p-4"
+                                >
+                                    {editingEntry === entry.id ? (
+                                        <div className="space-y-3">
+                                            <div className="grid gap-3 sm:grid-cols-2">
                                                 <div>
-                                                    <Label className="text-sm font-medium text-muted-foreground">
+                                                    <Label htmlFor={`source-${entry.id}`}>
                                                         {t('sourceLanguage')}
                                                     </Label>
-                                                    <p className="text-sm">{entry.sourceText}</p>
+                                                    <Input
+                                                        id={`source-${entry.id}`}
+                                                        value={editForm.sourceText}
+                                                        onChange={e =>
+                                                            handleInputChange(
+                                                                'sourceText',
+                                                                e.target.value
+                                                            )
+                                                        }
+                                                        placeholder={t('enterSourceLanguageTerm')}
+                                                        disabled={isBusy}
+                                                    />
                                                 </div>
                                                 <div>
-                                                    <Label className="text-sm font-medium text-muted-foreground">
+                                                    <Label htmlFor={`target-${entry.id}`}>
                                                         {t('targetLanguage')}
                                                     </Label>
-                                                    <p className="text-sm">{entry.targetText}</p>
+                                                    <Input
+                                                        id={`target-${entry.id}`}
+                                                        value={editForm.targetText}
+                                                        onChange={e =>
+                                                            handleInputChange(
+                                                                'targetText',
+                                                                e.target.value
+                                                            )
+                                                        }
+                                                        placeholder={t('enterTargetLanguageTerm')}
+                                                        disabled={isBusy}
+                                                    />
                                                 </div>
                                             </div>
-                                            <div className="mt-2 grid grid-cols-2 gap-4">
-                                                <div>
-                                                    <Label className="text-sm font-medium text-muted-foreground">
-                                                        {t('notes')}
-                                                    </Label>
-                                                    <p className="text-sm text-muted-foreground">
-                                                        {entry.notes ? entry.notes : '-'}
-                                                    </p>
-                                                </div>
-                                                {(entry as any).origin && (
-                                                    <div>
-                                                        <Label className="text-sm font-medium text-muted-foreground">
-                                                            {t('origin')}
-                                                        </Label>
-                                                        <p className="text-sm text-muted-foreground">
-                                                            {String((entry as any).origin)}
-                                                        </p>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center space-x-3">
-                                            <div className="flex items-center gap-2">
-                                                <Label className="text-sm text-muted-foreground">
-                                                    {t('enabled')}
+                                            <div>
+                                                <Label htmlFor={`notes-${entry.id}`}>
+                                                    {t('notes')}
                                                 </Label>
-                                                <Switch
-                                                    checked={!!(entry as any).enabled}
-                                                    onCheckedChange={checked =>
-                                                        handleToggleEnabled(entry, !!checked)
+                                                <Textarea
+                                                    id={`notes-${entry.id}`}
+                                                    value={editForm.notes}
+                                                    onChange={e =>
+                                                        handleInputChange('notes', e.target.value)
                                                     }
-                                                    disabled={
-                                                        loading || !canWrite
-                                                    }
+                                                    placeholder={t('enterNotes')}
+                                                    rows={2}
+                                                    disabled={isBusy}
                                                 />
                                             </div>
-                                            <div className="flex space-x-2">
+                                            <div className="flex justify-end gap-2">
                                                 <Button
-                                                    variant="ghost"
+                                                    variant="outline"
                                                     size="sm"
-                                                    onClick={() => handleEditEntry(entry)}
-                                                    disabled={
-                                                        loading || !canWrite
-                                                    }
-                                                    title={
-                                                        !canWrite
-                                                            ? t('readOnlyDictionary')
-                                                            : undefined
-                                                    }
+                                                    onClick={() => handleCancelEdit(entry.id)}
+                                                    disabled={isBusy}
                                                 >
-                                                    <Edit className="h-4 w-4" />
+                                                    {t('cancel')}
                                                 </Button>
                                                 <Button
-                                                    variant="ghost"
                                                     size="sm"
-                                                    onClick={() => handleDeleteEntry(entry.id)}
-                                                    className="text-red-500 hover:text-red-700"
-                                                    disabled={
-                                                        loading || !canWrite
-                                                    }
-                                                    title={
-                                                        !canWrite
-                                                            ? t('cannotDeleteReadOnlyEntry')
-                                                            : undefined
-                                                    }
+                                                    onClick={() => handleSaveEntry(entry.id)}
+                                                    disabled={isBusy}
                                                 >
-                                                    <Trash2 className="h-4 w-4" />
+                                                    {isSaving ? t('entrySaving') : t('entrySave')}
                                                 </Button>
                                             </div>
                                         </div>
-                                    </div>
-                                )}
-                            </div>
-                        ))}
+                                    ) : (
+                                        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                                            <div className="grid min-w-0 flex-1 gap-3 sm:grid-cols-2">
+                                                <div className="min-w-0">
+                                                    <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                                                        {t('sourceLanguage')}
+                                                    </Label>
+                                                    <p className="mt-1 break-words text-sm leading-6">
+                                                        {entry.sourceText}
+                                                    </p>
+                                                </div>
+                                                <div className="min-w-0 border-border/70 sm:border-l sm:pl-3">
+                                                    <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                                                        {t('targetLanguage')}
+                                                    </Label>
+                                                    <p className="mt-1 break-words text-sm leading-6">
+                                                        {entry.targetText}
+                                                    </p>
+                                                </div>
+                                                <div className="min-w-0 border-t border-border/60 pt-2 sm:col-span-2">
+                                                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                                                        <span className="text-xs font-medium text-muted-foreground">
+                                                            {t('notes')}
+                                                        </span>
+                                                        <p className="break-words text-sm text-muted-foreground">
+                                                            {entry.notes || '—'}
+                                                        </p>
+                                                        {(entry as any).origin && (
+                                                            <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                                                                {t('origin')}: {String((entry as any).origin)}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div className="flex shrink-0 items-center justify-between gap-2 lg:justify-end">
+                                                <div className="flex items-center gap-2">
+                                                    <Label
+                                                        htmlFor={`entry-${entry.id}-enabled`}
+                                                        className="text-xs text-muted-foreground"
+                                                    >
+                                                        {t('enabled')}
+                                                    </Label>
+                                                    <Switch
+                                                        id={`entry-${entry.id}-enabled`}
+                                                        checked={!!(entry as any).enabled}
+                                                        onCheckedChange={checked =>
+                                                            handleToggleEnabled(entry, !!checked)
+                                                        }
+                                                        disabled={isListLocked || !canWrite}
+                                                    />
+                                                </div>
+                                                <div className="flex gap-1">
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        onClick={() => handleEditEntry(entry)}
+                                                        disabled={isListLocked || !canWrite}
+                                                        title={
+                                                            !canWrite
+                                                                ? t('readOnlyDictionary')
+                                                                : t('editEntry')
+                                                        }
+                                                        aria-label={t('editEntry')}
+                                                    >
+                                                        <Edit className="h-4 w-4" />
+                                                    </Button>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        onClick={() => handleDeleteEntry(entry.id)}
+                                                        className="text-destructive hover:text-destructive"
+                                                        disabled={isListLocked || !canWrite}
+                                                        title={
+                                                            !canWrite
+                                                                ? t('cannotDeleteReadOnlyEntry')
+                                                                : t('deleteEntry')
+                                                        }
+                                                        aria-label={t('deleteEntry')}
+                                                    >
+                                                        <Trash2 className="h-4 w-4" />
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
 
-                        {entries.length === 0 && (
-                            <div className="py-8 text-center text-muted-foreground">
-                                {searchTerm ? t('noMatchingEntries') : t('noEntries')}
-                            </div>
-                        )}
-
-                        {entries.length > 0 && entries.length === 30 && !searchTerm && (
-                            <div className="border-t py-4 text-center text-sm text-muted-foreground">
-                                仅显示最新的30条词条
-                            </div>
-                        )}
-
-                        {entries.length > 0 && entries.length === 30 && searchTerm && (
-                            <div className="border-t py-4 text-center text-sm text-muted-foreground">
-                                搜索结果仅显示前30条匹配项
-                            </div>
-                        )}
-                    </div>
-                </ScrollArea>
-                <div className="mt-3 flex items-center justify-between text-sm">
+                            {!shouldShowLoading && visibleEntries.length === 0 && (
+                                <div className="flex min-h-48 items-center justify-center rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">
+                                    {searchTerm || originFilter
+                                        ? t('noMatchingEntries')
+                                        : t('noEntries')}
+                                </div>
+                            )}
+                            {shouldShowLoading && visibleEntries.length === 0 && (
+                                <div className="flex min-h-48 items-center justify-center text-sm text-muted-foreground">
+                                    {t('entryLoading')}
+                                </div>
+                            )}
+                        </div>
+                    </ScrollArea>
+                )}
+                <div className="mt-4 flex flex-col gap-3 border-t border-border/70 pt-3 text-sm sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex items-center gap-2">
-                        <span>{t('entriesPerPage')}</span>
+                        <Label htmlFor={`dictionary-${dictionary.id}-page-size`}>
+                            {t('entriesPerPage')}
+                        </Label>
                         <select
+                            id={`dictionary-${dictionary.id}-page-size`}
                             value={pageSize}
-                            onChange={async e => {
-                                const size = parseInt(e.target.value) || 50;
-                                await loadEntries({ page: 1, pageSize: size });
+                            onChange={e => {
+                                setPage(1);
+                                setPageSize(Number(e.target.value));
                             }}
-                            className="rounded border bg-background px-2 py-1"
+                            className="h-8 rounded-md border border-input bg-background px-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+                            disabled={isListLocked}
                         >
-                            <option value={20}>20</option>
-                            <option value={50}>50</option>
-                            <option value={100}>100</option>
+                            {DICTIONARY_ENTRY_PAGE_SIZE_OPTIONS.map(size => (
+                                <option key={size} value={size}>
+                                    {size}
+                                </option>
+                            ))}
                         </select>
-                        <span>{t('entries')}</span>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center justify-between gap-2 sm:justify-end">
                         <Button
                             variant="outline"
                             size="sm"
-                            disabled={page <= 1}
-                            onClick={async () => {
-                                await loadEntries({ page: Math.max(1, page - 1) });
+                            disabled={isListLocked || visiblePage <= 1}
+                            onClick={() => {
+                                void loadEntries({ page: visiblePage - 1 });
                             }}
                         >
                             {t('previousPage')}
                         </Button>
-                        <span>
-                            {page} / {Math.max(1, Math.ceil(total / Math.max(1, pageSize)))}{' '}
-                            {t('pages')}
+                        <span className="min-w-20 text-center text-xs text-muted-foreground" aria-live="polite">
+                            {visiblePage} / {pageCount} {t('pages')}
                         </span>
                         <Button
                             variant="outline"
                             size="sm"
-                            disabled={page >= Math.ceil((total || 0) / Math.max(1, pageSize))}
-                            onClick={async () => {
-                                await loadEntries({ page: page + 1 });
+                            disabled={isListLocked || visiblePage >= pageCount}
+                            onClick={() => {
+                                void loadEntries({ page: visiblePage + 1 });
                             }}
                         >
                             {t('nextPage')}

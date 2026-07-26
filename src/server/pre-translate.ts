@@ -34,10 +34,11 @@ export async function extractMonolingualTerms(
 
 export async function lookupDictionaryForOwner(
     terms: TermCandidate[],
-    owner: AuthContext
+    owner: AuthContext,
+    options?: { projectId?: string }
 ): Promise<DictEntry[]> {
     const agent = new DictLookupAgent();
-    return agent.execute({ terms, owner });
+    return agent.execute({ terms, owner, projectId: options?.projectId });
 }
 
 export async function baselineTranslate(
@@ -84,7 +85,7 @@ export async function runPreTranslateForOwner(
     sourceLanguage: string | undefined,
     targetLanguage: string | undefined,
     owner: AuthContext,
-    options?: { prompt?: string }
+    options?: { termExtractPrompt?: string; termEmbedPrompt?: string; projectId?: string }
 ): Promise<{
     terms: TermCandidate[];
     dict: DictEntry[];
@@ -97,15 +98,18 @@ export async function runPreTranslateForOwner(
             sourceChars: sourceText?.length || 0,
             sourceLanguage,
             targetLanguage,
-            hasPrompt: !!options?.prompt,
+            hasTermExtractPrompt: !!options?.termExtractPrompt,
+            hasTermEmbedPrompt: !!options?.termEmbedPrompt,
         });
 
         const terms = await extractMonolingualTerms(sourceText, {
-            prompt: options?.prompt,
+            prompt: options?.termExtractPrompt,
         });
         logger.debug('术语抽取完成:', { count: terms?.length, terms: terms?.slice(0, 5) });
 
-        const dict = await lookupDictionaryForOwner(terms, owner);
+        const dict = await lookupDictionaryForOwner(terms, owner, {
+            projectId: options?.projectId,
+        });
         logger.debug('词典查询完成:', { count: dict?.length });
 
         const translation = await embedAndTranslate(
@@ -113,7 +117,7 @@ export async function runPreTranslateForOwner(
             sourceLanguage,
             targetLanguage,
             dict,
-            { prompt: options?.prompt }
+            { prompt: options?.termEmbedPrompt }
         );
         logger.debug('术语嵌入翻译完成:', { translationLength: translation?.length });
 

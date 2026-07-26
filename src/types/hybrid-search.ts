@@ -7,7 +7,10 @@ export interface HybridSearchConfig {
     vectorSearch?: {
         enabled: boolean;
         topK: number;
-        metric?: 'L2' | 'IP' | 'COSINE';
+        // The indexed halfvec query path is cosine-only. Keep the public
+        // contract aligned with the actual pgvector index instead of exposing
+        // metrics that would not be used by retrieval.
+        metric?: 'COSINE';
         ef?: number;
         weight?: number; // 向量检索结果权重，默认 0.7
     };
@@ -45,7 +48,9 @@ export interface SearchResult {
     score: number;
     text?: string;
     meta?: any;
-    source: 'vector' | 'keyword' | 'hybrid'; // 结果来源
+    // Per-result retrieval evidence. UI callers expose this as `searchMode`;
+    // it is deliberately distinct from the aggregate configured/effective mode.
+    source: 'vector' | 'keyword' | 'hybrid';
     originalScore?: number; // 原始分数（融合前）
     vectorScore?: number; // 向量检索分数
     keywordScore?: number; // 关键词检索分数

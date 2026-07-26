@@ -5,8 +5,13 @@ import { Card } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import {
+    formatMemorySearchDisplaySignal,
+    memorySearchDisplaySignal,
+    splitMemorySearchHighlights,
+} from '@/lib/memory-search';
 import { Search, Zap, Hash, TrendingUp } from 'lucide-react';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 
 interface SearchResultItemProps {
     item: {
@@ -31,36 +36,26 @@ export function SearchResultItem({
     showScores = true,
 }: SearchResultItemProps) {
     const t = useTranslations('Dashboard.Memories.SearchResult');
-    // 高亮搜索关键词
-    const highlightText = (text: string, query: string) => {
-        if (!query.trim()) return text;
-
-        const keywords = query.toLowerCase().split(/\s+/).filter(Boolean);
-        let highlightedText = text;
-
-        keywords.forEach(keyword => {
-            const regex = new RegExp(`(${keyword})`, 'gi');
-            highlightedText = highlightedText.replace(
-                regex,
-                '<mark class="bg-yellow-200 dark:bg-yellow-800 px-1 rounded">$1</mark>'
-            );
-        });
-
-        return highlightedText;
-    };
+    const locale = useLocale();
+    const renderHighlightedText = (text: string, query: string) =>
+        splitMemorySearchHighlights(text, query).map((segment, segmentIndex) =>
+            segment.highlighted ? (
+                <mark
+                    key={`${segmentIndex}-${segment.text}`}
+                    className="rounded bg-yellow-200 px-1 dark:bg-yellow-800"
+                >
+                    {segment.text}
+                </mark>
+            ) : (
+                <span key={`${segmentIndex}-${segment.text}`}>{segment.text}</span>
+            )
+        );
 
     const getScoreColor = (score: number) => {
         if (score >= 0.8) return 'text-green-600 dark:text-green-400';
         if (score >= 0.6) return 'text-blue-600 dark:text-blue-400';
         if (score >= 0.4) return 'text-yellow-600 dark:text-yellow-400';
         return 'text-gray-600 dark:text-gray-400';
-    };
-
-    const getScoreLabel = (score: number) => {
-        if (score >= 0.8) return t('highRelevance');
-        if (score >= 0.6) return t('mediumRelevance');
-        if (score >= 0.4) return t('lowRelevance');
-        return t('weakRelevance');
     };
 
     const getSearchModeInfo = (mode?: string) => {
@@ -93,8 +88,13 @@ export function SearchResultItem({
     };
 
     const modeInfo = getSearchModeInfo(item.searchMode);
-    const finalScore = item.score || 0;
-    const scorePercentage = Math.round(finalScore * 100);
+    const retrievalSignal = memorySearchDisplaySignal(item);
+    const semanticScore = retrievalSignal.kind === 'semantic' ? retrievalSignal.score : undefined;
+    const retrievalLabel = formatMemorySearchDisplaySignal(
+        item,
+        locale.startsWith('zh') ? 'zh' : 'en'
+    );
+    const semanticPercentage = semanticScore === undefined ? 0 : Math.round(semanticScore * 100);
 
     return (
         <Card className="p-4 transition-shadow duration-200 hover:shadow-md">
@@ -111,74 +111,46 @@ export function SearchResultItem({
                         </Badge>
                     </div>
 
-                    {showScores && finalScore > 0 && (
+                    {showScores && (
                         <TooltipProvider>
                             <Tooltip>
                                 <TooltipTrigger asChild>
-                                    <div className="flex cursor-help items-center gap-2">
-                                        <span
-                                            className={`text-sm font-medium ${getScoreColor(finalScore)}`}
+                                    {semanticScore === undefined ? (
+                                        <span className="cursor-help text-xs text-muted-foreground">
+                                            {retrievalLabel}
+                                        </span>
+                                    ) : (
+                                        <div
+                                            aria-label={retrievalLabel}
+                                            className="flex cursor-help items-center gap-2"
                                         >
-                                            {scorePercentage}%
-                                        </span>
-                                        <span className="text-xs text-muted-foreground">
-                                            {getScoreLabel(finalScore)}
-                                        </span>
-                                    </div>
+                                            <span
+                                                className={`text-sm font-medium ${getScoreColor(semanticScore)}`}
+                                            >
+                                                {semanticPercentage}%
+                                            </span>
+                                            <span className="text-xs text-muted-foreground">
+                                                {t('vector')}
+                                            </span>
+                                        </div>
+                                    )}
                                 </TooltipTrigger>
                                 <TooltipContent side="left" className="max-w-xs">
-                                    <div className="space-y-2">
-                                        <div className="font-medium">{t('similarityDetails')}</div>
-                                        <div className="space-y-1 text-xs">
-                                            <div>
-                                                {t('overallScore')}: {(finalScore * 100).toFixed(1)}
-                                                %
-                                            </div>
-                                            {item.vectorScore !== undefined && (
-                                                <div>
-                                                    {t('vectorScore')}:{' '}
-                                                    {(item.vectorScore * 100).toFixed(1)}%
-                                                </div>
-                                            )}
-                                            {item.keywordScore !== undefined && (
-                                                <div>
-                                                    {t('keywordScore')}:{' '}
-                                                    {(item.keywordScore * 100).toFixed(1)}%
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
+                                    <span>{retrievalLabel}</span>
                                 </TooltipContent>
                             </Tooltip>
                         </TooltipProvider>
                     )}
                 </div>
 
-                {/* 分数进度条 */}
-                {showScores && finalScore > 0 && (
+                {/* 只有原始向量分数才是可校准的语义相似度。 */}
+                {showScores && semanticScore !== undefined && (
                     <div className="space-y-1">
-                        <Progress value={scorePercentage} className="h-1.5" />
-                        {/* 子分数显示 */}
-                        {(item.vectorScore !== undefined || item.keywordScore !== undefined) && (
-                            <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                                {item.vectorScore !== undefined && (
-                                    <div className="flex items-center gap-1">
-                                        <Search className="h-3 w-3" />
-                                        <span>
-                                            {t('vector')}: {(item.vectorScore * 100).toFixed(0)}%
-                                        </span>
-                                    </div>
-                                )}
-                                {item.keywordScore !== undefined && (
-                                    <div className="flex items-center gap-1">
-                                        <Hash className="h-3 w-3" />
-                                        <span>
-                                            {t('keyword')}: {(item.keywordScore * 100).toFixed(0)}%
-                                        </span>
-                                    </div>
-                                )}
-                            </div>
-                        )}
+                        <Progress value={semanticPercentage} className="h-1.5" />
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <Search className="h-3 w-3" />
+                            <span>{retrievalLabel}</span>
+                        </div>
                     </div>
                 )}
 
@@ -190,24 +162,18 @@ export function SearchResultItem({
                         <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                             {t('sourceText')}
                         </div>
-                        <div
-                            className="break-words text-sm leading-relaxed"
-                            dangerouslySetInnerHTML={{
-                                __html: highlightText(item.sourceText, searchQuery),
-                            }}
-                        />
+                        <div className="break-words text-sm leading-relaxed">
+                            {renderHighlightedText(item.sourceText, searchQuery)}
+                        </div>
                     </div>
 
                     <div className="space-y-1">
                         <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                             {t('targetText')}
                         </div>
-                        <div
-                            className="break-words text-sm leading-relaxed"
-                            dangerouslySetInnerHTML={{
-                                __html: highlightText(item.targetText, searchQuery),
-                            }}
-                        />
+                        <div className="break-words text-sm leading-relaxed">
+                            {renderHighlightedText(item.targetText, searchQuery)}
+                        </div>
                     </div>
                 </div>
 
@@ -217,12 +183,9 @@ export function SearchResultItem({
                         <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                             {t('notes')}
                         </div>
-                        <div
-                            className="break-words text-xs leading-relaxed text-muted-foreground"
-                            dangerouslySetInnerHTML={{
-                                __html: highlightText(item.notes, searchQuery),
-                            }}
-                        />
+                        <div className="break-words text-xs leading-relaxed text-muted-foreground">
+                            {renderHighlightedText(item.notes, searchQuery)}
+                        </div>
                     </div>
                 )}
             </div>

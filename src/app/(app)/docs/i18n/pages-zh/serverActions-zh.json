@@ -104,7 +104,7 @@
                             "method": "POST",
                             "path": "/api/auth/email-login",
                             "title": "邮箱登录",
-                            "description": "使用邮箱和验证码登录"
+                            "description": "提交邮箱和六位验证码以建立登录会话；成功后返回安全的站内跳转路径"
                         },
                         {
                             "method": "POST",
@@ -254,7 +254,7 @@
                             "method": "GET",
                             "path": "/api/memories/import/status?jobId={jobId}",
                             "title": "查询导入进度",
-                            "description": "按任务 ID 查询解析、嵌入和向量写入进度"
+                            "description": "按任务 ID 查询解析、嵌入和向量写入进度，以及后台 Worker 是否可处理该任务"
                         },
                         {
                             "method": "POST",

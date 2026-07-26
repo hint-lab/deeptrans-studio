@@ -9,8 +9,8 @@ import NextAuth from 'next-auth';
 
 import CredentialsProvider from 'next-auth/providers/credentials';
 
-import { findUserByEmailDB, findUserByIdDB, updateUserByIdDB } from './db/user';
-import { DEMO_CODE, DEMO_EMAIL, ensureDemoUser, isDemoAccount } from './lib/demo-user';
+import { findUserByIdDB, findUserByNormalizedEmailDB, updateUserByIdDB } from './db/user';
+import { DEMO_CODE, ensureDemoUser, isDemoAccount } from './lib/demo-user';
 // 直接将配置内联在此文件中，不再依赖外部 authConfig
 const MAX_AGE = Number(process.env.AUTH_SESSION_MAX_AGE ?? 3600);
 const logger = createLogger(
@@ -43,34 +43,36 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                     return null;
                 }
                 if (process.env.IS_DEMO === 'yes') {
-                    if (code === DEMO_CODE && email === DEMO_EMAIL) {
-                        return ensureDemoUser();
-                    } else {
-                        return null;
-                    }
-                } else {
-                    if (email) {
-                        const { getVerificationCodeByEmail } =
-                            await import('./db/verificationCode');
-                        const record = await getVerificationCodeByEmail(email as string);
-                        if (!record || record.code !== code) {
-                            return null;
-                        }
-                        const user = await findUserByEmailDB(email as string);
-                        return user || null;
-                    }
-                    if (phone) {
-                        const { getVerificationCodeByPhone } =
-                            await import('./db/verificationCode');
-                        const record = await getVerificationCodeByPhone(phone as string);
-                        if (!record || record.code !== code) {
-                            return null;
-                        }
-                        const user = await findUserByIdDB(record.phone);
-                        return user || null;
-                    }
                     return null;
                 }
+                if (email) {
+                    const { consumeEmailVerificationCode, normalizeEmailForVerification } =
+                        await import('./db/verificationCode');
+                    const normalizedEmail = normalizeEmailForVerification(String(email));
+                    const normalizedCode = String(code || '').trim();
+                    const user = await findUserByNormalizedEmailDB(normalizedEmail);
+                    // Do not consume a registration code unless an account
+                    // already exists. The registration flow verifies first,
+                    // creates the user, then reaches this final sign-in step.
+                    if (
+                        !user ||
+                        !(await consumeEmailVerificationCode(normalizedEmail, normalizedCode))
+                    ) {
+                        return null;
+                    }
+                    await updateUserByIdDB(user.id, { emailVerified: new Date() });
+                    return user;
+                }
+                if (phone) {
+                    const { getVerificationCodeByPhone } = await import('./db/verificationCode');
+                    const record = await getVerificationCodeByPhone(phone as string);
+                    if (!record || record.code !== code) {
+                        return null;
+                    }
+                    const user = await findUserByIdDB(record.phone);
+                    return user || null;
+                }
+                return null;
             },
         }),
     ],
@@ -147,10 +149,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             if (token.email) session.user.email = token.email as string;
             /* 统一过期字段 */
             (session as any).expires = token.expires
-                ? new Date((token.expires as number) * 1000).toLocaleString()
-                : new Date(Date.now() + MAX_AGE * 1000).toLocaleString();
+                ? new Date((token.expires as number) * 1000).toISOString()
+                : new Date(Date.now() + MAX_AGE * 1000).toISOString();
 
-            if (token.expired) (session as any).expires = new Date().toLocaleString();
+            if (token.expired) (session as any).expires = new Date().toISOString();
             return session;
         },
     },

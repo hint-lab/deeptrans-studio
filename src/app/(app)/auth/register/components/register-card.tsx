@@ -1,22 +1,36 @@
 'use client';
-import { useState, useTransition } from 'react';
+import { useRef, useState, useTransition } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
 import { useTranslations } from 'next-intl';
 import { emailLoginAction } from '@/actions/email-login';
 import { Icons } from '@/components/icons';
-import { useSearchParams } from 'next/navigation';
+import {
+    getEmailVerificationFailureCode,
+    getEmailVerificationFailureMessage,
+    isEmailRegistrationCompleted,
+    isEmailVerificationSent,
+} from '@/lib/email-verification-client';
 
-export const RegisterCard = () => {
-    const searchParams = useSearchParams();
+interface RegisterCardProps {
+    callbackUrl: string;
+    initialEmail: string;
+    isDesktop: boolean;
+}
+
+export const RegisterCard = ({ callbackUrl, initialEmail, isDesktop }: RegisterCardProps) => {
     const [name, setName] = useState('');
-    const [email, setEmail] = useState(() => searchParams.get('email') || '');
+    const [email, setEmail] = useState(initialEmail);
     const [code, setCode] = useState('');
     const [cooldown, setCooldown] = useState(0);
     const [isPending, startTransition] = useTransition();
     const [isSendingCode, setIsSendingCode] = useState(false);
+    const otpRef = useRef<HTMLInputElement>(null);
     const t = useTranslations('Auth');
+    const loginParams = new URLSearchParams({ callbackUrl });
+    if (isDesktop) loginParams.set('desktop', '1');
+    const loginHref = `/auth/login?${loginParams.toString()}`;
 
     const sendCode = async () => {
         if (!email) {
@@ -29,17 +43,33 @@ export const RegisterCard = () => {
             return;
         }
         setIsSendingCode(true);
+        let timeoutId: ReturnType<typeof setTimeout> | undefined;
         try {
             const form = new FormData();
             form.set('mode', 'email');
             form.set('purpose', 'register');
             form.set('email', email.trim());
-            const r = await fetch('/api/auth/send-email', { method: 'POST', body: form });
-            if (!r.ok) {
-                const errorData = await r.json().catch(() => ({}));
-                throw new Error(errorData.error || errorData.message || t('sendFailed'));
+            const controller = new AbortController();
+            timeoutId = setTimeout(() => controller.abort(), 10000);
+            const r = await fetch('/api/auth/send-email', {
+                method: 'POST',
+                body: form,
+                signal: controller.signal,
+            });
+            const payload: unknown = await r.json().catch(() => null);
+            if (!r.ok || !isEmailVerificationSent(payload)) {
+                const failureCode = getEmailVerificationFailureCode(payload);
+                if (r.status === 409 && failureCode === 'USER_ALREADY_EXISTS') {
+                    const params = new URLSearchParams({ callbackUrl });
+                    if (isDesktop) params.set('desktop', '1');
+                    window.location.assign(`/auth/login?${params.toString()}`);
+                    return;
+                }
+                toast.error(getEmailVerificationFailureMessage(payload, t('sendFailed')));
+                return;
             }
             toast.info(process.env.NODE_ENV === 'development' ? t('codeSentDev') : t('codeSent'));
+            otpRef.current?.focus();
             setCooldown(60);
             const timer = setInterval(
                 () =>
@@ -52,9 +82,14 @@ export const RegisterCard = () => {
                     }),
                 1000
             );
-        } catch (e: any) {
-            toast.error((e as Error)?.message || t('sendFailed'));
+        } catch (error: unknown) {
+            if (error instanceof DOMException && error.name === 'AbortError') {
+                toast.error(t('requestTimeout'));
+            } else {
+                toast.error(t('sendFailed'));
+            }
         } finally {
+            if (timeoutId) clearTimeout(timeoutId);
             setIsSendingCode(false);
         }
     };
@@ -73,16 +108,27 @@ export const RegisterCard = () => {
                 form.set('email', email.trim());
                 form.set('code', code.trim());
                 const r = await fetch('/api/auth/register', { method: 'POST', body: form });
-                const j = await r.json().catch(() => ({}));
-                if (!r.ok || j?.error) throw new Error((j as any)?.error || t('registerFailed'));
-                toast.success(t('registerSuccess'));
-                const result = await emailLoginAction({ email: email.trim(), code: code.trim() }, '/dashboard');
-                if (result?.error) toast.error(t('loginFailed', { error: result.error }));
-            } catch (e: any) {
-                if (e?.message === 'NEXT_REDIRECT' || e?.digest?.includes?.('NEXT_REDIRECT')) {
-                    throw e;
+                const payload: unknown = await r.json().catch(() => null);
+                if (!r.ok || !isEmailRegistrationCompleted(payload)) {
+                    toast.error(getEmailVerificationFailureMessage(payload, t('registerFailed')));
+                    return;
                 }
-                toast.error((e as Error)?.message || t('registerFailed'));
+                toast.success(t('registerSuccess'));
+                const result = await emailLoginAction(
+                    { email: email.trim(), code: code.trim() },
+                    callbackUrl
+                );
+                if (result?.error) toast.error(t('loginFailed', { error: result.error }));
+            } catch (error: unknown) {
+                const redirectError = error as { message?: unknown; digest?: unknown };
+                if (
+                    redirectError?.message === 'NEXT_REDIRECT' ||
+                    (typeof redirectError?.digest === 'string' &&
+                        redirectError.digest.includes('NEXT_REDIRECT'))
+                ) {
+                    throw error;
+                }
+                toast.error(t('registerFailed'));
             }
         });
     };
@@ -90,7 +136,14 @@ export const RegisterCard = () => {
     return (
         <Card className="w-full border-none">
             <CardHeader>
-                <CardTitle className="text-center text-2xl">{t('register')}</CardTitle>
+                <CardTitle className="flex flex-wrap items-center justify-center gap-2 text-center text-2xl">
+                    {t('register')}
+                    {isDesktop ? (
+                        <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
+                            {t('desktopEdition')}
+                        </span>
+                    ) : null}
+                </CardTitle>
             </CardHeader>
             <CardContent>
                 <form onSubmit={onSubmit} className="space-y-4">
@@ -110,6 +163,11 @@ export const RegisterCard = () => {
                                 id="email"
                                 placeholder={t('enterEmail')}
                                 type="email"
+                                autoCapitalize="none"
+                                autoComplete="email"
+                                autoCorrect="off"
+                                inputMode="email"
+                                spellCheck={false}
                                 value={email}
                                 onChange={e => setEmail(e.target.value)}
                                 required
@@ -122,11 +180,18 @@ export const RegisterCard = () => {
                         <div className="mb-1 text-sm">{t('verificationCode')}</div>
                         <div className="flex items-center justify-center space-x-4 rounded-full border border-muted p-1 hover:border-primary">
                             <input
+                                ref={otpRef}
                                 id="otp"
                                 placeholder={t('enterCode')}
                                 type="text"
+                                autoComplete="one-time-code"
+                                inputMode="numeric"
+                                maxLength={6}
+                                pattern="[0-9]{6}"
                                 value={code}
-                                onChange={e => setCode(e.target.value)}
+                                onChange={e =>
+                                    setCode(e.target.value.replace(/\D/g, '').slice(0, 6))
+                                }
                                 required
                                 disabled={isSendingCode || isPending}
                                 className="mx-6 w-full border-none bg-transparent p-1 outline-none disabled:cursor-not-allowed disabled:opacity-50"
@@ -152,12 +217,16 @@ export const RegisterCard = () => {
                             </Button>
                         </div>
                     </div>
-                    <Button type="submit" className="w-full" disabled={isPending || isSendingCode}>
+                    <Button
+                        type="submit"
+                        className="w-full"
+                        disabled={isPending || isSendingCode || !email || code.length !== 6}
+                    >
                         {isPending ? t('loggingIn') : t('registerAndLogin')}
                     </Button>
                     <div className="text-center text-sm text-muted-foreground">
                         {t('hasAccount')}{' '}
-                        <a className="underline" href="/auth/login">
+                        <a className="underline" href={loginHref}>
                             {t('goLogin')}
                         </a>
                     </div>

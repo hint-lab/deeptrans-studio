@@ -8,8 +8,22 @@ import {
     getTranslationStageLabel,
 } from '@/constants/translationStages';
 import { useActiveDocumentItem } from '@/hooks/useActiveDocumentItem';
+import { getTargetEditorInstance } from '@/hooks/useEditor';
 import { useExplorerTabs } from '@/hooks/useExplorerTabs';
+import { useTranslationState } from '@/hooks/useTranslation';
+import { getExplorerDisclosureAction } from '@/lib/explorer-tree-keyboard';
+import {
+    completeExplorerLoad,
+    failExplorerLoad,
+    initialExplorerLoadState,
+    isCurrentExplorerLoadRequest,
+    startExplorerLoad,
+} from '@/lib/explorer-load-state';
 import { createLogger } from '@/lib/logger';
+import {
+    canLeaveCurrentPostEditDraft,
+    POST_EDIT_DRAFT_DISCARD_MESSAGE,
+} from '@/lib/post-edit-draft-navigation';
 import type { TranslationStage } from '@/store/features/translationSlice';
 import { DocumentItemTab, DocumentTab } from '@/types/explorerTabs';
 import { Check, ChevronDown, ChevronRight, FileIcon, Pencil, X } from 'lucide-react';
@@ -89,27 +103,75 @@ const ExplorerView = ({ projectId }: { projectId: string }) => {
     const t = useTranslations('IDE.explorerPanel');
     const { explorerTabs, setExplorerTabs } = useExplorerTabs();
     const { activeDocumentItem, setActiveDocumentItem } = useActiveDocumentItem();
-    const [isLoading, setIsLoading] = useState(true);
+    const { currentStage } = useTranslationState();
+    const initialExplorerLoadRef = useRef(
+        explorerTabs.projectId === projectId
+            ? completeExplorerLoad(explorerTabs.documentTabs.length)
+            : initialExplorerLoadState
+    );
+    const [explorerLoad, setExplorerLoad] = useState(initialExplorerLoadRef.current);
+    const [reloadRequest, setReloadRequest] = useState(0);
     const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({});
     const [renamingDocumentId, setRenamingDocumentId] = useState<string | null>(null);
     const [renameValue, setRenameValue] = useState('');
     const [isSavingRename, setIsSavingRename] = useState(false);
     const listRef = useRef<HTMLUListElement | null>(null);
     const scrollTopRef = useRef<number>(0);
+    const explorerLoadRef = useRef(initialExplorerLoadRef.current);
+    const explorerTabsRef = useRef(explorerTabs);
+    const loadRequestIdRef = useRef(0);
+    const displayedProjectIdRef = useRef(projectId);
+
+    // Guard old responses during the interval before an effect cleanup runs.
+    displayedProjectIdRef.current = projectId;
+
+    const updateExplorerLoad = (next: typeof explorerLoad) => {
+        explorerLoadRef.current = next;
+        setExplorerLoad(next);
+    };
+
+    const setFolderExpanded = (folderId: string, isExpanded: boolean) => {
+        // 记录滚动位置，展开/收起后还原，避免列表“蹦跳”
+        const prevScroll = listRef.current?.scrollTop ?? 0;
+        setExpandedFolders(prev => {
+            if (Boolean(prev[folderId]) === isExpanded) return prev;
+            return { ...prev, [folderId]: isExpanded };
+        });
+        setTimeout(() => {
+            if (listRef.current) listRef.current.scrollTop = prevScroll;
+        }, 0);
+    };
+
+    const toggleFolder = (folderId: string) => {
+        // 记录滚动位置，展开/收起后还原，避免列表“蹦跳”
+        const prevScroll = listRef.current?.scrollTop ?? 0;
+        setExpandedFolders(prev => ({ ...prev, [folderId]: !prev[folderId] }));
+        setTimeout(() => {
+            if (listRef.current) listRef.current.scrollTop = prevScroll;
+        }, 0);
+    };
 
     const handleDocumentTabClick = (element: DocumentTab) => {
-        if (element.items) {
-            // 记录滚动位置，展开/收起后还原，避免列表“蹦跳”
-            const prevScroll = listRef.current?.scrollTop ?? 0;
-            setExpandedFolders(prev => ({ ...prev, [element.id]: !prev[element.id] }));
-            setTimeout(() => {
-                if (listRef.current) listRef.current.scrollTop = prevScroll;
-            }, 0);
+        if (element.items.length > 0) {
+            toggleFolder(element.id);
         }
     };
 
     const handleDocumentItemClick = (element: DocumentItemTab) => {
         if (element.id === activeDocumentItem.id) return;
+        const targetEditor = getTargetEditorInstance();
+        const targetElement = targetEditor?.view.dom;
+        const canLeave = canLeaveCurrentPostEditDraft(
+            {
+                activeItemId: activeDocumentItem.id,
+                currentStage,
+                editorItemId: targetElement?.getAttribute('data-deeptrans-editor-item-id'),
+                editorJob: targetElement?.getAttribute('data-deeptrans-editor-job'),
+                editorDirty: targetElement?.getAttribute('data-deeptrans-editor-dirty'),
+            },
+            () => window.confirm(POST_EDIT_DRAFT_DISCARD_MESSAGE)
+        );
+        if (!canLeave) return;
         setActiveDocumentItem(element);
         logger.debug('element', element);
     };
@@ -117,9 +179,22 @@ const ExplorerView = ({ projectId }: { projectId: string }) => {
     const handleOutlineItemClick = (element: ExplorerNode) => {
         const hasChildren = !!element.children?.length;
         if (hasChildren) {
-            setExpandedFolders(prev => ({ ...prev, [element.id]: !prev[element.id] }));
+            toggleFolder(element.id);
         }
         handleDocumentItemClick(element);
+    };
+
+    const handleDisclosureKeyDown = (
+        event: React.KeyboardEvent<HTMLButtonElement>,
+        folderId: string,
+        hasChildren: boolean,
+        isExpanded: boolean
+    ) => {
+        const action = getExplorerDisclosureAction(event.key, { hasChildren, isExpanded });
+        if (!action) return;
+
+        event.preventDefault();
+        setFolderExpanded(folderId, action === 'expand');
     };
 
     const startRenamingDocument = (document: DocumentTab) => {
@@ -156,7 +231,7 @@ const ExplorerView = ({ projectId }: { projectId: string }) => {
             cancelRenamingDocument();
         } catch (error) {
             logger.error(t('renameFailed'), error);
-            toast.error(error instanceof Error ? error.message : t('renameFailed'));
+            toast.error(t('renameFailed'));
         } finally {
             setIsSavingRename(false);
         }
@@ -168,26 +243,65 @@ const ExplorerView = ({ projectId }: { projectId: string }) => {
         if (el) el.scrollTop = scrollTopRef.current;
     }, [explorerTabs]);
 
+    useLayoutEffect(() => {
+        explorerTabsRef.current = explorerTabs;
+    }, [explorerTabs]);
+
     useEffect(() => {
+        const requestId = ++loadRequestIdRef.current;
+        const hasCurrentProjectResult =
+            explorerTabsRef.current.projectId === projectId &&
+            explorerLoadRef.current.hasLoadedResult;
+        const pendingState = hasCurrentProjectResult
+            ? startExplorerLoad(explorerLoadRef.current)
+            : initialExplorerLoadState;
+        updateExplorerLoad(pendingState);
+        let disposed = false;
+
         const fetchData = async () => {
             try {
-                setIsLoading(true);
-                // 获取数据...
                 const projectTabs = await fetchProjectTabsAction(projectId);
-                // 转换 ProjectTabs 到 ExplorerTabs
+                const requestIsCurrent =
+                    !disposed &&
+                    requestId === loadRequestIdRef.current &&
+                    displayedProjectIdRef.current === projectId;
+                if (!requestIsCurrent) return;
+                if (
+                    !isCurrentExplorerLoadRequest(
+                        requestId,
+                        loadRequestIdRef.current,
+                        projectId,
+                        projectTabs.projectId
+                    )
+                ) {
+                    throw new Error('Explorer response did not match the requested project');
+                }
+
                 logger.debug('projectTabs', projectTabs);
-                setExplorerTabs({
-                    ...projectTabs,
-                });
+                setExplorerTabs(projectTabs);
+                updateExplorerLoad(completeExplorerLoad(projectTabs.documentTabs.length));
             } catch (error) {
+                if (
+                    disposed ||
+                    requestId !== loadRequestIdRef.current ||
+                    displayedProjectIdRef.current !== projectId
+                ) {
+                    return;
+                }
                 logger.error(t('dataLoadFailed'), error);
-            } finally {
-                setIsLoading(false);
+                updateExplorerLoad(failExplorerLoad(explorerLoadRef.current));
             }
         };
 
-        fetchData();
-    }, [projectId]);
+        void fetchData();
+        return () => {
+            disposed = true;
+        };
+    }, [projectId, reloadRequest]);
+
+    const retryExplorerLoad = () => {
+        setReloadRequest(previous => previous + 1);
+    };
 
     const handleCreateFile = () => {
         const newElement = {
@@ -204,13 +318,22 @@ const ExplorerView = ({ projectId }: { projectId: string }) => {
 
         return (
             <li key={documentItem.id}>
-                <div
-                    className={`flex cursor-pointer select-none items-center gap-1 rounded-sm px-2 py-1.5 font-normal hover:bg-accent hover:text-accent-foreground ${isActive ? 'bg-accent text-accent-foreground' : ''}`}
+                <button
+                    type="button"
+                    className={`flex w-full select-none items-center gap-1 rounded-sm px-2 py-1.5 text-left font-normal hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 ${isActive ? 'bg-accent text-accent-foreground' : ''}`}
                     onClick={() => handleOutlineItemClick(documentItem)}
+                    onKeyDown={event =>
+                        handleDisclosureKeyDown(event, documentItem.id, hasChildren, isExpanded)
+                    }
+                    aria-expanded={hasChildren ? isExpanded : undefined}
+                    aria-current={isActive ? 'true' : undefined}
                     data-file-id={documentItem.id}
                 >
                     {hasChildren ? (
-                        <span className="flex h-4 w-4 items-center justify-center text-muted-foreground">
+                        <span
+                            aria-hidden="true"
+                            className="flex h-4 w-4 items-center justify-center text-muted-foreground"
+                        >
                             {isExpanded ? (
                                 <ChevronDown className="h-3.5 w-3.5" />
                             ) : (
@@ -229,9 +352,9 @@ const ExplorerView = ({ projectId }: { projectId: string }) => {
                     <span className="ml-auto">
                         <ItemStatusBadge status={documentItem.status as any} />
                     </span>
-                </div>
+                </button>
                 {hasChildren && isExpanded && (
-                    <ul className="pl-5">
+                    <ul className="pl-5" aria-label={documentItem.name}>
                         {documentItem.children?.map(child =>
                             renderOutlineItem(child as ExplorerNode, 3)
                         )}
@@ -241,26 +364,49 @@ const ExplorerView = ({ projectId }: { projectId: string }) => {
         );
     };
 
+    const hasCurrentProjectResult =
+        explorerLoad.hasLoadedResult && explorerTabs.projectId === projectId;
+    const currentDocumentTabs = hasCurrentProjectResult ? explorerTabs.documentTabs : [];
+
     return (
         <div className="flex size-full flex-col justify-start">
             <div className="flex items-center justify-between border-b bg-muted/40 px-2 py-2 text-[11px] text-foreground/70">
                 <span className="font-medium">{t('files')}</span>
                 <div className="flex items-center gap-1">
-                    {/* 工具按钮区（导出已移至顶栏菜单） */}
+                    {explorerLoad.isRefreshing && (
+                        <span role="status" aria-live="polite" className="text-muted-foreground">
+                            {t('refreshingFiles')}
+                        </span>
+                    )}
                 </div>
             </div>
 
-            {isLoading ? (
-                <div className="p-2">
+            {explorerLoad.hasError && (
+                <div
+                    role="alert"
+                    className="mx-2 mt-2 flex items-center justify-between gap-2 rounded-sm border border-destructive/30 bg-destructive/5 px-2 py-2 text-xs text-destructive"
+                >
+                    <span>{t('dataLoadFailed')}</span>
+                    <button
+                        type="button"
+                        className="shrink-0 rounded-sm border border-destructive/30 bg-background px-2 py-1 font-medium text-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                        onClick={retryExplorerLoad}
+                    >
+                        {t('retryLoad')}
+                    </button>
+                </div>
+            )}
+
+            {explorerLoad.phase === 'loading' ||
+            (!hasCurrentProjectResult && !explorerLoad.hasError) ? (
+                <div className="p-2" aria-busy="true" aria-label={t('loadingFiles')}>
                     <div className="space-y-2">
                         {Array.from({ length: 8 }).map((_, i) => (
                             <Skeleton key={i} className="h-5 w-full" />
                         ))}
                     </div>
                 </div>
-            ) : explorerTabs &&
-              explorerTabs.documentTabs &&
-              explorerTabs.documentTabs.length > 0 ? (
+            ) : hasCurrentProjectResult && currentDocumentTabs.length > 0 ? (
                 <ul
                     ref={listRef}
                     className="flex flex-col overflow-y-auto p-2 text-sm text-foreground [overflow-anchor:none]"
@@ -269,89 +415,110 @@ const ExplorerView = ({ projectId }: { projectId: string }) => {
                         scrollTopRef.current = (e.currentTarget as HTMLUListElement).scrollTop;
                     }}
                 >
-                    {explorerTabs.documentTabs.map(document => (
-                        <React.Fragment key={document.id}>
-                            <li
-                                className={`group flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 hover:bg-accent hover:text-accent-foreground ${document.items && expandedFolders[document.id] ? 'bg-accent text-accent-foreground' : ''} font-medium`}
-                                onClick={() => handleDocumentTabClick(document)}
+                    {currentDocumentTabs.map(document => (
+                        <li key={document.id} className="group">
+                            <div
+                                className={`flex items-center gap-2 rounded-sm px-2 py-1.5 hover:bg-accent hover:text-accent-foreground ${document.items.length > 0 && expandedFolders[document.id] ? 'bg-accent text-accent-foreground' : ''} font-medium`}
                             >
-                                <FileIcon className="h-4 w-4 flex-none shrink-0" />
                                 {renamingDocumentId === document.id ? (
-                                    <div
-                                        className="flex min-w-0 flex-1 items-center gap-1"
-                                        onClick={e => e.stopPropagation()}
-                                    >
-                                        <input
-                                            value={renameValue}
-                                            autoFocus
-                                            disabled={isSavingRename}
-                                            onChange={e => setRenameValue(e.target.value)}
-                                            onKeyDown={e => {
-                                                if (e.key === 'Enter') {
-                                                    e.preventDefault();
-                                                    commitRenamingDocument(document);
-                                                }
-                                                if (e.key === 'Escape') {
-                                                    e.preventDefault();
-                                                    cancelRenamingDocument();
-                                                }
-                                            }}
-                                            className="h-6 min-w-0 flex-1 rounded-sm border border-input bg-background px-2 text-xs outline-none ring-offset-background focus-visible:ring-1 focus-visible:ring-ring"
+                                    <>
+                                        <FileIcon
+                                            aria-hidden="true"
+                                            className="h-4 w-4 flex-none shrink-0"
                                         />
-                                        <button
-                                            type="button"
-                                            className="flex h-6 w-6 items-center justify-center rounded-sm hover:bg-background/80"
-                                            title={t('saveRename')}
-                                            aria-label={t('saveRename')}
-                                            disabled={isSavingRename}
-                                            onClick={() => commitRenamingDocument(document)}
-                                        >
-                                            <Check className="h-3.5 w-3.5" />
-                                        </button>
-                                        <button
-                                            type="button"
-                                            className="flex h-6 w-6 items-center justify-center rounded-sm hover:bg-background/80"
-                                            title={t('cancelRename')}
-                                            aria-label={t('cancelRename')}
-                                            disabled={isSavingRename}
-                                            onClick={cancelRenamingDocument}
-                                        >
-                                            <X className="h-3.5 w-3.5" />
-                                        </button>
-                                    </div>
+                                        <div className="flex min-w-0 flex-1 items-center gap-1">
+                                            <input
+                                                value={renameValue}
+                                                autoFocus
+                                                disabled={isSavingRename}
+                                                onChange={e => setRenameValue(e.target.value)}
+                                                onKeyDown={e => {
+                                                    if (e.key === 'Enter') {
+                                                        e.preventDefault();
+                                                        commitRenamingDocument(document);
+                                                    }
+                                                    if (e.key === 'Escape') {
+                                                        e.preventDefault();
+                                                        cancelRenamingDocument();
+                                                    }
+                                                }}
+                                                className="h-6 min-w-0 flex-1 rounded-sm border border-input bg-background px-2 text-xs outline-none ring-offset-background focus-visible:ring-1 focus-visible:ring-ring"
+                                            />
+                                            <button
+                                                type="button"
+                                                className="flex h-6 w-6 items-center justify-center rounded-sm hover:bg-background/80"
+                                                title={t('saveRename')}
+                                                aria-label={t('saveRename')}
+                                                disabled={isSavingRename}
+                                                onClick={() => commitRenamingDocument(document)}
+                                            >
+                                                <Check className="h-3.5 w-3.5" />
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className="flex h-6 w-6 items-center justify-center rounded-sm hover:bg-background/80"
+                                                title={t('cancelRename')}
+                                                aria-label={t('cancelRename')}
+                                                disabled={isSavingRename}
+                                                onClick={cancelRenamingDocument}
+                                            >
+                                                <X className="h-3.5 w-3.5" />
+                                            </button>
+                                        </div>
+                                    </>
                                 ) : (
                                     <>
-                                        <span className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left">
-                                            {document.name}
-                                        </span>
+                                        <button
+                                            type="button"
+                                            className="flex min-w-0 flex-1 items-center gap-2 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                                            onClick={() => handleDocumentTabClick(document)}
+                                            onKeyDown={event =>
+                                                handleDisclosureKeyDown(
+                                                    event,
+                                                    document.id,
+                                                    document.items.length > 0,
+                                                    !!expandedFolders[document.id]
+                                                )
+                                            }
+                                            aria-expanded={
+                                                document.items.length > 0
+                                                    ? !!expandedFolders[document.id]
+                                                    : undefined
+                                            }
+                                        >
+                                            <FileIcon
+                                                aria-hidden="true"
+                                                className="h-4 w-4 flex-none shrink-0"
+                                            />
+                                            <span className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left">
+                                                {document.name}
+                                            </span>
+                                        </button>
                                         <button
                                             type="button"
                                             className="flex h-6 w-6 items-center justify-center rounded-sm text-muted-foreground opacity-0 hover:bg-background/80 hover:text-foreground focus:opacity-100 group-hover:opacity-100"
                                             title={t('renameFile')}
                                             aria-label={t('renameFile')}
-                                            onClick={e => {
-                                                e.stopPropagation();
-                                                startRenamingDocument(document);
-                                            }}
+                                            onClick={() => startRenamingDocument(document)}
                                         >
                                             <Pencil className="h-3.5 w-3.5" />
                                         </button>
                                     </>
                                 )}
-                            </li>
-                            {document.items && expandedFolders[document.id] && (
-                                <ul className="pl-4">
+                            </div>
+                            {document.items.length > 0 && expandedFolders[document.id] && (
+                                <ul className="pl-4" aria-label={document.name}>
                                     {buildThreeLevelOutline(document.items).map(documentItem =>
                                         renderOutlineItem(documentItem, 2)
                                     )}
                                 </ul>
                             )}
-                        </React.Fragment>
+                        </li>
                     ))}
                 </ul>
-            ) : (
-                <div>{t('noDocuments')}</div>
-            )}
+            ) : explorerLoad.phase === 'empty' && hasCurrentProjectResult ? (
+                <div className="p-3 text-sm text-muted-foreground">{t('noDocuments')}</div>
+            ) : null}
         </div>
     );
 };

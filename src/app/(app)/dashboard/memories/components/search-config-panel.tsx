@@ -266,14 +266,14 @@ export function SearchConfigPanel({
                                                 <span className="font-mono text-xs">
                                                     {(
                                                         (config.fusionStrategy?.weights
-                                                            ?.vectorWeight || 0.7) * 100
+                                                            ?.vectorWeight ?? 0.7) * 100
                                                     ).toFixed(0)}
                                                     %
                                                 </span>
                                             </div>
                                             <Slider
                                                 value={[
-                                                    config.fusionStrategy?.weights?.vectorWeight ||
+                                                    config.fusionStrategy?.weights?.vectorWeight ??
                                                         0.7,
                                                 ]}
                                                 onValueChange={([value]: number[]) =>
@@ -284,8 +284,8 @@ export function SearchConfigPanel({
                                                                 'weighted_sum',
                                                             ...config.fusionStrategy,
                                                             weights: {
-                                                                vectorWeight: value || 0.7,
-                                                                keywordWeight: 1 - (value || 0.7),
+                                                                vectorWeight: value ?? 0.7,
+                                                                keywordWeight: 1 - (value ?? 0.7),
                                                             },
                                                         },
                                                     })
@@ -304,7 +304,7 @@ export function SearchConfigPanel({
                                                 <span className="font-mono text-xs">
                                                     {(
                                                         (config.fusionStrategy?.weights
-                                                            ?.keywordWeight || 0.3) * 100
+                                                            ?.keywordWeight ?? 0.3) * 100
                                                     ).toFixed(0)}
                                                     %
                                                 </span>
@@ -313,7 +313,7 @@ export function SearchConfigPanel({
                                                 {t('autoAdjusted')}{' '}
                                                 {(
                                                     100 -
-                                                    (config.fusionStrategy?.weights?.vectorWeight ||
+                                                    (config.fusionStrategy?.weights?.vectorWeight ??
                                                         0.7) *
                                                         100
                                                 ).toFixed(0)}

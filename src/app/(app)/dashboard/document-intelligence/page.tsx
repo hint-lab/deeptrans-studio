@@ -1,7 +1,7 @@
 'use client';
 import { fetchDictionariesAction, fetchDictionaryEntriesAction } from '@/actions/dictionary';
 import { parseDocxAction } from '@/actions/parse-docx';
-import { runPreTranslateAction } from '@/actions/pre-translate';
+import { embedAndTranslateAction } from '@/actions/pre-translate';
 import { DOCX_ACCEPTED_FILE_TYPES, FileUpload } from '@/components/file-upload';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -23,8 +23,12 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
-import { Switch } from '@/components/ui/switch';
 import { createLogger } from '@/lib/logger';
+import {
+    requireSelectedDictionaryEntries,
+    SelectedDictionaryEntriesLoadError,
+} from '@/lib/selected-dictionary-entries';
+import type { DictEntry } from '@/types/terms';
 import {
     FileText,
     Globe,
@@ -33,7 +37,7 @@ import {
 } from 'lucide-react';
 import { useSession } from 'next-auth/react';
 import { useTranslations } from 'next-intl';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 const logger = createLogger({
     type: 'document-intelligence:page',
@@ -55,13 +59,15 @@ export default function DocumentIntelligencePage() {
         contentType: string;
         size: number;
     } | null>(null);
+    const [fileUploadResetKey, setFileUploadResetKey] = useState(0);
+    const translationRequestRef = useRef(0);
+    const activeTranslationRequestRef = useRef<number | null>(null);
     const [fileName, setFileName] = useState<string | null>(null);
     const [isTranslating, setIsTranslating] = useState(false);
     const [translationResult, setTranslationResult] = useState<{
         content: string;
         sourceLanguage: string;
         targetLanguage: string;
-        engine: string;
         fileName: string;
     } | null>(null);
     // 动态语言选项
@@ -71,19 +77,20 @@ export default function DocumentIntelligencePage() {
         { key: 'de', label: tDashboard('german') },
     ];
     const targetLanguages = [{ key: 'zh', label: tDashboard('chinese') }];
-    // 公共参数
-    const [tab, setTab] = useState('document');
+    const translationStyles = [
+        { key: 'formal', label: tDashboard('formal') },
+        { key: 'casual', label: tDashboard('casual') },
+        { key: 'technical', label: tDashboard('technical') },
+        { key: 'creative', label: tDashboard('creative') },
+        { key: 'academic', label: tDashboard('academic') },
+    ];
     // 文档识别翻译参数
     const [taskStatus, setTaskStatus] = useState('idle');
     const [translatedContent, setTranslatedContent] = useState<string | null>(null);
     const [sourceLanguage, setSourceLanguage] = useState('auto');
     const [targetLanguage, setTargetLanguage] = useState('zh');
-    const [translationEngine, setTranslationEngine] = useState('deepseek');
-    const [preserveFormatting, setPreserveFormatting] = useState(true);
-    const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
     const [selectedDictionaries, setSelectedDictionaries] = useState<string[]>([]);
     const [translationStyle, setTranslationStyle] = useState('formal');
-    const [qualityLevel, setQualityLevel] = useState('standard');
     // 与即时翻译一致的词库状态
     interface DictionarySummary {
         id: string;
@@ -110,6 +117,14 @@ export default function DocumentIntelligencePage() {
     >({});
     const [loadingEntries, setLoadingEntries] = useState<Record<string, boolean>>({});
     const [dictionarySearch, setDictionarySearch] = useState('');
+    const invalidateTranslation = (nextStatus: 'idle' | 'pending' = uploadedFile ? 'pending' : 'idle') => {
+        translationRequestRef.current += 1;
+        activeTranslationRequestRef.current = null;
+        setIsTranslating(false);
+        setTaskStatus(nextStatus);
+        setTranslatedContent(null);
+        setTranslationResult(null);
+    };
     const handleUploadComplete = (fileInfo: {
         fileName: string;
         originalName: string;
@@ -117,12 +132,59 @@ export default function DocumentIntelligencePage() {
         contentType: string;
         size: number;
     }) => {
+        translationRequestRef.current += 1;
+        activeTranslationRequestRef.current = null;
         setFileName(fileInfo.fileName);
+        setIsTranslating(false);
         setTaskStatus('pending');
         setTranslatedContent(null);
         setTranslationResult(null);
         setUploadedFile(fileInfo);
         toast.success(t('uploadSuccess'));
+    };
+    const clearCurrentUpload = () => {
+        translationRequestRef.current += 1;
+        activeTranslationRequestRef.current = null;
+        setIsTranslating(false);
+        setUploadedFile(null);
+        setFileName(null);
+        setTaskStatus('idle');
+        setTranslatedContent(null);
+        setTranslationResult(null);
+    };
+    const handleSourceLanguageChange = (value: string) => {
+        if (value === sourceLanguage) return;
+        invalidateTranslation();
+        setSourceLanguage(value);
+    };
+    const handleTargetLanguageChange = (value: string) => {
+        if (value === targetLanguage) return;
+        invalidateTranslation();
+        setTargetLanguage(value);
+    };
+    const getSelectedDictionaryEntries = async (): Promise<DictEntry[]> => {
+        if (selectedDictionaries.length === 0) return [];
+
+        const allEntries: DictEntry[] = [];
+        for (const dictionaryId of selectedDictionaries) {
+            try {
+                const result = await fetchDictionaryEntriesAction(dictionaryId);
+                const entries = requireSelectedDictionaryEntries<DictionaryEntryItem>(result);
+                allEntries.push(
+                    ...entries.map(entry => ({
+                        term: entry.sourceText,
+                        translation: entry.targetText,
+                        notes: entry.notes || undefined,
+                    }))
+                );
+            } catch (error) {
+                logger.error('获取已选词库词条失败:', error);
+                if (error instanceof SelectedDictionaryEntriesLoadError) throw error;
+                throw new SelectedDictionaryEntriesLoadError();
+            }
+        }
+
+        return allEntries;
     };
     const handleDownloadResult = () => {
         if (!translatedContent || !translationResult) return;
@@ -140,20 +202,29 @@ export default function DocumentIntelligencePage() {
         toast.success(t('downloadSuccess'));
     };
     const handleTranslateDocument = async () => {
-        if (!uploadedFile) {
+        const fileToTranslate = uploadedFile;
+        if (!fileToTranslate) {
             toast.error(t('noDocumentUploaded'));
             return;
         }
+        if (activeTranslationRequestRef.current !== null) return;
 
+        const requestId = ++translationRequestRef.current;
+        activeTranslationRequestRef.current = requestId;
+        const sourceLanguageAtStart = sourceLanguage;
+        const targetLanguageAtStart = targetLanguage;
+        const translationStyleAtStart = translationStyle;
         setIsTranslating(true);
         setTaskStatus('processing');
-        const startedAt = Date.now();
+        setTranslatedContent(null);
+        setTranslationResult(null);
 
         try {
-            const { success, data, error } = await parseDocxAction(uploadedFile.fileUrl);
+            const { success, data, error } = await parseDocxAction(fileToTranslate.fileName);
             if (!success) {
                 throw new Error(error || t('translationFailed'));
             }
+            if (requestId !== translationRequestRef.current) return;
             let content = '';
             if (data) {
                 content = String(data.text || '').trim();
@@ -161,50 +232,43 @@ export default function DocumentIntelligencePage() {
             if (!content) {
                 throw new Error(t('ocrEmpty'));
             }
-            // 构建翻译参数
-            const translationParams = {
-                sourceText: content,
-                sourceLanguage: sourceLanguage,
-                targetLanguage: targetLanguage
-            };
-            // 调用翻译API
-            const res = await runPreTranslateAction(translationParams.sourceText,
-                translationParams.sourceLanguage,
-                translationParams.targetLanguage);
-            const result = {
-                success: true,
-                data: {
-                    translatedContent: res.translation,
-                    sourceLanguage: translationParams.sourceLanguage,
-                    targetLanguage: translationParams.targetLanguage,
-                    engine: translationEngine,
-                    fileName: uploadedFile.fileName,
-                    characterCount: content.length,
-                    timeUsed: Number(((Date.now() - startedAt) / 1000).toFixed(1))
-                }
-            };
-
-            if (result.success && result.data) {
-                setTranslatedContent(result.data.translatedContent);
-                setTranslationResult({
-                    content: result.data.translatedContent,
-                    sourceLanguage: result.data.sourceLanguage || sourceLanguage,
-                    targetLanguage: result.data.targetLanguage || targetLanguage,
-                    engine: result.data.engine || translationEngine,
-                    fileName: fileName || 'document',
-                });
-                setTaskStatus('completed');
-                toast.success(t('translationSuccess'));
-            } else {
-                setTaskStatus('failed');
-                //toast.error(result.error || t('translationFailed'));
+            const dictionaryEntries = await getSelectedDictionaryEntries();
+            const translatedContent = String(
+                await embedAndTranslateAction(
+                    content,
+                    sourceLanguageAtStart,
+                    targetLanguageAtStart,
+                    dictionaryEntries,
+                    { style: translationStyleAtStart }
+                )
+            ).trim();
+            if (requestId !== translationRequestRef.current) return;
+            if (!translatedContent) {
+                throw new Error(t('translationFailed'));
             }
+            setTranslatedContent(translatedContent);
+            setTranslationResult({
+                content: translatedContent,
+                sourceLanguage: sourceLanguageAtStart,
+                targetLanguage: targetLanguageAtStart,
+                fileName: fileToTranslate.fileName || 'document',
+            });
+            setTaskStatus('completed');
+            toast.success(t('translationSuccess'));
         } catch (error) {
+            if (requestId !== translationRequestRef.current) return;
             setTaskStatus('failed');
             logger.error('Translation error:', error);
-            toast.error(t('translationError'));
+            toast.error(
+                error instanceof SelectedDictionaryEntriesLoadError
+                    ? t('loadEntriesFailed')
+                    : t('translationError')
+            );
         } finally {
-            setIsTranslating(false);
+            if (requestId === translationRequestRef.current) {
+                activeTranslationRequestRef.current = null;
+                setIsTranslating(false);
+            }
         }
     };
     // 加载公共/私有词典（不加载词条）
@@ -264,11 +328,17 @@ export default function DocumentIntelligencePage() {
 
     // 使用/取消使用某词典
     const onToggleUseDictionary = (dictionaryId: string) => {
+        invalidateTranslation();
         setSelectedDictionaries(prev =>
             prev.includes(dictionaryId)
                 ? prev.filter(id => id !== dictionaryId)
                 : [...prev, dictionaryId]
         );
+    };
+    const handleTranslationStyleChange = (value: string) => {
+        if (value === translationStyle) return;
+        invalidateTranslation();
+        setTranslationStyle(value);
     };
 
     // 过滤词典
@@ -292,13 +362,13 @@ export default function DocumentIntelligencePage() {
                 <p className="text-gray-600 dark:text-gray-400">{t('description')}</p>
             </div>
 
-            <div className="mb-6 flex items-center justify-between rounded-lg bg-white p-4 shadow-sm dark:bg-gray-800">
-                <div className="flex items-center space-x-4">
+            <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-white p-4 shadow-sm dark:bg-gray-800">
+                <div className="flex flex-wrap items-center gap-4">
                     <div className="flex items-center space-x-2">
                         <Label className="text-sm font-medium">
                             {tDashboard('sourceLanguage')}
                         </Label>
-                        <Select value={sourceLanguage} onValueChange={setSourceLanguage}>
+                        <Select value={sourceLanguage} onValueChange={handleSourceLanguageChange}>
                             <SelectTrigger className="w-32 border-gray-300 bg-white text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
                                 <SelectValue />
                             </SelectTrigger>
@@ -320,7 +390,7 @@ export default function DocumentIntelligencePage() {
                         <Label className="text-sm font-medium">
                             {tDashboard('targetLanguage')}
                         </Label>
-                        <Select value={targetLanguage} onValueChange={setTargetLanguage}>
+                        <Select value={targetLanguage} onValueChange={handleTargetLanguageChange}>
                             <SelectTrigger className="w-32 border-gray-300 bg-white text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
                                 <SelectValue />
                             </SelectTrigger>
@@ -339,14 +409,21 @@ export default function DocumentIntelligencePage() {
                     </div>
                 </div>
 
-                <div className="flex items-center space-x-4">
-                    <div className="flex items-center space-x-2">
-                        <Switch
-                            id="preserve-formatting"
-                            checked={preserveFormatting}
-                            onCheckedChange={setPreserveFormatting}
-                        />
-                        <Label htmlFor="preserve-formatting">{t('preserveFormatting')}</Label>
+                <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex items-center gap-2">
+                        <Label className="text-sm font-medium">{t('translationStyle')}</Label>
+                        <Select value={translationStyle} onValueChange={handleTranslationStyleChange}>
+                            <SelectTrigger className="w-32">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {translationStyles.map(style => (
+                                    <SelectItem key={style.key} value={style.key}>
+                                        {style.label}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
                     </div>
 
                     <Dialog open={dictionaryDialogOpen} onOpenChange={setDictionaryDialogOpen}>
@@ -684,6 +761,9 @@ export default function DocumentIntelligencePage() {
                     </Dialog>
                 </div>
             </div>
+            <p className="-mt-3 mb-6 text-xs text-gray-500 dark:text-gray-400">
+                {t('plainTextOutputNote')}
+            </p>
 
             <div className="space-y-6">
                 <div className="rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
@@ -694,6 +774,8 @@ export default function DocumentIntelligencePage() {
                         <div className="mb-3 w-full">
                             <FileUpload
                                 onUploadComplete={handleUploadComplete}
+                                onUploadReset={clearCurrentUpload}
+                                resetKey={fileUploadResetKey}
                                 projectName={t('temporaryDocument')}
                                 elementName="Dashboard.DocumentTranslate"
                                 acceptedFileTypes={DOCX_ACCEPTED_FILE_TYPES}
@@ -718,9 +800,8 @@ export default function DocumentIntelligencePage() {
                                             variant="outline"
                                             size="sm"
                                             onClick={() => {
-                                                setUploadedFile(null);
-                                                setFileName(null);
-                                                setTaskStatus('idle');
+                                                clearCurrentUpload();
+                                                setFileUploadResetKey(value => value + 1);
                                             }}
                                         >
                                             <X className="h-4 w-4" />
@@ -734,83 +815,6 @@ export default function DocumentIntelligencePage() {
                         </div>
                     </div>
                 </div>
-
-                {showAdvancedOptions && (
-                    <div className="rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
-                        <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
-                            <div className="flex items-center justify-between">
-                                <div className="text-lg font-medium">{t('advancedOptions')}</div>
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => setShowAdvancedOptions(false)}
-                                >
-                                    <X className="h-4 w-4" />
-                                </Button>
-                            </div>
-                        </div>
-                        <div className="p-4">
-                            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                                <div className="space-y-2">
-                                    <Label className="text-sm font-medium">
-                                        {t('translationEngine')}
-                                    </Label>
-                                    <Select value={translationEngine} onValueChange={setTranslationEngine}>
-                                        <SelectTrigger>
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                    </Select>
-                                </div>
-
-                                <div className="space-y-2">
-                                    <Label className="text-sm font-medium">
-                                        {t('translationStyle')}
-                                    </Label>
-                                    <Select value={translationStyle} onValueChange={setTranslationStyle}>
-                                        <SelectTrigger>
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="formal">
-                                                {tDashboard('formal')}
-                                            </SelectItem>
-                                            <SelectItem value="casual">
-                                                {tDashboard('casual')}
-                                            </SelectItem>
-                                            <SelectItem value="technical">
-                                                {tDashboard('technical')}
-                                            </SelectItem>
-                                            <SelectItem value="creative">
-                                                {tDashboard('creative')}
-                                            </SelectItem>
-                                            <SelectItem value="academic">
-                                                {tDashboard('academic')}
-                                            </SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-
-                                <div className="space-y-2">
-                                    <Label className="text-sm font-medium">
-                                        {t('qualityLevel')}
-                                    </Label>
-                                    <Select value={qualityLevel} onValueChange={setQualityLevel}>
-                                        <SelectTrigger>
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="fast">{t('fast')}</SelectItem>
-                                            <SelectItem value="standard">
-                                                {t('standard')}
-                                            </SelectItem>
-                                            <SelectItem value="high">{t('high')}</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                )}
 
                 <MediaTranslationWorkspace
                     labels={{

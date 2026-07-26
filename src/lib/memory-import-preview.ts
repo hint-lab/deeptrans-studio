@@ -1,3 +1,8 @@
+import {
+    canonicalizeMemoryImportColumnName,
+    resolveMemoryImportDelimitedColumns,
+} from './memory-import-delimited';
+
 export type MemoryImportColumnMapping = {
     sourceKey: string;
     targetKey: string;
@@ -12,55 +17,42 @@ export type MemoryImportPreviewRow = {
     notes: string;
 };
 
-const SOURCE_COLUMN_ALIASES = ['source', 'src', '源', '原文'];
-const TARGET_COLUMN_ALIASES = ['target', 'tgt', '译', '译文'];
-const NOTES_COLUMN_ALIASES = ['notes', 'note', '备注'];
-
 function normalizeColumnName(value: unknown) {
-    return String(value ?? '')
-        .trim()
-        .toLowerCase();
-}
-
-function findColumn(headers: string[], aliases: string[]) {
-    const normalizedHeaders = headers.map(normalizeColumnName);
-    for (const alias of aliases) {
-        const index = normalizedHeaders.indexOf(normalizeColumnName(alias));
-        if (index >= 0) return headers[index] ?? '';
-    }
-    return '';
+    return canonicalizeMemoryImportColumnName(value);
 }
 
 export function detectMemoryImportColumns(
     headers: string[],
     fallback: MemoryImportColumnMapping
 ): MemoryImportColumnMapping {
+    const columns = resolveMemoryImportDelimitedColumns(headers, fallback);
     return {
-        sourceKey: findColumn(headers, SOURCE_COLUMN_ALIASES) || fallback.sourceKey,
-        targetKey: findColumn(headers, TARGET_COLUMN_ALIASES) || fallback.targetKey,
-        notesKey: findColumn(headers, NOTES_COLUMN_ALIASES) || fallback.notesKey,
+        sourceKey: columns.sourceKey || fallback.sourceKey,
+        targetKey: columns.targetKey || fallback.targetKey,
+        notesKey: columns.notesKey || fallback.notesKey,
     };
 }
 
-function readCell(record: MemoryImportPreviewRecord, primaryKey: string, aliases: string[]) {
+function readCell(record: MemoryImportPreviewRecord, primaryKey: string) {
     const normalizedRecord = new Map(
         Object.entries(record).map(([key, value]) => [normalizeColumnName(key), value])
     );
-    for (const key of [primaryKey, ...aliases]) {
-        const normalizedKey = normalizeColumnName(key);
-        if (!normalizedRecord.has(normalizedKey)) continue;
-        return String(normalizedRecord.get(normalizedKey) ?? '').trim();
-    }
-    return '';
+    const normalizedKey = normalizeColumnName(primaryKey);
+    return normalizedRecord.has(normalizedKey)
+        ? String(normalizedRecord.get(normalizedKey) ?? '').trim()
+        : '';
 }
 
 export function createMemoryImportPreviewRows(
     records: MemoryImportPreviewRecord[],
     mapping: MemoryImportColumnMapping
 ): MemoryImportPreviewRow[] {
-    return records.map(record => ({
-        source: readCell(record, mapping.sourceKey, SOURCE_COLUMN_ALIASES),
-        target: readCell(record, mapping.targetKey, TARGET_COLUMN_ALIASES),
-        notes: readCell(record, mapping.notesKey, NOTES_COLUMN_ALIASES),
-    }));
+    return records.map(record => {
+        const columns = resolveMemoryImportDelimitedColumns(Object.keys(record), mapping);
+        return {
+            source: readCell(record, columns.sourceKey),
+            target: readCell(record, columns.targetKey),
+            notes: readCell(record, columns.notesKey),
+        };
+    });
 }

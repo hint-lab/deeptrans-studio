@@ -1,13 +1,15 @@
 'use client';
 
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { toggle } from '@/store/features/sidebarSlice';
+import { setOpen, toggle } from '@/store/features/sidebarSlice';
+import { useCallback } from 'react';
 
 export const useSidebar = () => {
     const dispatch = useAppDispatch();
     const isSidebarOpen = useAppSelector(state => state.sidebar?.isOpen ?? false);
 
-    const toggleSidebar = () => dispatch(toggle());
+    const toggleSidebar = useCallback(() => dispatch(toggle()), [dispatch]);
+    const closeSidebar = useCallback(() => dispatch(setOpen(false)), [dispatch]);
 
-    return { isSidebarOpen, toggleSidebar };
+    return { isSidebarOpen, toggleSidebar, closeSidebar };
 };

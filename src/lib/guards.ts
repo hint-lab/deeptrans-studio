@@ -229,6 +229,11 @@ function writableDictionaryWhere(dictionaryId: string, ctx: AuthContext) {
                     },
                 },
             },
+            ...(ctx.role === 'ADMIN' ? [{ visibility: 'PUBLIC' as const }] : []),
+            // Public dictionaries created before the administrator-only
+            // publish policy remain maintainable by their original owner so
+            // a user can safely withdraw or delete an accidental publication.
+            { visibility: 'PUBLIC' as const, userId: ctx.userId },
         ],
     };
 }

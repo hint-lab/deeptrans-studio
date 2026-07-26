@@ -1,9 +1,10 @@
 import { uploadFileAction } from '@/actions/upload';
 import { Button } from '@/components/ui/button';
 import { createLogger } from '@/lib/logger';
+import { isUploadErrorCode, type UploadErrorCode } from '@/lib/upload-errors';
 import { MAX_UPLOAD_FILE_SIZE_BYTES } from '@/lib/upload-limits';
 import { useTranslations } from 'next-intl';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { type Accept, FileRejection, useDropzone } from 'react-dropzone';
 import { toast } from 'sonner';
 const logger = createLogger({
@@ -26,6 +27,10 @@ interface FileUploadProps {
     projectId?: string;
     elementName: string;
     acceptedFileTypes?: Accept;
+    /** Clears this component when the owning page discards its file state. */
+    resetKey?: string | number;
+    /** Lets an owning page invalidate results before a replacement upload starts. */
+    onUploadReset?: () => void;
 }
 
 export const PROJECT_DOCUMENT_ACCEPTED_FILE_TYPES: Accept = {
@@ -52,12 +57,13 @@ export function FileUpload({
     projectId,
     elementName = 'FileUpload',
     acceptedFileTypes = PROJECT_DOCUMENT_ACCEPTED_FILE_TYPES,
+    resetKey,
+    onUploadReset,
 }: FileUploadProps) {
     const t = useTranslations(elementName);
+    const commonT = useTranslations('FileUpload');
     const [isUploading, setIsUploading] = useState(false);
-    const resetUpload = useCallback(() => {
-        setUploadedFile(null);
-    }, []);
+    const [uploadError, setUploadError] = useState<string | null>(null);
     const [uploadedFile, setUploadedFile] = useState<{
         fileName: string;
         originalName: string;
@@ -65,11 +71,54 @@ export function FileUpload({
         contentType: string;
         size: number;
     } | null>(null);
+    const uploadGenerationRef = useRef(0);
+    const resetUpload = useCallback(() => {
+        uploadGenerationRef.current += 1;
+        setUploadedFile(null);
+        setUploadError(null);
+        onUploadReset?.();
+    }, [onUploadReset]);
+
+    useEffect(() => {
+        // A parent may clear a completed file independently of this component.
+        // Invalidate an in-flight upload too so an old response cannot reappear.
+        uploadGenerationRef.current += 1;
+        setUploadedFile(null);
+        setUploadError(null);
+        setIsUploading(false);
+    }, [resetKey]);
+
+    const messageForUploadError = useCallback(
+        (value: unknown) => {
+            const errorCode: UploadErrorCode | null = isUploadErrorCode(value) ? value : null;
+            switch (errorCode) {
+                case 'FILE_REQUIRED':
+                    return commonT('noFileSelected');
+                case 'FILE_TOO_LARGE':
+                    return commonT('fileSizeExceeded');
+                case 'FILE_TYPE_UNSUPPORTED':
+                    return commonT('fileTypeNotSupported');
+                case 'AUTH_REQUIRED':
+                    return commonT('uploadAuthRequired');
+                case 'ACCESS_DENIED':
+                    return commonT('uploadPermissionDenied');
+                default:
+                    return commonT('uploadUnavailable');
+            }
+        },
+        [commonT]
+    );
+
+    const showUploadError = useCallback((message: string) => {
+        setUploadError(message);
+        toast.error(message);
+    }, []);
 
     const uploadFile = useCallback(
         async (file: File) => {
             if (!file) {
                 logger.error(t('noFileSelected'));
+                showUploadError(commonT('noFileSelected'));
                 return;
             }
 
@@ -82,15 +131,17 @@ export function FileUpload({
 
             // 检查文件大小
             if (file.size > MAX_UPLOAD_FILE_SIZE_BYTES) {
-                toast.error(t('fileSizeExceeded'));
+                showUploadError(commonT('fileSizeExceeded'));
                 return;
             }
 
             if (projectName !== undefined && !projectName.trim()) {
-                toast.error(t('projectNameRequired'));
+                showUploadError(t('projectNameRequired'));
                 return;
             }
 
+            const uploadGeneration = ++uploadGenerationRef.current;
+            setUploadError(null);
             setIsUploading(true);
 
             try {
@@ -99,7 +150,9 @@ export function FileUpload({
                 if (projectId) form.append('projectId', projectId);
                 const uploadJson = await uploadFileAction(form);
                 if (!uploadJson || !uploadJson.success || !uploadJson.data) {
-                    throw new Error((uploadJson as any)?.error || t('serverUploadFailed'));
+                    if (uploadGeneration !== uploadGenerationRef.current) return;
+                    showUploadError(messageForUploadError((uploadJson as any)?.errorCode));
+                    return;
                 }
                 const uploadData = uploadJson.data as {
                     fileName: string;
@@ -113,20 +166,40 @@ export function FileUpload({
                     originalName: uploadData.originalName,
                     fileUrl: uploadData.fileUrl,
                     contentType: uploadData.contentType || file.type,
-                    size: uploadData.size || file.size,
+                    size: uploadData.size ?? file.size,
                 };
+                if (uploadGeneration !== uploadGenerationRef.current) return;
                 onUploadComplete(fileInfo);
                 setUploadedFile(fileInfo);
+                setUploadError(null);
 
                 toast.success(t('uploadSuccess'));
             } catch (error) {
-                logger.error(t('uploadFailed'), error);
-                toast.error(error instanceof Error ? error.message : t('uploadFailed'));
+                if (uploadGeneration !== uploadGenerationRef.current) return;
+                // Server Action transport failures can contain framework or
+                // infrastructure details. The action's coded failures are
+                // handled above; every unexpected throw gets one safe retry
+                // message instead of exposing its raw text.
+                logger.error({
+                    message: t('uploadFailed'),
+                    errorName: error instanceof Error ? error.name : typeof error,
+                });
+                showUploadError(commonT('uploadUnavailable'));
             } finally {
-                setIsUploading(false);
+                if (uploadGeneration === uploadGenerationRef.current) {
+                    setIsUploading(false);
+                }
             }
         },
-        [onUploadComplete, projectId, projectName, t]
+        [
+            commonT,
+            messageForUploadError,
+            onUploadComplete,
+            projectId,
+            projectName,
+            showUploadError,
+            t,
+        ]
     );
 
     const onDrop = useCallback(
@@ -134,27 +207,32 @@ export function FileUpload({
             logger.debug(t('fileDrop'), acceptedFiles);
             if (acceptedFiles.length === 0) return;
 
-            // 重置上传状态
-            setUploadedFile(null);
+            // A selected replacement makes the previous parent result stale even
+            // before the new upload has finished.
+            resetUpload();
 
             const file = acceptedFiles[0];
             if (file) {
                 uploadFile(file);
             }
         },
-        [uploadFile, t]
+        [resetUpload, uploadFile, t]
     );
     const onDropRejected = useCallback(
         (rejections: FileRejection[]) => {
+            // Treat an attempted replacement as invalidating the previous
+            // result too. Otherwise a failed replacement could leave the old
+            // file looking like the current pending upload.
+            resetUpload();
             const first = rejections[0];
             const errorCode = first?.errors[0]?.code;
             if (errorCode === 'file-too-large') {
-                toast.error(t('fileSizeExceeded'));
+                showUploadError(commonT('fileSizeExceeded'));
             } else {
-                toast.error(t('fileTypeNotSupported'));
+                showUploadError(commonT('fileTypeNotSupported'));
             }
         },
-        [t]
+        [commonT, resetUpload, showUploadError]
     );
     const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
         onDrop,
@@ -168,6 +246,9 @@ export function FileUpload({
 
     return (
         <div className="space-y-4">
+            {/* Keep the dropzone input mounted even after a successful upload,
+                so the visible re-upload button can reliably open a picker. */}
+            <input {...getInputProps()} />
             {uploadedFile ? (
                 <>
                     <div className="mt-4 rounded-md border p-4 text-left">
@@ -208,7 +289,6 @@ export function FileUpload({
                         {...getRootProps()}
                         className={`cursor-pointer rounded-lg border-2 border-dashed p-8 text-center transition-colors ${isDragActive ? 'border-primary bg-primary/5' : 'border-gray-300 hover:border-primary'} ${isUploading ? 'cursor-not-allowed opacity-50' : ''}`}
                     >
-                        <input {...getInputProps()} />
                         <div className="space-y-2">
                             <div className="text-lg font-medium">
                                 {isDragActive ? t('dragActiveText') : t('dragInactiveText')}
@@ -228,6 +308,15 @@ export function FileUpload({
                         {isUploading ? t('uploading') : t('selectFile')}
                     </Button>
                 </>
+            )}
+            {uploadError && (
+                <p
+                    role="alert"
+                    aria-live="polite"
+                    className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive"
+                >
+                    {uploadError}
+                </p>
             )}
         </div>
     );

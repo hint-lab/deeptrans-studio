@@ -47,6 +47,27 @@ export const findUserByEmailDB = async (email: string): Promise<User | null> => 
     return dbTry(() => prisma.user.findUnique({ where: { email } }));
 };
 
+/**
+ * Authentication treats email addresses as case-insensitive. Keep this lookup
+ * separate from the exact-key helper so historical mixed-case accounts remain
+ * usable while new authentication flows store the canonical lower-case value.
+ */
+export const findUserByNormalizedEmailDB = async (email: string): Promise<User | null> => {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail) return null;
+
+    return dbTry(() =>
+        prisma.user.findFirst({
+            where: {
+                email: {
+                    equals: normalizedEmail,
+                    mode: 'insensitive',
+                },
+            },
+        })
+    );
+};
+
 // 更新
 export const updateUserByIdDB = async (id: string, data: UserUpdateInput): Promise<User | null> => {
     return await dbTry(() => prisma.user.update({ where: { id }, data: data as any }));

@@ -1,16 +1,33 @@
 import { prisma } from '@/lib/db';
 import type { AuthContext } from '@/lib/guards';
 import { GuardError, requireWritableDocumentItem, requireUser } from '@/lib/guards';
+import { isBatchQAReviewReady } from '@/lib/batch-qa-stage-eligibility';
+import { requestBatchQACancelWithRedis } from '@/lib/batch-qa-cancellation';
 import { TTL_BATCH } from '@/lib/redis-ttl';
 import { sourceRevision } from '@/lib/source-revision';
 import { normalizeSyntaxQualityResult } from '@/lib/syntax-quality';
+import { resolveWorkflowPrompt } from '@/server/workflow-prompts';
 import { Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 
 // 延迟导入队列相关，避免在客户端构建时解析到 Node-only 依赖
 
-const BATCH_QA_ELIGIBLE_STATUSES = new Set(['MT', 'MT_REVIEW']);
 const PERSIST_LOCK_TTL_SECONDS = Math.max(60, TTL_BATCH);
+const BATCH_QA_CANCELED_MESSAGE = '批量质检已取消，结果不会保存';
+
+// Cancel and persist must have one linearized winner. If cancellation wins,
+// no persist call can acquire the lock; if persistence wins, cancellation is
+// explicitly rejected instead of claiming a result was discarded.
+const ACQUIRE_BATCH_QA_PERSIST_LOCK_SCRIPT = `
+    -- batch-qa-acquire-persist-lock
+    if redis.call('get', KEYS[1]) == '1' then
+        return 'CANCELED'
+    end
+    if redis.call('set', KEYS[2], ARGV[1], 'EX', ARGV[2], 'NX') then
+        return 'ACQUIRED'
+    end
+    return 'LOCKED'
+`;
 
 type BatchQAResult = {
     id: string;
@@ -29,7 +46,7 @@ type BatchQACurrentItem = {
 type PersistBatchQADeps = {
     connection: any;
     authCtx: AuthContext;
-    loadWritableItem: (id: string, authCtx: AuthContext) => Promise<BatchQACurrentItem>;
+    requireWritableDocumentItem: (id: string, authCtx: AuthContext) => Promise<BatchQACurrentItem>;
     persistItemAtomically: (
         data: BatchQAResult,
         currentItem: BatchQACurrentItem,
@@ -38,8 +55,28 @@ type PersistBatchQADeps = {
     lockToken?: string;
 };
 
+export type BatchQAPromptSnapshot = {
+    syntaxEvaluatePrompt?: string;
+};
+
+type ResolveBatchQAPrompt = (
+    authCtx: AuthContext,
+    nodeKey: 'syntax-evaluate'
+) => Promise<string | undefined>;
+
+/**
+ * Batch work is asynchronous, so take a user-owned prompt snapshot at enqueue
+ * time instead of letting a worker observe a later prompt configuration.
+ */
+export async function resolveBatchQAPromptSnapshot(
+    authCtx: AuthContext,
+    resolvePrompt: ResolveBatchQAPrompt = resolveWorkflowPrompt
+): Promise<BatchQAPromptSnapshot> {
+    return { syntaxEvaluatePrompt: await resolvePrompt(authCtx, 'syntax-evaluate') };
+}
+
 export function isBatchQAEligibleStatus(status: unknown): boolean {
-    return BATCH_QA_ELIGIBLE_STATUSES.has(String(status || ''));
+    return isBatchQAReviewReady(status);
 }
 
 export function isBatchQATerminal(total: number, done: number, failed: number): boolean {
@@ -83,7 +120,7 @@ async function persistBatchQAItemAtomically(
     const result = await prisma.documentItem.updateMany({
         where: {
             id: data.id,
-            status: { in: ['MT', 'MT_REVIEW'] },
+            status: 'MT_REVIEW',
             sourceText: currentItem.sourceText || '',
             targetText: currentItem.targetText ?? null,
             document: { project: { userId: authCtx.userId } },
@@ -110,6 +147,41 @@ async function releasePersistLock(connection: any, lockKey: string, lockToken: s
     );
 }
 
+async function acquireBatchQAPersistLock(
+    connection: any,
+    batchId: string,
+    lockToken: string
+): Promise<'acquired' | 'canceled' | 'locked'> {
+    const outcome = String(
+        await connection.eval(
+            ACQUIRE_BATCH_QA_PERSIST_LOCK_SCRIPT,
+            2,
+            `qa.${batchId}.cancel`,
+            `qa.${batchId}.persist.lock`,
+            lockToken,
+            String(PERSIST_LOCK_TTL_SECONDS)
+        )
+    ).toUpperCase();
+
+    if (outcome === 'CANCELED') return 'canceled';
+    if (outcome === 'ACQUIRED') return 'acquired';
+    return 'locked';
+}
+
+/**
+ * The cancel action authorizes ownership before entering the same Redis
+ * serialization point used by persistence. A persist lease is a deliberate
+ * conflict: the client must not report cancellation after durable writes have
+ * begun.
+ */
+async function requestAuthorizedBatchQACancel(batchId: string, connection: any) {
+    const result = await requestBatchQACancelWithRedis(batchId, connection, TTL_BATCH);
+    if (!result.canceled) {
+        throw new GuardError(409, '批量质检结果正在保存，无法取消');
+    }
+    return { ok: true, canceled: true } as const;
+}
+
 /**
  * Persists completed batch results while preserving transient failures for a retry.
  * Exported with injected dependencies so terminal, stale and cleanup semantics can
@@ -117,18 +189,27 @@ async function releasePersistLock(connection: any, lockKey: string, lockToken: s
  * @internal
  */
 export async function persistBatchQAResultsWithDeps(batchId: string, deps: PersistBatchQADeps) {
-    const { connection, authCtx, loadWritableItem, persistItemAtomically } = deps;
+    const { connection, authCtx, requireWritableDocumentItem, persistItemAtomically } = deps;
+    if ((await connection.get(`qa.${batchId}.cancel`)) === '1') {
+        throw new GuardError(409, BATCH_QA_CANCELED_MESSAGE);
+    }
     const total = Number(await connection.get(`qa.${batchId}.total`)) || 0;
     const done = Number(await connection.get(`qa.${batchId}.done`)) || 0;
     const failed = Number(await connection.get(`qa.${batchId}.failed`)) || 0;
+    if ((await connection.get(`qa.${batchId}.cancel`)) === '1') {
+        throw new GuardError(409, BATCH_QA_CANCELED_MESSAGE);
+    }
     if (!isBatchQATerminal(total, done, failed)) {
         throw new GuardError(409, '批量质检尚未结束，暂不能保存结果');
     }
 
     const lockKey = `qa.${batchId}.persist.lock`;
     const lockToken = deps.lockToken || randomUUID();
-    const acquired = await connection.set(lockKey, lockToken, 'EX', PERSIST_LOCK_TTL_SECONDS, 'NX');
-    if (acquired !== 'OK') throw new GuardError(409, '批量质检结果正在保存，请稍后重试');
+    const lockState = await acquireBatchQAPersistLock(connection, batchId, lockToken);
+    if (lockState === 'canceled') throw new GuardError(409, BATCH_QA_CANCELED_MESSAGE);
+    if (lockState !== 'acquired') {
+        throw new GuardError(409, '批量质检结果正在保存，请稍后重试');
+    }
 
     try {
         const keys = await connection.keys(`qa.${batchId}.item.*`);
@@ -158,7 +239,7 @@ export async function persistBatchQAResultsWithDeps(batchId: string, deps: Persi
 
             let currentItem: BatchQACurrentItem;
             try {
-                currentItem = await loadWritableItem(itemId, authCtx);
+                currentItem = await requireWritableDocumentItem(itemId, authCtx);
             } catch {
                 retryableIds.push(itemId);
                 continue;
@@ -227,6 +308,7 @@ export async function startBatchQAAction(
     itemIds: string[],
     opts: { targetLanguage?: string; domain?: string }
 ) {
+    'use server';
     const authCtx = await requireUser();
     if (!Array.isArray(itemIds) || !itemIds.length) return { batchId: undefined, total: 0 };
 
@@ -242,6 +324,8 @@ export async function startBatchQAAction(
     );
     const total = items.length;
     if (!total) return { batchId: undefined, total: 0 };
+
+    const promptSnapshot = await resolveBatchQAPromptSnapshot(authCtx);
 
     const { getQueue, defaultJobOpts } = await import('@/worker/queue');
     const { getRedis } = await import('@/lib/redis');
@@ -276,6 +360,7 @@ export async function startBatchQAAction(
                     domain: opts.domain,
                     userId: authCtx.userId,
                     tenantId: authCtx.tenantId || undefined,
+                    syntaxEvaluatePrompt: promptSnapshot.syntaxEvaluatePrompt,
                 },
                 opts: defaultJobOpts,
             }))
@@ -288,6 +373,7 @@ export async function startBatchQAAction(
 }
 
 export async function getBatchQAProgressAction(batchId: string) {
+    'use server';
     const { getRedis } = await import('@/lib/redis');
     const connection = await getRedis();
     await requireBatchOwner(connection, batchId);
@@ -295,26 +381,35 @@ export async function getBatchQAProgressAction(batchId: string) {
     const done = Number(await connection.get(`qa.${batchId}.done`)) || 0;
     const failed = Number(await connection.get(`qa.${batchId}.failed`)) || 0;
     const percent = total > 0 ? Math.min(100, Math.round(((done + failed) / total) * 100)) : 0;
-    return { total, done, failed, percent };
+    const canceled = (await connection.get(`qa.${batchId}.cancel`)) === '1';
+    return {
+        total,
+        done,
+        failed,
+        percent,
+        terminal: isBatchQATerminal(total, done, failed),
+        canceled,
+    };
 }
 
 export async function cancelBatchQAAction(batchId: string) {
+    'use server';
     const { getRedis } = await import('@/lib/redis');
     const connection = await getRedis();
     await requireBatchOwner(connection, batchId);
-    await connection.set(`qa.${batchId}.cancel`, '1', 'EX', TTL_BATCH);
-    return { ok: true };
+    return requestAuthorizedBatchQACancel(batchId, connection);
 }
 
 // 在批处理完成后，将 Redis 中的 QA 结果一次性落库；瞬时失败保留供重试。
 export async function persistBatchQAResultsAction(batchId: string) {
+    'use server';
     const { getRedis } = await import('@/lib/redis');
     const connection = await getRedis();
     const authCtx = await requireBatchOwner(connection, batchId);
     return persistBatchQAResultsWithDeps(batchId, {
         connection,
         authCtx,
-        loadWritableItem: requireWritableDocumentItem as any,
+        requireWritableDocumentItem: requireWritableDocumentItem as any,
         persistItemAtomically: persistBatchQAItemAtomically,
     });
 }

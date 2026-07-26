@@ -4,7 +4,7 @@
         "subtitle": "Through this 5-minute getting started guide, you'll learn how to create your first translation project, upload documents, and complete a full translation workflow.",
         "alert": "Before you begin, make sure you have access to DeepTrans Studio. If not, please contact your administrator to create an account.",
         "stepsTitle": "Step-by-Step Guide",
-        "tipsLabel": "💡 Tips:",
+        "tipsLabel": "Tips:",
         "steps": {
             "step1": {
                 "number": "1",
@@ -30,10 +30,7 @@
                 "number": "3",
                 "title": "Document Parsing",
                 "description": "The system automatically parses document structure, extracts translatable content, and performs intelligent segmentation.",
-                "tips": [
-                    "View parsing progress",
-                    "Supports manual segment adjustment"
-                ],
+                "tips": ["View parsing progress", "Supports manual segment adjustment"],
                 "image": "/docs/en/gettingstarted-en/pic3.png"
             },
             "step4": {
@@ -50,20 +47,14 @@
                 "number": "5",
                 "title": "Quality Check",
                 "description": "Use built-in quality assessment tools to check translation quality, including terminology consistency, grammar checks, etc.",
-                "tips": [
-                    "Automatically mark issues",
-                    "Supports batch fixes"
-                ],
+                "tips": ["Automatically mark issues", "Supports batch fixes"],
                 "image": "/docs/en/gettingstarted-en/pic5.png"
             },
             "step6": {
                 "number": "6",
                 "title": "Export & Delivery",
                 "description": "After completing translation, export to original format or other formats while maintaining document style.",
-                "tips": [
-                    "Supports multiple export formats",
-                    "Can generate translation reports"
-                ],
+                "tips": ["Supports multiple export formats", "Can generate translation reports"],
                 "image": "/docs/en/gettingstarted-en/pic6.png"
             }
         },

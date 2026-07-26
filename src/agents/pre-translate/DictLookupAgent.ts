@@ -7,6 +7,7 @@ export class DictLookupAgent extends BaseAgent<
     {
         terms: TermCandidate[];
         owner?: AuthContext;
+        projectId?: string;
         locale?: string;
         domain?: string;
     },
@@ -23,11 +24,12 @@ export class DictLookupAgent extends BaseAgent<
     }
 
     async execute(
-        input: { terms: TermCandidate[]; owner?: AuthContext; locale?: string },
+        input: { terms: TermCandidate[]; owner?: AuthContext; projectId?: string; locale?: string },
         _ctx?: AgentRunContext
     ): Promise<DictEntry[]> {
         return dictionaryTool.lookup(input.terms, {
             owner: input.owner,
+            projectId: input.projectId,
         });
     }
 }

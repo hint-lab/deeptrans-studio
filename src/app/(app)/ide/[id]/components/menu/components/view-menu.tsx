@@ -8,15 +8,13 @@ import {
 import { useRightPanel } from '@/hooks/useRightPanel';
 import { useSidebar } from '@/hooks/useSidebar';
 import { useBottomPanel } from '@/hooks/useBottomPanel';
-import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 
 export function ViewMenu() {
     const t = useTranslations('IDE.menu');
-    const { mode, setMode, toggleChatMode } = useRightPanel() as any;
+    const { mode, setMode } = useRightPanel();
     const { isSidebarOpen, toggleSidebar } = useSidebar();
-    const { isBottomPanelOpen, toggleBottomPanel } = useBottomPanel();
-    const [open, setOpen] = useState(false);
+    const { isBottomPanelOpen, setBottomPanelOpen } = useBottomPanel();
 
     return (
         <>
@@ -33,14 +31,31 @@ export function ViewMenu() {
 
                     <MenubarCheckboxItem
                         checked={mode === 'chat'}
-                        onCheckedChange={() => toggleChatMode()}
+                        onCheckedChange={checked => setMode(checked ? 'chat' : 'none')}
+                        aria-label={t('chatPanel')}
                     >
                         <span>{t('chatPanel')}</span>
                     </MenubarCheckboxItem>
 
                     <MenubarCheckboxItem
+                        checked={mode === 'preview'}
+                        onCheckedChange={checked => setMode(checked ? 'preview' : 'none')}
+                        aria-label={t('filePreviewPanel')}
+                    >
+                        <span>{t('filePreviewPanel')}</span>
+                    </MenubarCheckboxItem>
+
+                    <MenubarCheckboxItem
+                        checked={mode === 'help'}
+                        onCheckedChange={checked => setMode(checked ? 'help' : 'none')}
+                        aria-label={t('helpPanel')}
+                    >
+                        <span>{t('helpPanel')}</span>
+                    </MenubarCheckboxItem>
+
+                    <MenubarCheckboxItem
                         checked={isBottomPanelOpen}
-                        onCheckedChange={toggleBottomPanel}
+                        onCheckedChange={setBottomPanelOpen}
                     >
                         <span>{t('bottomPanel')}</span>
                     </MenubarCheckboxItem>

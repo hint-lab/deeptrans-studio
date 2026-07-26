@@ -45,25 +45,37 @@ export async function extractDocxFromUrl(
             const arrayBuf = await res.arrayBuffer();
             buffer = Buffer.from(arrayBuf);
         }
-        let html: string | undefined;
-        let structured: any | undefined;
-        let text: string = '';
-        try {
-            const parsed = await parseDocxStructure(buffer);
-            text = String(parsed?.text || '');
-            html = parsed?.html;
-            if (parsed) {
-                const { text: _t, html: _h, ...rest } = parsed as any;
-                structured = rest;
-            }
-        } catch (err) {
-            throw new Error(`DOCX structure parse failed: ${(err as Error)?.message || err}`);
-        }
-        return { text, html, contentType, structured };
+        return await extractDocxFromBuffer(buffer, contentType);
     } catch (err) {
         throw new Error(`DOCX parse failed: ${(err as Error)?.message || err}`);
     } finally {
         clearTimeout(timer);
+    }
+}
+
+/**
+ * Parse a DOCX buffer that has already crossed an authorized storage boundary.
+ * Callers that own the storage object should prefer this over a URL fetch so a
+ * browser-supplied URL can never choose the server's network destination.
+ */
+export async function extractDocxFromBuffer(
+    buffer: Buffer,
+    contentType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+): Promise<{ text: string; html?: string; contentType?: string; structured?: any }> {
+    try {
+        const parsed = await parseDocxStructure(buffer);
+        const text = String(parsed?.text || '');
+        const html = parsed?.html;
+        const structured = parsed
+            ? (() => {
+                  const { text: _text, html: _html, ...rest } = parsed as any;
+                  return rest;
+              })()
+            : undefined;
+
+        return { text, html, contentType, structured };
+    } catch (err) {
+        throw new Error(`DOCX structure parse failed: ${(err as Error)?.message || err}`);
     }
 }
 
@@ -166,9 +178,7 @@ async function parseDocxStructure(buffer: Buffer): Promise<any> {
     }
 
     // 提取段落内 run 级样式信息（字体/字号/颜色/粗斜体/下划线），并保留换行
-    function runsFromParagraph(
-        p: any
-    ): Array<{
+    function runsFromParagraph(p: any): Array<{
         text: string;
         br?: boolean;
         bold?: boolean;
@@ -210,14 +220,23 @@ async function parseDocxStructure(buffer: Buffer): Promise<any> {
                     : undefined;
                 const underline = !!(uVal && uVal !== 'none' && uVal !== '0');
                 const colorVal = rPr?.color?.['@_val'];
+                const normalizedColor = String(colorVal || '').replace(/^#/, '');
                 const color =
-                    typeof colorVal === 'string' && colorVal.toLowerCase() !== 'auto'
-                        ? `#${colorVal.replace(/^#/, '')}`
+                    /^[\da-f]{3}(?:[\da-f]{3})?$/i.test(normalizedColor) &&
+                    normalizedColor.toLowerCase() !== 'auto'
+                        ? `#${normalizedColor}`
                         : undefined;
                 const szHalf = Number(rPr?.sz?.['@_val'] || rPr?.szCs?.['@_val'] || 0);
-                const sizePt = szHalf ? szHalf / 2 : undefined; // Word 存半磅
+                const sizePt =
+                    Number.isFinite(szHalf) && szHalf >= 2 && szHalf <= 576
+                        ? szHalf / 2
+                        : undefined; // Word 存半磅；限制为合理且安全的显示范围
                 const rf = rPr?.rFonts || {};
-                const font = rf?.eastAsia || rf?.ascii || rf?.hAnsi || undefined;
+                const rawFont = String(rf?.eastAsia || rf?.ascii || rf?.hAnsi || '').trim();
+                // Keep font names as plain CSS identifiers only. Quotes, semicolons
+                // and parentheses can otherwise escape the style attribute in the
+                // standalone preview artifact.
+                const font = /^[\p{L}\p{N} .,_-]{1,128}$/u.test(rawFont) ? rawFont : undefined;
                 out.push({ text: t, bold, italic, underline, color, sizePt, font });
             }
             return out;
@@ -381,9 +400,16 @@ async function parseDocxStructure(buffer: Buffer): Promise<any> {
                 if (r.underline) style.push('text-decoration:underline');
                 if (r.color) style.push(`color:${r.color}`);
                 if (typeof r.sizePt === 'number') style.push(`font-size:${r.sizePt}pt`);
-                if (r.font) style.push(`font-family:"${String(r.font).replace(/"/g, '\\"')}"`);
+                if (r.font) style.push(`font-family:${r.font}`);
                 const styleAttr = style.length ? ` style="${style.join(';')}"` : '';
-                parts.push(`<span${styleAttr}>${escapeHtml(r.text)}</span>`);
+                let content = escapeHtml(r.text);
+                // Preserve semantic formatting that survives the strict client
+                // sanitizer. Presentation-only attributes are validated above and
+                // may be stripped at render time by the document-preview policy.
+                if (r.underline) content = `<u>${content}</u>`;
+                if (r.italic) content = `<em>${content}</em>`;
+                if (r.bold) content = `<strong>${content}</strong>`;
+                parts.push(`<span${styleAttr}>${content}</span>`);
             }
             return parts.join('');
         };

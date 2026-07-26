@@ -15,6 +15,7 @@ import { createLogger } from '@/lib/logger';
 import { getRedis } from '@/lib/redis';
 import { releaseOwnedRedisLock } from '@/lib/redis-lock';
 import { TTL_BATCH, TTL_PROGRESS, setTextWithTTL } from '@/lib/redis-ttl';
+import { getReadableDocumentSourceUrlForOwner } from '@/server/uploaded-object';
 import { DocumentStatus } from '@/types/enums';
 import { getQueue } from '@/worker/queue';
 import { randomUUID } from 'node:crypto';
@@ -55,8 +56,21 @@ export async function POST(req: NextRequest, ctx: any) {
         const scopedBatchId = scopedProjectBatchId(projectId, batchId);
         progressBatchId = scopedBatchId;
 
+        // Never recycle a canceled namespace. A model call from the old job
+        // may return after the user stops it; clearing this marker on a retry
+        // would let that stale worker publish into the replacement run.
+        if ((await redis.get(`docTerms.${scopedBatchId}.cancel`)) === '1') {
+            return NextResponse.json(
+                {
+                    error: '术语提取已停止，请创建新的重试任务',
+                    requiresNewBatch: true,
+                },
+                { status: 409 }
+            );
+        }
+
         const only = project.documents?.[0];
-        if (!only || !only.url)
+        if (!only || !only.name)
             return NextResponse.json({ error: 'document not found' }, { status: 404 });
         if (!canWriteDocumentTermsStatus(only.status)) {
             return NextResponse.json(
@@ -64,20 +78,24 @@ export async function POST(req: NextRequest, ctx: any) {
                 { status: 409 }
             );
         }
+        const sourceUrl = await getReadableDocumentSourceUrlForOwner(only.name, authCtx);
 
         const termsBatchPointerKey = documentTermsBatchPointerKey(only.id);
         const rememberedBatchId = String((await redis.get(termsBatchPointerKey)) || '');
         if (rememberedBatchId && body?.retry !== true) {
             const rememberedScopedBatchId = scopedProjectBatchId(projectId, rememberedBatchId);
-            const [rememberedTotal, rememberedDone, rememberedFailed] = await Promise.all([
-                redis.get(`docTerms.${rememberedScopedBatchId}.total`),
-                redis.get(`docTerms.${rememberedScopedBatchId}.done`),
-                redis.get(`docTerms.${rememberedScopedBatchId}.failed`),
-            ]);
+            const [rememberedTotal, rememberedDone, rememberedFailed, rememberedCanceled] =
+                await Promise.all([
+                    redis.get(`docTerms.${rememberedScopedBatchId}.total`),
+                    redis.get(`docTerms.${rememberedScopedBatchId}.done`),
+                    redis.get(`docTerms.${rememberedScopedBatchId}.failed`),
+                    redis.get(`docTerms.${rememberedScopedBatchId}.cancel`),
+                ]);
             const rememberedStatus = resolveDocumentTermsStatus(
                 rememberedTotal,
                 rememberedDone,
-                rememberedFailed
+                rememberedFailed,
+                rememberedCanceled
             );
             if (rememberedStatus !== 'idle') {
                 return NextResponse.json({
@@ -128,7 +146,7 @@ export async function POST(req: NextRequest, ctx: any) {
 
         let bodyText = '';
         try {
-            const { text } = await extractTextFromUrl(only.url);
+            const { text } = await extractTextFromUrl(sourceUrl);
             bodyText = String(text || '').trim();
         } catch {}
         if (!bodyText) return NextResponse.json({ error: 'empty content' }, { status: 400 });
@@ -165,7 +183,9 @@ export async function POST(req: NextRequest, ctx: any) {
         await redis.del(
             `docTerms.${scopedBatchId}.failed`,
             `docTerms.${scopedBatchId}.error`,
-            `docTerms.${scopedBatchId}.item.terms.all`
+            `docTerms.${scopedBatchId}.item.terms.all`,
+            `docTerms.${scopedBatchId}.cancel`,
+            `docTerms.${scopedBatchId}.terminal.terms.all`
         );
         await setTextWithTTL(redis, `docTerms.${scopedBatchId}.total`, '1', TTL_PROGRESS);
         await setTextWithTTL(redis, `docTerms.${scopedBatchId}.done`, '0', TTL_PROGRESS);

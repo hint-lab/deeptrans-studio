@@ -8,12 +8,12 @@ import {
 import { useActiveDocumentItem } from '@/hooks/useActiveDocumentItem';
 import type { TranslationStage } from '@/store/features/translationSlice';
 import { useTranslations } from 'next-intl';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
-type EventItem = {
+export type SignoffEventItem = {
     id: string;
     stepKey: string;
-    actorType: 'AGENT' | 'HUMAN';
+    actorType: 'AGENT' | 'USER';
     actorId?: string | null;
     model?: string | null;
     status: 'STARTED' | 'SUCCESS' | 'FAILED';
@@ -23,190 +23,293 @@ type EventItem = {
     metadata?: any;
 };
 
+export type SignoffStepStatus = 'SUCCESS' | 'FAILED' | 'STARTED' | 'IDLE';
+
+export type SignoffTimelineStep = {
+    status: SignoffStepStatus;
+    actor: string;
+    time?: string;
+};
+
+export type SignoffEventLoadState = 'idle' | 'loading' | 'ready' | 'error';
+
+type BuildSignoffTimelineOptions = {
+    /**
+     * The document's current stage is only a safe fallback after a successful
+     * audit-event read.  A failed read is not evidence that earlier stages
+     * completed successfully.
+     */
+    inferFromCurrentStatus?: boolean;
+};
+
+/**
+ * Reconciles persisted process events with the document's current stage.
+ *
+ * The current stage can fill an absent event in an earlier stage, but it is
+ * not evidence that an explicitly recorded result (especially a failure) was
+ * successful. Event data therefore wins over inferred status; only true idle
+ * gaps are backfilled.
+ */
+export function buildSignoffTimeline(
+    events: readonly SignoffEventItem[],
+    currentStatus: TranslationStage,
+    stages: readonly TranslationStage[] = TRANSLATION_STAGES_SEQUENCE,
+    { inferFromCurrentStatus = true }: BuildSignoffTimelineOptions = {}
+) {
+    const results = new Map<TranslationStage, SignoffTimelineStep>();
+    for (const stage of stages) results.set(stage, { status: 'IDLE', actor: '—' });
+
+    // Work on a copy so deriving the display timeline cannot mutate React state.
+    const sortedEvents = [...events].sort((a, b) => {
+        const timeA = new Date(a.finishedAt || a.createdAt || a.startedAt || 0).getTime();
+        const timeB = new Date(b.finishedAt || b.createdAt || b.startedAt || 0).getTime();
+        return timeA - timeB;
+    });
+
+    for (const event of sortedEvents) {
+        const key = String(event.stepKey) as TranslationStage;
+        if (!stages.includes(key)) continue;
+
+        const actor = event.actorType === 'USER' ? 'Human' : 'Agent';
+        const rawTime = event.finishedAt || event.createdAt || event.startedAt;
+        const time = rawTime ? new Date(rawTime).toLocaleString() : undefined;
+        results.set(key, { status: event.status as SignoffStepStatus, actor, time });
+    }
+
+    if (!inferFromCurrentStatus) return results;
+
+    const currentIndex = stages.indexOf(currentStatus);
+    if (currentIndex === -1) return results;
+
+    stages.forEach((stage, index) => {
+        const previous = results.get(stage)!;
+
+        if (index < currentIndex) {
+            // A later current status proves only that a missing stage was passed.
+            // It must not rewrite an actual FAILED or STARTED process event.
+            if (previous.status === 'IDLE') {
+                results.set(stage, { ...previous, status: 'SUCCESS', actor: 'System' });
+            }
+            return;
+        }
+
+        if (index === currentIndex) {
+            if (previous.status !== 'SUCCESS' && previous.status !== 'FAILED') {
+                results.set(stage, {
+                    ...previous,
+                    status: stage === 'COMPLETED' ? 'SUCCESS' : 'STARTED',
+                    actor: previous.actor !== '—' ? previous.actor : 'System',
+                });
+            }
+            return;
+        }
+
+        // Future stages are not part of the active run after a workflow rollback.
+        results.set(stage, { status: 'IDLE', actor: '—', time: undefined });
+    });
+
+    return results;
+}
+
+/**
+ * Keeps audit-data availability separate from an empty audit trail.  A ready
+ * but empty list may be reconciled against the current document stage; an
+ * unavailable list must remain unknown instead of being inferred as success.
+ */
+export function buildSignoffTimelineForLoadState(
+    events: readonly SignoffEventItem[],
+    currentStatus: TranslationStage,
+    loadState: SignoffEventLoadState,
+    stages: readonly TranslationStage[] = TRANSLATION_STAGES_SEQUENCE
+) {
+    return buildSignoffTimeline(events, currentStatus, stages, {
+        inferFromCurrentStatus: loadState === 'ready',
+    });
+}
+
 export default function SignoffPanel() {
     const t = useTranslations('IDE');
     const tStage = useTranslations('IDE.translationStages');
     const { activeDocumentItem } = useActiveDocumentItem();
-    const [events, setEvents] = useState<EventItem[]>([]);
-    const [loading, setLoading] = useState(false);
+    const [events, setEvents] = useState<SignoffEventItem[]>([]);
+    const [eventLoadState, setEventLoadState] = useState<SignoffEventLoadState>('idle');
+    const [reloadVersion, setReloadVersion] = useState(0);
+    const loadRequestRef = useRef(0);
 
     const documentItemId = (activeDocumentItem as any)?.id;
     // 获取当前分段的实时状态，作为时间线渲染的最高准则
     const currentStatus = (activeDocumentItem as any)?.status as TranslationStage;
 
     useEffect(() => {
+        const requestId = ++loadRequestRef.current;
+
+        if (!documentItemId) {
+            setEvents([]);
+            setEventLoadState('idle');
+            return;
+        }
+
+        setEvents([]);
+        setEventLoadState('loading');
+
         const run = async () => {
-            if (!documentItemId) return;
-            setLoading(true);
             try {
                 const list = await listTranslationProcessEventsForSignoff(documentItemId);
-                setEvents(Array.isArray(list) ? (list as any) : []);
-            } catch (error) {
-                console.error('Failed to load translation process events:', error);
+                if (requestId !== loadRequestRef.current) return;
+                if (!Array.isArray(list)) {
+                    throw new Error('Unexpected translation process event response');
+                }
+                setEvents(list as SignoffEventItem[]);
+                setEventLoadState('ready');
+            } catch {
+                if (requestId !== loadRequestRef.current) return;
+                console.error('Failed to load translation process events');
                 setEvents([]);
-            } finally {
-                setLoading(false);
+                setEventLoadState('error');
             }
         };
-        run();
-    }, [documentItemId, currentStatus]); // 监听 status 变化重新拉取
+        void run();
+
+        return () => {
+            if (loadRequestRef.current === requestId) loadRequestRef.current += 1;
+        };
+    }, [documentItemId, currentStatus, reloadVersion]); // 监听 status 变化重新拉取
 
     const timeline = useMemo(() => {
-        type StepStatus = 'SUCCESS' | 'FAILED' | 'STARTED' | 'IDLE';
         const stages: TranslationStage[] = TRANSLATION_STAGES_SEQUENCE;
+        const results = buildSignoffTimelineForLoadState(
+            events,
+            currentStatus,
+            eventLoadState,
+            stages
+        );
 
-        // 1. 初始化结果集
-        const results = new Map<
-            TranslationStage,
-            { status: StepStatus; actor: string; time?: string }
-        >();
-        for (const st of stages) results.set(st, { status: 'IDLE', actor: '—' });
-
-        // 2. 填充事件数据 (保留元数据：时间、执行人)
-        // 按时间正序排列，确保同一步骤取到的是最后一次执行的状态
-        const sortedEvents = (events || []).sort((a, b) => {
-            const timeA = new Date(a.finishedAt || a.createdAt || a.startedAt || 0).getTime();
-            const timeB = new Date(b.finishedAt || b.createdAt || b.startedAt || 0).getTime();
-            return timeA - timeB;
-        });
-
-        for (const e of sortedEvents) {
-            const key = String(e.stepKey) as TranslationStage;
-            if (!stages.includes(key)) continue;
-
-            const actor = e.actorType === 'HUMAN' ? 'Human' : 'Agent'; // 简化显示，或者显示 e.model
-            const rawTime = e.finishedAt || e.createdAt || e.startedAt;
-            const time = rawTime ? new Date(rawTime).toLocaleString() : undefined;
-            const status = e.status as StepStatus;
-
-            // 存入最新的事件信息
-            results.set(key, { status, actor, time });
-        }
-
-        // 3. 【核心修复】基于当前状态(Current Status) 进行逻辑覆盖
-        // 这解决了两个问题：
-        // a. "GAP"问题：如果当前是 COMPLETED，中间的 REVIEW 即使没事件也应该是 SUCCESS。
-        // b. "回退"问题：如果从 QA 回退到 MT，那么 QA 应该重置为 IDLE，无论之前有没有事件。
-
-        const currentIndex = stages.indexOf(currentStatus);
-
-        if (currentIndex !== -1) {
-            stages.forEach((stage, index) => {
-                const prevData = results.get(stage)!;
-
-                if (index < currentIndex) {
-                    // 情况 A: 当前步骤之前的步骤 -> 强制标记为成功 (补全 GAP)
-                    // 除非它显式标记为失败(但在流转逻辑中，通常失败会卡住，不会进入下一步，所以大概率是成功)
-                    if (prevData.status !== 'SUCCESS') {
-                        results.set(stage, {
-                            ...prevData,
-                            status: 'SUCCESS',
-                            // 如果没有时间，给一个占位符或保持空，避免显示错误的旧时间
-                            actor: prevData.actor !== '—' ? prevData.actor : 'System',
-                        });
-                    }
-                } else if (index === currentIndex) {
-                    // 情况 B: 当前步骤
-                    if (prevData.status !== 'SUCCESS' && prevData.status !== 'FAILED') {
-                        // 【修复点】：如果是 COMPLETED 阶段，它代表终点，应该是 SUCCESS 而不是 STARTED
-                        // 其他阶段（如 MT, QA）作为当前阶段时，代表正在进行中 (STARTED)
-                        const status = stage === 'COMPLETED' ? 'SUCCESS' : 'STARTED';
-
-                        results.set(stage, {
-                            ...prevData,
-                            status: status,
-                            actor: prevData.actor !== '—' ? prevData.actor : 'System',
-                        });
-                    }
-                } else {
-                    // 情况 C: 当前步骤之后的步骤 -> 强制重置为未开始 (清除回退后的"未来"脏数据)
-                    results.set(stage, {
-                        status: 'IDLE',
-                        actor: '—',
-                        time: undefined
-                    });
-                }
-            });
-        }
-
-        // 4. 生成渲染数组
         return stages.map(st => ({
             key: st,
             label: getTranslationStageLabel(st, tStage),
             ...(results.get(st) as any),
         }));
-    }, [events, tStage, currentStatus]);
+    }, [events, tStage, currentStatus, eventLoadState]);
 
     return (
         <div className="mt-2 w-full rounded border border-blue-200 bg-blue-50 p-2 dark:border-blue-900 dark:bg-blue-950/30">
             <div className="flex items-center justify-between">
                 <div className="text-xs font-medium text-foreground/70">{t('stageTimeline')}</div>
-                {loading && (
+                {eventLoadState === 'loading' && (
                     <div className="text-[11px] text-foreground/60">{t('loadingDots')}</div>
                 )}
             </div>
-            <div className="mt-2 w-full overflow-x-auto rounded border bg-white dark:border-slate-800 dark:bg-slate-900">
+            {eventLoadState === 'error' ? (
                 <div
-                    className="relative grid w-full items-start px-4 py-4"
-                    style={{
-                        gridTemplateColumns: `repeat(${Math.max(timeline.length, 1)}, minmax(112px, 1fr))`,
-                        minWidth: timeline.length ? `${timeline.length * 112}px` : undefined,
-                    }}
+                    className="mt-2 flex items-center justify-between gap-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300"
+                    role="alert"
                 >
-                    {timeline.length ? (
-                        timeline.map((s, i) => {
-                            const isDone = s.status === 'SUCCESS';
-                            const isFail = s.status === 'FAILED';
-                            const isRun = s.status === 'STARTED';
-                            const dotCls = isFail
-                                ? 'bg-red-500 border-red-600'
-                                : isDone
-                                    ? 'bg-blue-600 border-blue-700'
-                                    : isRun
-                                        ? 'bg-yellow-400 border-yellow-500'
-                                        : 'bg-white dark:bg-slate-900 border-blue-300 dark:border-blue-700';
-                            return (
-                                <div key={s.key} className="relative flex min-w-0 flex-col items-center text-center">
-                                    {/* 连接线 */}
-                                    {i < timeline.length - 1 && (
-                                        <div
-                                            className={`absolute left-1/2 right-[-50%] top-3 h-[2px] ${isFail ? 'bg-red-200 dark:bg-red-900' : isDone ? 'bg-blue-200 dark:bg-blue-900' : 'bg-blue-100 dark:bg-blue-800'}`}
-                                        />
-                                    )}
-                                    {/* 节点 */}
-                                    <div
-                                        className={`z-10 h-6 w-6 rounded-full border-2 ${dotCls} shadow`}
-                                    />
-                                    {/* 标签 */}
-                                    <div className="mt-2 w-full px-1 text-center text-[11px] text-foreground/80">
-                                        {s.label}
-                                    </div>
-                                    {/* 状态文案 */}
-                                    <div
-                                        className={`mt-0.5 w-full px-1 text-center text-[10px] ${isFail ? 'text-red-600' : isDone ? 'text-blue-600' : 'text-foreground/50'}`}
-                                    >
-                                        <div>
-                                            {isFail
-                                                ? t('failed')
-                                                : isDone
-                                                    ? t('success')
-                                                    : isRun
-                                                        ? t('inProgress')
-                                                        : t('notStarted')}
-                                        </div>
-                                        <div className="text-foreground/50">{s.actor || '—'}</div>
-                                        {s.time && (
-                                            <div className="text-foreground/50">{s.time}</div>
-                                        )}
-                                    </div>
-                                </div>
-                            );
-                        })
-                    ) : (
-                        <div className="px-4 py-6 text-xs text-foreground/60">{t('noEvents')}</div>
-                    )}
+                    <span>{t('auditEventsLoadFailed')}</span>
+                    <button
+                        type="button"
+                        className="shrink-0 rounded border border-current px-2 py-1 text-[11px] font-medium transition-colors hover:bg-red-100 dark:hover:bg-red-950"
+                        onClick={() => setReloadVersion(version => version + 1)}
+                    >
+                        {t('retryAuditEvents')}
+                    </button>
                 </div>
-            </div>
+            ) : eventLoadState === 'loading' ? (
+                <div
+                    className="mt-2 rounded border bg-white px-4 py-6 text-center text-xs text-foreground/60 dark:border-slate-800 dark:bg-slate-900"
+                    role="status"
+                    aria-live="polite"
+                >
+                    {t('loadingDots')}
+                </div>
+            ) : eventLoadState === 'idle' ? (
+                <div className="mt-2 rounded border bg-white px-4 py-6 text-center text-xs text-foreground/60 dark:border-slate-800 dark:bg-slate-900">
+                    {t('noEvents')}
+                </div>
+            ) : (
+                <>
+                    {events.length === 0 && (
+                        <div
+                            className="mt-2 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200"
+                            role="status"
+                        >
+                            {t('noAuditEventsInferred')}
+                        </div>
+                    )}
+                    <div className="mt-2 w-full overflow-x-auto rounded border bg-white dark:border-slate-800 dark:bg-slate-900">
+                        <div
+                            className="relative grid w-full items-start px-4 py-4"
+                            style={{
+                                gridTemplateColumns: `repeat(${Math.max(timeline.length, 1)}, minmax(112px, 1fr))`,
+                                minWidth: timeline.length
+                                    ? `${timeline.length * 112}px`
+                                    : undefined,
+                            }}
+                        >
+                            {timeline.length ? (
+                                timeline.map((s, i) => {
+                                    const isDone = s.status === 'SUCCESS';
+                                    const isFail = s.status === 'FAILED';
+                                    const isRun = s.status === 'STARTED';
+                                    const dotCls = isFail
+                                        ? 'bg-red-500 border-red-600'
+                                        : isDone
+                                          ? 'bg-blue-600 border-blue-700'
+                                          : isRun
+                                            ? 'bg-yellow-400 border-yellow-500'
+                                            : 'bg-white dark:bg-slate-900 border-blue-300 dark:border-blue-700';
+                                    return (
+                                        <div
+                                            key={s.key}
+                                            className="relative flex min-w-0 flex-col items-center text-center"
+                                        >
+                                            {/* 连接线 */}
+                                            {i < timeline.length - 1 && (
+                                                <div
+                                                    className={`absolute left-1/2 right-[-50%] top-3 h-[2px] ${isFail ? 'bg-red-200 dark:bg-red-900' : isDone ? 'bg-blue-200 dark:bg-blue-900' : 'bg-blue-100 dark:bg-blue-800'}`}
+                                                />
+                                            )}
+                                            {/* 节点 */}
+                                            <div
+                                                className={`z-10 h-6 w-6 rounded-full border-2 ${dotCls} shadow`}
+                                            />
+                                            {/* 标签 */}
+                                            <div className="mt-2 w-full px-1 text-center text-[11px] text-foreground/80">
+                                                {s.label}
+                                            </div>
+                                            {/* 状态文案 */}
+                                            <div
+                                                className={`mt-0.5 w-full px-1 text-center text-[10px] ${isFail ? 'text-red-600' : isDone ? 'text-blue-600' : 'text-foreground/50'}`}
+                                            >
+                                                <div>
+                                                    {isFail
+                                                        ? t('failed')
+                                                        : isDone
+                                                          ? t('success')
+                                                          : isRun
+                                                            ? t('inProgress')
+                                                            : t('notStarted')}
+                                                </div>
+                                                <div className="text-foreground/50">
+                                                    {s.actor || '—'}
+                                                </div>
+                                                {s.time && (
+                                                    <div className="text-foreground/50">
+                                                        {s.time}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })
+                            ) : (
+                                <div className="px-4 py-6 text-xs text-foreground/60">
+                                    {t('noEvents')}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </>
+            )}
         </div>
     );
 }

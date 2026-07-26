@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getRedis } from '@/lib/redis';
 import { extractTextFromUrl } from '@/lib/file-parser';
-import { guardMessage, guardStatus, requireOwnedProject } from '@/lib/guards';
+import { guardMessage, guardStatus, requireOwnedProject, requireUser } from '@/lib/guards';
 import { readInitStructuredRaw, scopedProjectBatchId } from '@/lib/init-artifact-keys';
 import { buildStatCandidates } from '@/lib/terms/termStats';
+import { getReadableDocumentSourceUrlForOwner } from '@/server/uploaded-object';
 
 export async function POST(req: NextRequest, context: any) {
     try {
@@ -16,7 +17,8 @@ export async function POST(req: NextRequest, context: any) {
         const redis = await getRedis();
         let text = '';
         const { id: projectId } = await (context?.params || {});
-        const project = await requireOwnedProject(projectId);
+        const authCtx = await requireUser();
+        const project = await requireOwnedProject(projectId, authCtx);
         if (batchId) {
             const scopedBatchId = scopedProjectBatchId(projectId, batchId);
             const structuredRaw = await readInitStructuredRaw(redis, scopedBatchId);
@@ -34,8 +36,9 @@ export async function POST(req: NextRequest, context: any) {
         }
         if (!text) {
             const only = project.documents?.[0];
-            if (only?.url) {
-                const { text: full } = await extractTextFromUrl(only.url);
+            if (only?.name) {
+                const sourceUrl = await getReadableDocumentSourceUrlForOwner(only.name, authCtx);
+                const { text: full } = await extractTextFromUrl(sourceUrl);
                 text = String(full || '').trim();
             }
         }

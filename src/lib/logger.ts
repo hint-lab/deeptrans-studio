@@ -23,6 +23,10 @@ interface LoggerOptions {
 const SENSITIVE_KEY = /(token|secret|password|authorization|cookie|code|session|profile|account|uploadurl|fileurl|apikey|api_key|clientsecret|credential)/i;
 const MAX_LOG_STRING_LENGTH = 500;
 
+function isBrowserRuntime(): boolean {
+    return typeof window !== 'undefined';
+}
+
 function sanitizeString(value: string): string {
     let output = value;
     try {
@@ -43,6 +47,15 @@ function sanitizeForLog(value: any, key = '', depth = 0): any {
     if (typeof value === 'string') return sanitizeString(value);
     if (typeof value === 'number' || typeof value === 'boolean') return value;
     if (value instanceof Error) {
+        // Browser console output is visible to the signed-in user. Error
+        // messages can originate in an action/API response and may contain
+        // infrastructure, database, or model-provider details. Keep the
+        // error class for diagnosis without serializing those details client-side.
+        if (isBrowserRuntime()) {
+            return {
+                name: value.name || 'Error',
+            };
+        }
         return {
             name: value.name,
             message: sanitizeString(value.message),
@@ -370,12 +383,8 @@ class JsonLogger {
                 if (args[0] instanceof Error) {
                     const error = args[0];
                     logData = {
-                        message: error.message,
-                        error: {
-                            name: error.name,
-                            message: error.message,
-                            stack: process.env.NODE_ENV !== 'production' ? error.stack : undefined,
-                        }
+                        message: isBrowserRuntime() ? 'Client operation failed' : error.message,
+                        error: sanitizeForLog(error),
                     };
                 }
             }
@@ -405,7 +414,7 @@ class JsonLogger {
         // 如果是 error 级别且包含 Error 对象，输出堆栈
         if (level === 'error') {
             const error = args.find(arg => arg instanceof Error);
-            if (error?.stack && isDebugEnabled()) {
+            if (!isBrowserRuntime() && error?.stack && isDebugEnabled()) {
                 console.error('\x1b[31m%s\x1b[0m', sanitizeString(error.stack));
             }
         }
@@ -495,11 +504,7 @@ class JsonLogger {
         return this.error({
             message: 'Request error',
             event: 'request_error',
-            error: {
-                name: error.name,
-                message: error.message,
-                stack: process.env.NODE_ENV !== 'production' ? error.stack : undefined,
-            },
+            error: sanitizeForLog(error),
             timestamp: new Date().toLocaleString(),
             ...additionalData,
         });

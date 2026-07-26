@@ -16,6 +16,8 @@ import {
     type SyntaxQualityResult,
 } from '@/lib/syntax-quality';
 import { sourceRevision, withSourceRevisions } from '@/lib/source-revision';
+import { omitClientWorkflowPrompt } from '@/lib/workflow-prompt-keys';
+import { resolveWorkflowPrompt } from '@/server/workflow-prompts';
 const logger = createLogger(
     {
         type: 'actions:quality-assure',
@@ -32,12 +34,14 @@ const logger = createLogger(
  */
 export async function extractBilingualSyntaxMarkersAction(
     source: string,
-    target: string,
-    options?: { prompt?: string }
+    target: string
 ): Promise<any> {
     try {
-        await requireUser();
-        const result = await extractBilingualSyntaxMarkers(source, target, options);
+        const authCtx = await requireUser();
+        // This legacy single-step entry shares the syntax-evaluation instruction
+        // layer. It must never accept a raw client prompt.
+        const prompt = await resolveWorkflowPrompt(authCtx, 'syntax-evaluate');
+        const result = await extractBilingualSyntaxMarkers(source, target, { prompt });
         logger.info('句法标记提取成功:', { hasResult: !!result });
         return result;
     } catch (error) {
@@ -55,13 +59,16 @@ export async function evaluateSyntaxAction(
     options?: {
         targetLanguage?: string;
         domain?: string;
-        prompt?: string;
         locale?: string;
     }
 ): Promise<any> {
     try {
-        await requireUser();
-        const result = await evaluateSyntax(source, target, options);
+        const authCtx = await requireUser();
+        const prompt = await resolveWorkflowPrompt(authCtx, 'syntax-evaluate');
+        const result = await evaluateSyntax(source, target, {
+            ...omitClientWorkflowPrompt(options),
+            prompt,
+        });
         logger.info('句法评估成功:', {
             issuesCount: Array.isArray(result?.issues) ? result.issues.length : undefined,
         });
@@ -79,11 +86,15 @@ export async function embedSyntaxAdviceAction(
     source: string,
     target: string,
     issues: Array<Partial<SyntaxIssue> & { type?: string; span?: string }>,
-    options?: { prompt?: string; locale?: string }
+    options?: { locale?: string }
 ): Promise<string> {
     try {
-        await requireUser();
-        return embedSyntaxAdvice(source, target, issues, options);
+        const authCtx = await requireUser();
+        const prompt = await resolveWorkflowPrompt(authCtx, 'syntax-advice-embed');
+        return embedSyntaxAdvice(source, target, issues, {
+            ...omitClientWorkflowPrompt(options),
+            prompt,
+        });
     } catch (error) {
         logger.error('句法建议嵌入失败:', error);
         throw new Error('句法建议嵌入失败');
@@ -102,7 +113,8 @@ export async function embedSelectedSyntaxIssuesAction(
     locale?: string
 ): Promise<{ text: string; syntax: SyntaxQualityResult }> {
     try {
-        const item = await requireWritableDocumentItem(itemId);
+        const authCtx = await requireUser();
+        const item = await requireWritableDocumentItem(itemId, authCtx);
         const syntax = normalizeSyntaxQualityResult((item as any).qualityAssureSyntax);
         if (syntax.status !== 'complete' || syntax.legacy) {
             throw new Error('质检结果不完整，请重新质检后再生成');
@@ -136,17 +148,18 @@ export async function embedSelectedSyntaxIssuesAction(
         }
         const proposalBaseTarget = currentTarget;
 
+        const prompt = await resolveWorkflowPrompt(authCtx, 'syntax-advice-embed');
         const text = await embedSyntaxAdvice(
             String((item as any).sourceText || ''),
             proposalBaseTarget,
             issues,
-            { locale }
+            { locale, prompt }
         );
         if (!String(text || '').trim()) throw new Error('未生成有效修订译文，请重试');
 
         // The model call is slow. Re-read every piece of provenance before writing so
         // a rerun, edit or selection change that happened meanwhile cannot be overwritten.
-        const latestItem = await requireWritableDocumentItem(itemId);
+        const latestItem = await requireWritableDocumentItem(itemId, authCtx);
         const latestSyntax = normalizeSyntaxQualityResult((latestItem as any).qualityAssureSyntax);
         if (latestSyntax.status !== 'complete' || latestSyntax.legacy) {
             throw new Error('质检结果不完整，请重新质检后再生成');
@@ -323,7 +336,6 @@ export async function runQualityAssureAction(
     options?: {
         targetLanguage?: string;
         domain?: string;
-        prompt?: string;
         projectId?: string;
         locale?: string;
     }
@@ -333,5 +345,7 @@ export async function runQualityAssureAction(
     syntaxEmbedded: null;
 }> {
     const authCtx = await requireUser();
-    return runQualityAssureForOwner(sourceText, targetText, authCtx, options);
+    const safeOptions = omitClientWorkflowPrompt(options);
+    const prompt = await resolveWorkflowPrompt(authCtx, 'syntax-evaluate');
+    return runQualityAssureForOwner(sourceText, targetText, authCtx, { ...safeOptions, prompt });
 }

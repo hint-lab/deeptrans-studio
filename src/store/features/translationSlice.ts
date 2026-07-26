@@ -10,6 +10,7 @@ export type TranslationStage =
     | 'POST_EDIT_REVIEW'
     | 'SIGN_OFF'
     | 'ERROR'
+    | 'CANCELED'
     | 'COMPLETED';
 
 interface TranslationState {
@@ -19,6 +20,9 @@ interface TranslationState {
     contentItemId: string;
     sourceText: string;
     targetText: string;
+    // The last target text confirmed by a guarded server write. It remains
+    // separate from `targetText`, which may be an unsaved TipTap draft.
+    persistedTargetText: string;
 }
 
 const initialState: TranslationState = {
@@ -28,6 +32,7 @@ const initialState: TranslationState = {
     contentItemId: '',
     sourceText: '',
     targetText: '',
+    persistedTargetText: '',
 };
 
 export const translationSlice = createSlice({
@@ -50,6 +55,7 @@ export const translationSlice = createSlice({
             state.contentItemId = '';
             state.sourceText = '';
             state.targetText = '';
+            state.persistedTargetText = '';
         },
         setTranslationContent: (
             state,
@@ -58,12 +64,16 @@ export const translationSlice = createSlice({
             state.contentItemId = action.payload.itemId;
             state.sourceText = action.payload.sourceText;
             state.targetText = action.payload.targetText || '';
+            state.persistedTargetText = action.payload.targetText || '';
         },
         setSourceText: (state, action: PayloadAction<string>) => {
             state.sourceText = action.payload;
         },
         setTargetText: (state, action: PayloadAction<string>) => {
             state.targetText = action.payload;
+        },
+        setPersistedTargetText: (state, action: PayloadAction<string>) => {
+            state.persistedTargetText = action.payload;
         },
     },
 });
@@ -76,6 +86,7 @@ export const {
     setTranslationContent,
     setSourceText,
     setTargetText,
+    setPersistedTargetText,
 } = translationSlice.actions;
 
 export default translationSlice.reducer;

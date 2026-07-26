@@ -45,6 +45,7 @@ test('only accepts term extraction options from request data', () => {
 });
 
 test('reports a failed term job instead of leaving it running at zero percent', () => {
+    assert.equal(resolveDocumentTermsStatus('1', '1', '0', '1'), 'canceled');
     assert.equal(resolveDocumentTermsStatus('1', '0', '1'), 'failed');
     assert.equal(resolveDocumentTermsStatus('1', '0', '0'), 'running');
     assert.equal(resolveDocumentTermsStatus('1', '1', '0'), 'completed');

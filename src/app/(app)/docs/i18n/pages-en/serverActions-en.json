@@ -104,7 +104,7 @@
                             "method": "POST",
                             "path": "/api/auth/email-login",
                             "title": "Email Login",
-                            "description": "Login using email and verification code"
+                            "description": "Submit an email and six-digit verification code to establish a session; returns a safe internal redirect path on success"
                         },
                         {
                             "method": "POST",
@@ -254,7 +254,7 @@
                             "method": "GET",
                             "path": "/api/memories/import/status?jobId={jobId}",
                             "title": "Query Import Progress",
-                            "description": "Query parsing, embedding, and vector-write progress by job ID"
+                            "description": "Query parsing, embedding, and vector-write progress by job ID, including whether a background Worker can process the job"
                         },
                         {
                             "method": "POST",

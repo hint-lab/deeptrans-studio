@@ -31,12 +31,15 @@ export const ChatBarContentSlice = createSlice({
             const { id, message } = action.payload;
             state.content = state.content.map(m => (m.id === id ? { ...message, id } : m));
         },
+        removeById: (state, action: PayloadAction<string>) => {
+            state.content = state.content.filter(message => message.id !== action.payload);
+        },
         clearContent: state => {
             state.content = [];
         },
     },
 });
 
-export const { toggle, setContent, appendContent, updateById, clearContent } =
+export const { toggle, setContent, appendContent, updateById, removeById, clearContent } =
     ChatBarContentSlice.actions;
 export default ChatBarContentSlice.reducer;

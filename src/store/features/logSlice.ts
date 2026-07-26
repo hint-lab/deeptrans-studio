@@ -15,8 +15,8 @@ const loadInitialState = (): LogEntry[] => {
             if (storedLogs) {
                 return JSON.parse(storedLogs);
             }
-        } catch (error) {
-            console.error('加载日志失败:', error);
+        } catch {
+            console.error('加载日志失败');
         }
     }
     return [];
@@ -41,8 +41,8 @@ export const logSlice = createSlice({
             if (typeof window !== 'undefined') {
                 try {
                     localStorage.setItem(STORAGE_KEY, JSON.stringify(state.logs));
-                } catch (error) {
-                    console.error('保存日志失败:', error);
+                } catch {
+                    console.error('保存日志失败');
                 }
             }
         },
@@ -53,8 +53,8 @@ export const logSlice = createSlice({
             if (typeof window !== 'undefined') {
                 try {
                     localStorage.removeItem(STORAGE_KEY);
-                } catch (error) {
-                    console.error('清除日志失败:', error);
+                } catch {
+                    console.error('清除日志失败');
                 }
             }
         },

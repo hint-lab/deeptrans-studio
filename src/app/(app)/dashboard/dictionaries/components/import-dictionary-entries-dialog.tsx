@@ -26,11 +26,13 @@ import { DictionaryTemplateDownloadButton } from './dictionary-import-guide';
 interface ImportDictionaryEntriesDialogProps {
     dictionaryId: string;
     onCompleted?: () => Promise<void> | void;
+    disabled?: boolean;
 }
 
 export function ImportDictionaryEntriesDialog({
     dictionaryId,
     onCompleted,
+    disabled = false,
 }: ImportDictionaryEntriesDialogProps) {
     const [open, setOpen] = useState(false);
     const [file, setFile] = useState<File | null>(null);
@@ -55,7 +57,11 @@ export function ImportDictionaryEntriesDialog({
         try {
             const data = await importDictionaryFromFormAction(form);
             if (!data?.success) {
-                throw new Error((data as any)?.error || '导入失败');
+                toast.error(t('importFailed'), {
+                    description:
+                        typeof data?.error === 'string' && data.error ? data.error : undefined,
+                });
+                return;
             }
             toast.success(
                 `导入完成: 总计 ${data.data?.total}，新增 ${data.data?.inserted}，更新 ${data.data?.updated}`
@@ -63,17 +69,22 @@ export function ImportDictionaryEntriesDialog({
             setOpen(false);
             setFile(null);
             if (onCompleted) await onCompleted();
-        } catch (err) {
-            toast.error(err instanceof Error ? err.message : '导入失败');
+        } catch {
+            toast.error(t('importFailed'));
         } finally {
             setSubmitting(false);
         }
     };
 
     return (
-        <Dialog open={open} onOpenChange={setOpen}>
+        <Dialog
+            open={open}
+            onOpenChange={nextOpen => {
+                if (!disabled || !nextOpen) setOpen(nextOpen);
+            }}
+        >
             <DialogTrigger asChild>
-                <Button variant="secondary" size="sm">
+                <Button variant="secondary" size="sm" disabled={disabled}>
                     {t('importEntries')}
                 </Button>
             </DialogTrigger>

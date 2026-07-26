@@ -36,14 +36,17 @@ import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 // Avoid importing Prisma types in client components
 type CreatedProject = { id: string } & Record<string, any>;
-const logger = createLogger({
-    type: 'dashboard:create-project-dialog',
-}, {
-    json: false,// 开启json格式输出
-    pretty: false, // 关闭开发环境美化输出
-    colors: true, // 仅当json：false时启用颜色输出可用
-    includeCaller: false, // 日志不包含调用者
-});
+const logger = createLogger(
+    {
+        type: 'dashboard:create-project-dialog',
+    },
+    {
+        json: false, // 开启json格式输出
+        pretty: false, // 关闭开发环境美化输出
+        colors: true, // 仅当json：false时启用颜色输出可用
+        includeCaller: false, // 日志不包含调用者
+    }
+);
 export function CreateProjectDialog({
     onCreated,
     triggerVariant = 'default',
@@ -73,6 +76,7 @@ export function CreateProjectDialog({
         contentType: string;
         size: number;
     } | null>(null);
+    const [fileUploadResetKey, setFileUploadResetKey] = useState(0);
 
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [progressOpen, setProgressOpen] = useState(false);
@@ -93,6 +97,7 @@ export function CreateProjectDialog({
     const handleClose = () => {
         setDialogState(prev => ({ ...prev, isOpen: false }));
         setUploadedFile(null);
+        setFileUploadResetKey(key => key + 1);
     };
 
     const handleFileUpload = (fileInfo: {
@@ -159,10 +164,11 @@ export function CreateProjectDialog({
                                 router.push(`/ide/${currentProjectIdRef.current}`);
                         }, 600);
                     }
-                } catch { }
+                } catch {}
             }, 3600);
-        } catch (e: any) {
-            toast.error((e as Error)?.message || t('initFailed'));
+        } catch (error) {
+            logger.error('项目初始化启动失败:', error);
+            toast.error(t('initFailed'));
             setProgressOpen(false);
         }
     }
@@ -174,7 +180,8 @@ export function CreateProjectDialog({
     }, []);
 
     const handleSubmit = async () => {
-        if (!uploadedFile || !dialogState.projectName) {
+        const projectName = dialogState.projectName.trim();
+        if (!uploadedFile || !projectName) {
             toast.error(t('uploadFileAndName'));
             return;
         }
@@ -183,7 +190,7 @@ export function CreateProjectDialog({
 
         try {
             const project = await createNewProjectAction({
-                name: dialogState.projectName,
+                name: projectName,
                 domain: dialogState.domain,
                 sourceLanguage: dialogState.sourceLanguage,
                 targetLanguage: dialogState.targetLanguage,
@@ -191,15 +198,15 @@ export function CreateProjectDialog({
             });
 
             const projectId = (project as any)?.id ?? '';
-            if (projectId) {
-                toast.success(t('projectCreated'));
-                router.push(`/dashboard/projects/${projectId}/init`);
-            }
+            if (!projectId) throw new Error(t('createFailed'));
+
+            toast.success(t('projectCreated'));
+            router.push(`/dashboard/projects/${projectId}/init`);
             if (project && onCreated) onCreated(project as CreatedProject);
             handleClose();
         } catch (error) {
             logger.error('创建项目失败:', error);
-            toast.error(error instanceof Error ? error.message : t('createFailed'));
+            toast.error(t('createFailed'));
         } finally {
             setIsSubmitting(false);
         }
@@ -209,7 +216,14 @@ export function CreateProjectDialog({
         <>
             <Dialog
                 open={dialogState.isOpen}
-                onOpenChange={open => setDialogState(prev => ({ ...prev, isOpen: open }))}
+                onOpenChange={open => {
+                    if (!open && isSubmitting) return;
+                    if (!open) {
+                        handleClose();
+                        return;
+                    }
+                    setDialogState(prev => ({ ...prev, isOpen: open }));
+                }}
             >
                 {(() => {
                     const showDefault =
@@ -239,6 +253,7 @@ export function CreateProjectDialog({
                                         className={
                                             'h-10 w-full justify-center bg-gradient-to-r from-indigo-500 to-purple-600 p-2 text-white shadow-lg transition-all duration-200 hover:from-indigo-600 hover:to-purple-700 hover:shadow-xl'
                                         }
+                                        aria-label={t('newProject')}
                                         title={t('newProject')}
                                     >
                                         <div className="text-md flex items-center">
@@ -251,7 +266,7 @@ export function CreateProjectDialog({
                     );
                 })()}
 
-                <DialogContent className="bg-white dark:bg-gray-900 sm:max-w-[500px]">
+                <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto bg-white dark:bg-gray-900 sm:max-w-[500px]">
                     <DialogHeader>
                         <DialogTitle className="text-xl font-semibold text-gray-900 dark:text-gray-100">
                             {t('createNewProject')}
@@ -284,7 +299,10 @@ export function CreateProjectDialog({
                         </div>
 
                         <div className="grid gap-2">
-                            <Label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                            <Label
+                                htmlFor="project-domain"
+                                className="text-sm font-medium text-gray-700 dark:text-gray-300"
+                            >
                                 {t('domain')}
                             </Label>
                             <Select
@@ -293,7 +311,7 @@ export function CreateProjectDialog({
                                     setDialogState(prev => ({ ...prev, domain: value }))
                                 }
                             >
-                                <SelectTrigger className="w-full">
+                                <SelectTrigger id="project-domain" className="w-full">
                                     <SelectValue placeholder={t('selectDomain')} />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -306,16 +324,30 @@ export function CreateProjectDialog({
                             </Select>
                         </div>
                         <div className="grid gap-2">
-                            <Label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                            <Label
+                                htmlFor="project-source-language"
+                                className="text-sm font-medium text-gray-700 dark:text-gray-300"
+                            >
                                 {t('sourceLanguage')}
                             </Label>
                             <Select
                                 value={dialogState.sourceLanguage}
-                                onValueChange={value =>
-                                    setDialogState(prev => ({ ...prev, sourceLanguage: value }))
-                                }
+                                onValueChange={value => {
+                                    const nextTargetLanguage = languages.find(
+                                        language => language.key !== value
+                                    )?.key;
+
+                                    setDialogState(prev => ({
+                                        ...prev,
+                                        sourceLanguage: value,
+                                        targetLanguage:
+                                            prev.targetLanguage === value
+                                                ? (nextTargetLanguage ?? prev.targetLanguage)
+                                                : prev.targetLanguage,
+                                    }));
+                                }}
                             >
-                                <SelectTrigger className="w-full">
+                                <SelectTrigger id="project-source-language" className="w-full">
                                     <SelectValue placeholder={t('selectSourceLanguage')} />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -329,7 +361,10 @@ export function CreateProjectDialog({
                         </div>
 
                         <div className="grid gap-2">
-                            <Label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                            <Label
+                                htmlFor="project-target-language"
+                                className="text-sm font-medium text-gray-700 dark:text-gray-300"
+                            >
                                 {t('targetLanguage')}
                             </Label>
                             <Select
@@ -338,7 +373,7 @@ export function CreateProjectDialog({
                                     setDialogState(prev => ({ ...prev, targetLanguage: value }))
                                 }
                             >
-                                <SelectTrigger className="w-full">
+                                <SelectTrigger id="project-target-language" className="w-full">
                                     <SelectValue placeholder={t('selectTargetLanguage')} />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -352,14 +387,23 @@ export function CreateProjectDialog({
                                 </SelectContent>
                             </Select>
                         </div>
-                        <div className="grid gap-2">
-                            <Label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                        <div
+                            className="grid gap-2"
+                            role="group"
+                            aria-labelledby="project-file-label"
+                        >
+                            <Label
+                                id="project-file-label"
+                                className="text-sm font-medium text-gray-700 dark:text-gray-300"
+                            >
                                 {t('uploadFile')}
                             </Label>
                             <FileUpload
                                 onUploadComplete={handleFileUpload}
+                                onUploadReset={() => setUploadedFile(null)}
                                 projectName={dialogState.projectName}
                                 elementName="FileUpload"
+                                resetKey={fileUploadResetKey}
                             />
                             <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
                                 {t('supportedFormats')}
@@ -372,15 +416,18 @@ export function CreateProjectDialog({
                             type="button"
                             variant="outline"
                             onClick={handleClose}
+                            disabled={isSubmitting}
                             className="border-gray-200 hover:bg-gray-100 dark:border-gray-700 dark:hover:bg-gray-800"
                         >
                             {t('cancel')}
                         </Button>
                         <Button
-                            type="submit"
+                            type="button"
                             onClick={handleSubmit}
                             className="bg-gradient-to-r from-indigo-500 to-purple-600 text-white hover:from-indigo-600 hover:to-purple-700"
-                            disabled={!uploadedFile || !dialogState.projectName || isSubmitting}
+                            disabled={
+                                !uploadedFile || !dialogState.projectName.trim() || isSubmitting
+                            }
                         >
                             {isSubmitting ? t('creating') : t('createProject')}
                         </Button>

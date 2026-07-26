@@ -198,23 +198,27 @@
         },
         "migrations": {
             "title": "Database Migrations",
-            "description": "Use Prisma Migrate to manage database schema changes:",
+            "description": "For isolated local startup, use the guarded runner first. Prisma commands below are advanced, environment-specific maintenance commands and must never be pointed at an arbitrary shell database:",
             "commands": [
                 {
+                    "command": "npm run local:setup && npm run local:check",
+                    "description": "Only supported isolated local initialization: start owned dependencies, migrate deeptrans_local, create demo data, then verify readiness"
+                },
+                {
                     "command": "yarn prisma migrate dev",
-                    "description": "Create new migration in development environment"
+                    "description": "Create a migration only for an explicitly approved development database; not part of the safe local startup path"
                 },
                 {
                     "command": "yarn prisma migrate deploy",
-                    "description": "Apply migrations in production environment"
+                    "description": "Apply migrations only through the approved production deployment procedure"
                 },
                 {
                     "command": "yarn prisma generate",
-                    "description": "Generate Prisma Client"
+                    "description": "Generate Prisma Client without changing a database"
                 },
                 {
                     "command": "yarn prisma studio",
-                    "description": "Open Prisma Studio to visualize database"
+                    "description": "Advanced inspection command; never start it with an arbitrary environment URL"
                 }
             ]
         }

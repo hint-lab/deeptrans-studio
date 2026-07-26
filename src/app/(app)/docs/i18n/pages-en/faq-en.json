@@ -18,19 +18,19 @@
                     },
                     {
                         "question": "What are the minimum system requirements?",
-                        "solution": "Minimum requirements: Node.js ≥ 18.18, Docker and Docker Compose (for dependency services), at least 4GB RAM.\nRecommended configuration: 8GB+ RAM, multi-core CPU for better performance."
+                        "solution": "Minimum requirements: Node.js ≥ 18.18, Docker Desktop for the local dependency containers, and at least 4GB RAM.\nRecommended configuration: 8GB+ RAM and a multi-core CPU. For local work, start dependency containers only through npm run local:up."
                     },
                     {
                         "question": "Is Docker required?",
-                        "solution": "Development environment recommends using Docker Compose to run dependency services (PostgreSQL, Valkey, pgvector, etc.), but Next.js application and Worker can run locally. Production environment recommends using Docker for deployment."
+                        "solution": "Docker Desktop is required for the guarded local dependency containers, but do not run project Compose commands directly. Create .env.local, run npm run local:setup (it starts dependencies and creates the demo account), then npm run local:check; use npm run dev and, when needed, npm run worker. Production deployment remains a separate, environment-specific Docker procedure."
                     },
                     {
                         "question": "How to configure OpenAI API?",
-                        "solution": "Set OPENAI_API_KEY, OPENAI_BASE_URL, and OPENAI_API_MODEL in .env.local. If using other OpenAI API-compatible services (such as DeepSeek), just modify the BASE_URL."
+                        "solution": "Remote AI is disabled by default: with LOCAL_ALLOW_REMOTE_AI=no, translation, chat, embeddings, and model-backed retrieval are expected to be unavailable. To enable them deliberately for local development, set LOCAL_ALLOW_REMOTE_AI=yes and development-only provider settings in .env.local, then restart through npm run dev. Never copy production credentials into the local profile."
                     },
                     {
                         "question": "Where should environment variables be placed?",
-                        "solution": "Development environment uses .env.local file, production environment uses .env or .env.production. Ensure these files are added to .gitignore and do not commit sensitive information to version control."
+                        "solution": "Local development uses .env.local only. Do not reuse .env or .env.production. For a first install, run npm run local:setup and then npm run local:check before starting the app. Production configuration belongs to its deployment procedure and must not be copied into .env.local."
                     }
                 ]
             },
@@ -39,28 +39,16 @@
                 "description": "Questions about database backup, storage configuration, and data management",
                 "questions": [
                     {
-                        "question": "How to backup database?",
-                        "commands": [
-                            {
-                                "code": "pg_dump $DATABASE_URL > backup.sql",
-                                "language": "bash",
-                                "description": "Use PostgreSQL's pg_dump command. Regular backups are important, especially in production environments."
-                            }
-                        ]
+                        "question": "How to back up a database?",
+                        "solution": "Do not run a backup command against an arbitrary DATABASE_URL from a local shell. npm run local:check verifies the owned local profile; production backups must follow the approved production backup procedure for the intended environment."
                     },
                     {
                         "question": "How to reset database?",
-                        "commands": [
-                            {
-                                "code": "yarn prisma migrate reset",
-                                "language": "bash",
-                                "description": "Development environment can use this command, which will delete all data and re-run migrations. Production environment please operate with caution, recommend backing up first."
-                            }
-                        ]
+                        "solution": "There is intentionally no general local reset command. npm run local:setup is the only documented path for local migrations and demo data, not a reset; run npm run local:check after setup to diagnose the isolated profile. Do not use raw Prisma reset against an unknown database."
                     },
                     {
                         "question": "Where is object storage data stored?",
-                        "solution": "Local development uses MinIO Docker volumes. Production uses Tencent COS, so files are stored in the configured COS bucket."
+                        "solution": "Local development uses the MinIO instance owned by the guarded local runner. Production uses Tencent COS, so files are stored in the configured COS bucket."
                     },
                     {
                         "question": "How to clean PostgreSQL vector data?",
@@ -126,7 +114,7 @@
                 "questions": [
                     {
                         "question": "How to deploy to production environment?",
-                        "solution": "1) Prepare production environment variables, 2) Use Docker Compose to build and start services, 3) Configure Traefik reverse proxy and HTTPS, 4) Set up database backups, 5) Configure monitoring and logs."
+                        "solution": "1) Prepare production environment variables, 2) use the reviewed production deployment runbook and its environment-specific service commands, 3) configure Traefik reverse proxy and HTTPS, 4) set up database backups, 5) configure monitoring and logs. Do not reuse the production procedure for local development."
                     },
                     {
                         "question": "What configurations are needed for production environment?",
@@ -138,7 +126,7 @@
                     },
                     {
                         "question": "How to monitor system status?",
-                        "solution": "Can: 1) Use docker compose ps to view service status, 2) View logs of each service, 3) Use Prisma Studio to monitor database, 4) Use Prisma Studio to inspect translation memory rows, 5) Configure monitoring tools like Prometheus."
+                        "solution": "In production, follow the approved monitoring and deployment runbook to inspect service status and logs, inspect data through approved access, and configure tools such as Prometheus. Those production procedures must not be used as local-development commands."
                     }
                 ]
             },

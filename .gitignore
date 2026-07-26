@@ -72,6 +72,7 @@ web_modules/
 .env
 .env.test
 .env.local
+.env.production
 .env*.local
 
 # parcel-bundler cache (https://parceljs.org/)
@@ -86,6 +87,7 @@ out
 # Nuxt.js build / generate output
 .nuxt
 dist
+src-tauri/target/
 
 # Gatsby files
 .cache/
@@ -127,4 +129,5 @@ milvus_script/
 .DS_Store
 tmp/
 test/
+.playwright-cli/
 docker-compose-local.yml

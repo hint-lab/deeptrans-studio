@@ -4,6 +4,9 @@ dist/
 .next/
 .git/
 .gitignore
+.env
+.env.*
+!.env.example
 Dockerfile*
 Dockerfile.*
 **/*.log

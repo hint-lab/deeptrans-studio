@@ -1,14 +1,17 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useLocale } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { Search, X, Loader2 } from 'lucide-react';
+import { SanitizedHtml } from '@/components/sanitized-html';
+import { isCurrentHelpPanelRequest } from '@/lib/help-panel-request';
 
 type HelpPanelProps = { src?: string };
 
 // 组件方式渲染文档主体，并提供简单搜索
 export default function HelpPanel({ src }: HelpPanelProps) {
     const locale = useLocale();
+    const t = useTranslations('IDE.helpPanel');
     const rawDefault = src || '/docs/getting-started';
     const ensureLocalePath = useCallback(
         (href: string) => {
@@ -32,12 +35,24 @@ export default function HelpPanel({ src }: HelpPanelProps) {
     }, []);
     const defaultPath = ensureLocalePath(rawDefault);
     const [currentPath, setCurrentPath] = useState<string>(defaultPath);
-    const [html, setHtml] = useState<string>(
-        "<div class='p-3 text-xs text-foreground/70'>Loading...</div>"
-    );
-    const [loading, setLoading] = useState<boolean>(false);
+    const [html, setHtml] = useState<string>('');
+    const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
-    const contentRef = useRef<HTMLDivElement>(null);
+    const [reloadKey, setReloadKey] = useState(0);
+    const [isSearching, setIsSearching] = useState(false);
+    const [searchError, setSearchError] = useState<string | null>(null);
+    const [searchedQuery, setSearchedQuery] = useState<string | null>(null);
+    const docRequestIdRef = useRef(0);
+    const searchRequestIdRef = useRef(0);
+    const searchAbortRef = useRef<AbortController | null>(null);
+    const currentPathRef = useRef(currentPath);
+    currentPathRef.current = currentPath;
+
+    useEffect(() => {
+        // Keep the open article when the interface locale changes instead of
+        // leaving an old-language route mounted in the side panel.
+        setCurrentPath(path => ensureLocalePath(stripLocalePath(path)));
+    }, [ensureLocalePath, stripLocalePath]);
 
     // 支持的文档入口（可按需扩展）
     const docEntries = useMemo(() => ['/docs/getting-started', '/docs/faq'], []);
@@ -61,42 +76,77 @@ export default function HelpPanel({ src }: HelpPanelProps) {
         }
     }, []);
 
-    const loadDoc = useCallback(
-        async (path: string) => {
+    useEffect(() => {
+        const requestId = ++docRequestIdRef.current;
+        const requestedPath = currentPath;
+        const controller = new AbortController();
+        const isCurrentRequest = () =>
+            isCurrentHelpPanelRequest(
+                requestId,
+                docRequestIdRef.current,
+                requestedPath,
+                currentPathRef.current
+            );
+
+        const loadDoc = async () => {
             try {
                 setLoading(true);
                 setError(null);
                 // 优先尝试带 locale 的地址，不行再回退
-                let target = ensureLocalePath(path);
-                let res = await fetch(target, { headers: { Accept: 'text/html' } });
+                let target = ensureLocalePath(requestedPath);
+                let res = await fetch(target, {
+                    headers: { Accept: 'text/html' },
+                    signal: controller.signal,
+                });
                 if (!res.ok) {
                     // 去掉语言前缀再试
-                    const stripped = stripLocalePath(path);
+                    const stripped = stripLocalePath(requestedPath);
                     target = stripped;
-                    res = await fetch(target, { headers: { Accept: 'text/html' } });
-                }
-                if (!res.ok) {
-                    // 最后回退到默认入口（无前缀）
-                    target = '/docs/getting-started';
-                    res = await fetch(target, { headers: { Accept: 'text/html' } });
+                    res = await fetch(target, {
+                        headers: { Accept: 'text/html' },
+                        signal: controller.signal,
+                    });
                 }
                 if (!res.ok) throw new Error(`加载失败: ${res.status}`);
                 const text = await res.text();
+                if (!isCurrentRequest()) return;
                 const mainHtml = extractMainHtml(text);
-                setHtml(mainHtml || '<div class="p-3 text-xs text-foreground/70">No content</div>');
-            } catch (e: any) {
-                setError(e?.message || String(e));
-                setHtml('<div class="p-3 text-xs text-red-600">加载文档失败</div>');
+                setHtml(mainHtml);
+            } catch (error) {
+                if (
+                    isCurrentRequest() &&
+                    !(error instanceof DOMException && error.name === 'AbortError')
+                ) {
+                    setHtml('');
+                    setError(t('loadFailed'));
+                }
             } finally {
-                setLoading(false);
+                if (isCurrentRequest()) setLoading(false);
             }
-        },
-        [extractMainHtml, ensureLocalePath, stripLocalePath]
-    );
+        };
 
-    useEffect(() => {
-        loadDoc(currentPath);
-    }, [currentPath, loadDoc]);
+        void loadDoc();
+        return () => controller.abort();
+    }, [currentPath, reloadKey, ensureLocalePath, extractMainHtml, stripLocalePath, t]);
+
+    const openDocument = useCallback(
+        (path: string) => {
+            // Clear the previous article synchronously with navigation. The
+            // pending effect is invalidated before it can paint or overwrite
+            // the new article with an older response.
+            docRequestIdRef.current += 1;
+            setLoading(true);
+            setHtml('');
+            setError(null);
+            const nextPath = ensureLocalePath(path);
+            if (nextPath === currentPathRef.current) {
+                setReloadKey(value => value + 1);
+                return;
+            }
+            setCurrentPath(nextPath);
+        },
+        [ensureLocalePath]
+    );
 
     // 拦截内容中的内部链接
     const onContentClick = useCallback(
@@ -108,10 +158,10 @@ export default function HelpPanel({ src }: HelpPanelProps) {
             const isInternal = href.startsWith('/docs') || /^\/(\w[\w-]*)\/docs/.test(href);
             if (isInternal) {
                 e.preventDefault();
-                setCurrentPath(ensureLocalePath(href));
+                openDocument(href);
             }
         },
-        [ensureLocalePath]
+        [openDocument]
     );
 
     // 简单搜索：在预定义文档中查找匹配
@@ -120,22 +170,51 @@ export default function HelpPanel({ src }: HelpPanelProps) {
         []
     );
     const doSearch = useCallback(async () => {
-        if (!query.trim()) {
+        const querySnapshot = query.trim();
+        searchAbortRef.current?.abort();
+        const requestId = ++searchRequestIdRef.current;
+        if (!querySnapshot) {
             setResults([]);
+            setSearchedQuery(null);
+            setSearchError(null);
+            setIsSearching(false);
             return;
         }
-        const q = query.trim().toLowerCase();
+        const controller = new AbortController();
+        searchAbortRef.current = controller;
+        const q = querySnapshot.toLowerCase();
         const out: Array<{ path: string; title: string; snippet: string }> = [];
+        let loadedAnyDocument = false;
+        const isCurrentSearch = () =>
+            isCurrentHelpPanelRequest(
+                requestId,
+                searchRequestIdRef.current,
+                querySnapshot,
+                query.trim()
+            );
+
+        setIsSearching(true);
+        setSearchError(null);
+        setSearchedQuery(querySnapshot);
+        setResults([]);
         for (const p of docEntries) {
             try {
                 let target = ensureLocalePath(p);
-                let resp = await fetch(target, { headers: { Accept: 'text/html' } });
+                let resp = await fetch(target, {
+                    headers: { Accept: 'text/html' },
+                    signal: controller.signal,
+                });
                 if (!resp.ok) {
                     target = p; // 回退到无 locale
-                    resp = await fetch(target, { headers: { Accept: 'text/html' } });
+                    resp = await fetch(target, {
+                        headers: { Accept: 'text/html' },
+                        signal: controller.signal,
+                    });
                 }
                 if (!resp.ok) continue;
+                loadedAnyDocument = true;
                 const t = await resp.text();
+                if (!isCurrentSearch()) return;
                 const parser = new DOMParser();
                 const doc = parser.parseFromString(t, 'text/html');
                 const main = doc.querySelector('main') || doc.querySelector('article') || doc.body;
@@ -148,52 +227,93 @@ export default function HelpPanel({ src }: HelpPanelProps) {
                     const snippet = `${textContent.slice(start, idx)}${textContent.slice(idx, idx + q.length)}${textContent.slice(idx + q.length, end)}`;
                     out.push({ path: ensureLocalePath(p), title, snippet });
                 }
-            } catch {}
+            } catch (error) {
+                if (error instanceof DOMException && error.name === 'AbortError') return;
+            }
         }
+        if (!isCurrentSearch()) return;
         setResults(out);
-    }, [query, docEntries, ensureLocalePath]);
+        setSearchError(loadedAnyDocument ? null : t('searchFailed'));
+        setIsSearching(false);
+    }, [query, docEntries, ensureLocalePath, t]);
+
+    const clearSearch = () => {
+        searchAbortRef.current?.abort();
+        searchRequestIdRef.current += 1;
+        setQuery('');
+        setResults([]);
+        setSearchedQuery(null);
+        setSearchError(null);
+        setIsSearching(false);
+    };
+
+    const handleQueryChange = (nextQuery: string) => {
+        // A changed query makes any older search result misleading. Abort it
+        // immediately instead of leaving the spinner/results to settle later.
+        searchAbortRef.current?.abort();
+        searchRequestIdRef.current += 1;
+        setQuery(nextQuery);
+        setResults([]);
+        setSearchedQuery(null);
+        setSearchError(null);
+        setIsSearching(false);
+    };
 
     return (
         <div className="flex h-full w-full flex-col">
-            <div className="border-b p-2">
-                <div className="relative">
+            <div className="border-b bg-muted/20 p-2.5">
+                <form
+                    className="relative"
+                    role="search"
+                    onSubmit={event => {
+                        event.preventDefault();
+                        void doSearch();
+                    }}
+                >
                     <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                     <input
                         value={query}
-                        onChange={e => setQuery(e.target.value)}
-                        onKeyDown={e => {
-                            if (e.key === 'Enter') doSearch();
-                        }}
-                        placeholder="搜索文档..."
+                        onChange={e => handleQueryChange(e.target.value)}
+                        placeholder={t('searchPlaceholder')}
+                        aria-label={t('searchPlaceholder')}
                         className="h-9 w-full rounded-md border bg-background pl-8 pr-16 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1"
                     />
-                    {loading && (
+                    {(loading || isSearching) && (
                         <Loader2 className="absolute right-8 top-2.5 h-5 w-5 animate-spin text-muted-foreground" />
                     )}
                     {query && (
                         <button
-                            aria-label="清空"
+                            type="button"
+                            aria-label={t('clearSearch')}
                             className="absolute right-2.5 top-2.5 inline-flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:bg-muted"
-                            onClick={() => {
-                                setQuery('');
-                                setResults([]);
-                            }}
+                            onClick={clearSearch}
                         >
                             <X className="h-3.5 w-3.5" />
                         </button>
                     )}
-                </div>
+                </form>
             </div>
-            {!!results.length && (
-                <div className="max-h-40 space-y-1 overflow-auto border-b p-2">
+            {(results.length > 0 || searchError || (searchedQuery && !isSearching)) && (
+                <div
+                    className="max-h-40 space-y-1 overflow-auto border-b bg-background p-2"
+                    aria-live="polite"
+                >
+                    {searchError && (
+                        <p className="px-1 py-1 text-xs text-destructive">{searchError}</p>
+                    )}
+                    {!searchError && searchedQuery && !results.length && (
+                        <p className="px-1 py-1 text-xs text-muted-foreground">
+                            {t('noResults', { query: searchedQuery })}
+                        </p>
+                    )}
                     {results.map(r => (
                         <div key={`${r.path}-${r.title}`} className="text-xs">
                             <a
                                 href={r.path}
                                 onClick={e => {
                                     e.preventDefault();
-                                    setCurrentPath(r.path);
-                                    setResults([]);
+                                    openDocument(r.path);
+                                    clearSearch();
                                 }}
                                 className="font-medium text-foreground hover:underline"
                             >
@@ -206,14 +326,35 @@ export default function HelpPanel({ src }: HelpPanelProps) {
             )}
             <div className="min-h-0 flex-1 overflow-auto" onClick={onContentClick}>
                 {loading ? (
-                    <div className="p-3 text-xs text-foreground/70">Loading...</div>
+                    <div className="p-3 text-xs text-muted-foreground" role="status">
+                        {t('loading')}
+                    </div>
                 ) : error ? (
-                    <div className="p-3 text-xs text-red-600">{error}</div>
-                ) : (
                     <div
-                        ref={contentRef}
+                        className="m-3 flex flex-col items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive"
+                        role="alert"
+                    >
+                        <p>{error}</p>
+                        <button
+                            type="button"
+                            className="rounded-md border border-destructive/30 bg-background px-2 py-1 font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            onClick={() => {
+                                setLoading(true);
+                                setError(null);
+                                setHtml('');
+                                setReloadKey(value => value + 1);
+                            }}
+                        >
+                            {t('retry')}
+                        </button>
+                    </div>
+                ) : !html ? (
+                    <div className="p-3 text-xs text-muted-foreground">{t('noContent')}</div>
+                ) : (
+                    <SanitizedHtml
                         className="prose dark:prose-invert max-w-none p-3"
-                        dangerouslySetInnerHTML={{ __html: html }}
+                        html={html}
+                        profile="help"
                     />
                 )}
             </div>

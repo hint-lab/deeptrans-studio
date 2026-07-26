@@ -18,19 +18,19 @@
                     },
                     {
                         "question": "最低系统要求是什么？",
-                        "solution": "最低要求：Node.js ≥ 18.18、Docker 和 Docker Compose（用于依赖服务）、至少 4GB RAM。\n推荐配置：8GB+ RAM、多核 CPU，以获得更好的性能。"
+                        "solution": "最低要求：Node.js ≥ 18.18、用于本地依赖容器的 Docker Desktop，以及至少 4GB RAM。\n推荐配置：8GB+ RAM、多核 CPU。本地依赖只能通过 npm run local:up 启动。"
                     },
                     {
                         "question": "必须使用 Docker 吗？",
-                        "solution": "开发环境推荐使用 Docker Compose 运行依赖服务（PostgreSQL、Valkey、pgvector 等），但 Next.js 应用和 Worker 可以在本地运行。生产环境建议使用 Docker 进行部署。"
+                        "solution": "本地依赖容器需要 Docker Desktop，但不要直接执行项目 Compose 命令。创建 .env.local 后，先运行 npm run local:setup（它会启动依赖并创建演示账号），再运行 npm run local:check；然后使用 npm run dev，后台任务需要时另开终端运行 npm run worker。生产部署仍是独立的、按环境执行的 Docker 流程。"
                     },
                     {
                         "question": "如何配置 OpenAI API？",
-                        "solution": "在 .env.local 中设置 OPENAI_API_KEY、OPENAI_BASE_URL 和 OPENAI_API_MODEL。\n如果使用其他兼容 OpenAI API 的服务（如 DeepSeek），只需修改 BASE_URL 即可。"
+                        "solution": "远程 AI 默认关闭：LOCAL_ALLOW_REMOTE_AI=no 时，翻译、聊天、向量嵌入和模型驱动检索预期不可用。若确需在本地启用，请只在 .env.local 中设置 LOCAL_ALLOW_REMOTE_AI=yes 和开发专用的服务商配置，然后通过 npm run dev 重启；不要复制生产凭据。"
                     },
                     {
                         "question": "环境变量应该放在哪里？",
-                        "solution": "开发环境使用 .env.local 文件，生产环境使用 .env 或 .env.production。\n确保这些文件已添加到 .gitignore，不要提交敏感信息到版本控制。"
+                        "solution": "本地开发只使用 .env.local。不要复用 .env 或 .env.production。首次安装先运行 npm run local:setup，再运行 npm run local:check，然后再启动应用。生产配置属于生产部署流程，不能复制到 .env.local。"
                     }
                 ]
             },
@@ -40,27 +40,15 @@
                 "questions": [
                     {
                         "question": "如何备份数据库？",
-                        "commands": [
-                            {
-                                "code": "pg_dump $DATABASE_URL > backup.sql",
-                                "language": "bash",
-                                "description": "使用 PostgreSQL 的 pg_dump 命令。定期备份是重要的，特别是在生产环境中。"
-                            }
-                        ]
+                        "solution": "不要在本地 shell 中对不明确的 DATABASE_URL 直接执行备份命令。npm run local:check 只用于核验受管的本地配置；生产备份必须按目标环境的已批准生产备份流程执行。"
                     },
                     {
                         "question": "如何重置数据库？",
-                        "commands": [
-                            {
-                                "code": "yarn prisma migrate reset",
-                                "language": "bash",
-                                "description": "开发环境可以使用此命令，这会删除所有数据并重新运行迁移。生产环境请谨慎操作，建议先备份。"
-                            }
-                        ]
+                        "solution": "系统有意不提供通用的本地重置命令。npm run local:setup 是唯一文档化的本地迁移和演示数据入口，不是重置命令；setup 后可运行 npm run local:check 诊断隔离配置。不要对未知数据库使用原始 Prisma reset。"
                     },
                     {
                         "question": "对象存储的数据在哪里？",
-                        "solution": "本地开发使用 MinIO Docker 卷。生产环境使用腾讯云 COS，文件存储在配置的 COS bucket 中。"
+                        "solution": "本地开发使用受保护本地启动器拥有的 MinIO 实例。生产环境使用腾讯云 COS，文件存储在配置的 COS bucket 中。"
                     },
                     {
                         "question": "如何清理 pgvector 向量数据？",
@@ -126,7 +114,7 @@
                 "questions": [
                     {
                         "question": "如何部署到生产环境？",
-                        "solution": "1) 准备生产环境变量，2) 使用 Docker Compose 构建和启动服务，3) 配置 Traefik 反向代理和 HTTPS，4) 设置数据库备份，5) 配置监控和日志。"
+                        "solution": "1) 准备生产环境变量，2) 使用已评审的生产部署运行手册及其中按环境限定的服务命令，3) 配置 Traefik 反向代理和 HTTPS，4) 设置数据库备份，5) 配置监控和日志。不要把生产流程复用于本地开发。"
                     },
                     {
                         "question": "生产环境需要哪些配置？",
@@ -138,7 +126,7 @@
                     },
                     {
                         "question": "如何监控系统状态？",
-                        "solution": "可以：1) 使用 docker compose ps 查看服务状态，2) 查看各服务日志，3) 使用 Prisma Studio 监控数据库，4) 使用 Prisma Studio 查看翻译记忆数据，5) 配置 Prometheus 等监控工具。"
+                        "solution": "生产环境应按已批准的监控与部署运行手册查看服务状态和日志，通过已批准的访问方式检查数据，并配置 Prometheus 等监控工具。这些生产流程不能作为本地开发命令使用。"
                     }
                 ]
             },

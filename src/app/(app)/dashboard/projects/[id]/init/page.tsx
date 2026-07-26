@@ -8,11 +8,33 @@ import { Button } from '@/components/ui/button';
 import { useProjectInit } from '@/hooks/useProjectInit';
 import { resolveProjectInitResumeTarget } from '@/lib/document-init-status';
 import type { SegmentGranularity } from '@/lib/document-segmentation';
+import {
+    DOCUMENT_INIT_PARSER_FAILED_MARKER,
+    isDocumentInitParsePreviewAdvanceable,
+    resolveDocumentInitParseFailureMarker,
+} from '@/lib/document-init-parse-state';
+import {
+    beginDocumentTermsCancel,
+    createDocumentTermsRetryBatchId,
+    type DocumentTermsCancelState,
+} from '@/lib/document-term-cancellation';
+import {
+    createProjectInitApiError,
+    createProjectInitStateError,
+    resolveProjectInitErrorKind,
+    resolveProjectInitParseFailureCode,
+} from '@/lib/project-init-error';
 import { createLogger } from '@/lib/logger';
+import { createProjectInitDeferredActionGate } from '@/lib/project-init-deferred-action';
+import { resolveProjectInitPersistOutcome } from '@/lib/project-init-persist';
+import {
+    createProjectInitRequestScopeGate,
+    type ProjectInitRequestScope,
+} from '@/lib/project-init-request-scope';
 import { Coffee, Loader, Loader2, Redo2, Square, SquareCheckBig } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useParams, useRouter } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import ParsePanel from './components/ParsePanel';
 import SegmentPanel from './components/SegmentPanel';
@@ -34,14 +56,59 @@ export default function ProjectInitPage() {
     const { id } = useParams<{ id: string }>();
     const projectId = String(id || '');
     const router = useRouter();
+
+    function resolveSafeErrorDescription(error: unknown, fallback: string): string {
+        switch (resolveProjectInitErrorKind(error)) {
+            case 'empty-document':
+                return t('emptyDocumentMessage');
+            case 'parse-not-ready':
+                return t('parsePersistFailed');
+            case 'terms-start-failed':
+                return t('termsStartFailed');
+            case 'terms-run-failed':
+                return t('termsRunFailed');
+            case 'terms-new-batch':
+                return t('termsNewBatchRequired');
+            case 'terms-retry':
+                return t('termsRetryRequired');
+            case 'terms-cancel-updated':
+                return t('termsCancelUpdated');
+            case 'terms-cancel-completed':
+                return t('termsCancelCompleted');
+            case 'terms-cancel-failed':
+                return t('termsCancelFailed');
+            case 'terms-write-in-progress':
+                return t('termsWriteInProgress');
+            case 'terms-empty':
+                return t('termsEmpty');
+            case 'terms-pretranslate-incomplete':
+                return t('termsPretranslateIncomplete');
+            case 'document-stage-changed':
+                return t('documentStageChanged');
+            case 'segment-conflict':
+                return t('segmentConflict');
+            case 'retry':
+            default:
+                return fallback;
+        }
+    }
+
     const { entry, restart, updateBatchId, updateStep, updateProgress } = useProjectInit(projectId);
     const batchId = entry?.batchId || '';
+    const requestScopeGateRef = useRef(createProjectInitRequestScopeGate());
     logger.info('ProjectInitPage render projectId, batchId', `${projectId}, ${batchId}`);
     const segPct = entry?.segPct || 0;
     const termPct = entry?.termPct || 0;
     const segPctRef = useRef(0);
     const termPctRef = useRef(0);
-    const [phase, setPhase] = useState<'INIT' | 'RUNNING' | 'DONE' | 'ERROR'>('INIT');
+    const parseRequestRef = useRef(0);
+    const persistRequestRef = useRef(0);
+    const termPreviewRequestRef = useRef(0);
+    const termStartRequestRef = useRef(0);
+    const termCancelRequestRef = useRef(0);
+    const termApplyRequestRef = useRef(0);
+    const skipTermsRequestRef = useRef(0);
+    const [phase, setPhase] = useState<'INIT' | 'RUNNING' | 'DONE' | 'ERROR' | 'CANCELED'>('INIT');
     const currentStep: 'parse' | 'segment' | 'terms' | 'done' = entry?.currentStep || 'parse';
     const [starting, setStarting] = useState(false);
     const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -49,12 +116,31 @@ export default function ProjectInitPage() {
     const statusAbortRef = useRef<AbortController | null>(null);
     const restartStatusPollingRef = useRef<(() => void) | null>(null);
     const termFailureNotifiedRef = useRef(false);
+    const termCanceledNotifiedRef = useRef(false);
+    const termCancellationHoldRef = useRef(false);
+    const [localProjectId, setLocalProjectId] = useState(projectId);
     const [preview, setPreview] = useState<string>('');
     const [terms, setTerms] = useState<Array<{ term: string; count: number; score?: number }>>([]);
     const [previewHtml, setPreviewHtml] = useState<string>('');
     // 横向步骤视图无需折叠面板
     const [isNavigatingToIDE, setIsNavigatingToIDE] = useState(false);
     const overall = Math.round((segPct + termPct) / 2);
+
+    useLayoutEffect(() => {
+        requestScopeGateRef.current.sync(projectId, batchId);
+    }, [projectId, batchId]);
+
+    function captureRequestScope(): ProjectInitRequestScope {
+        // Capture the values from this render, not merely the gate's latest
+        // values. A timer from an old render must not be able to borrow the
+        // new project's scope and then issue a request for the old one.
+        const current = requestScopeGateRef.current.capture();
+        return { projectId, batchId, version: current.version };
+    }
+
+    function isRequestCurrent(scope: ProjectInitRequestScope) {
+        return requestScopeGateRef.current.isCurrent(scope);
+    }
 
     useEffect(() => {
         /* 由 useProjectInit.ensure 初始化 batchId；此处不再本地生成 */
@@ -73,17 +159,24 @@ export default function ProjectInitPage() {
             return true;
         }
         setPhase('ERROR');
-        setPreviewHtml('ERROR:PARSER_FAILED');
+        setPreviewHtml(DOCUMENT_INIT_PARSER_FAILED_MARKER);
         return true;
     }
 
-    async function loadParsePreview(resultBatchId: string, waitMs: number) {
+    async function loadParsePreview(
+        resultBatchId: string,
+        waitMs: number,
+        scope: ProjectInitRequestScope = captureRequestScope()
+    ) {
+        if (!isRequestCurrent(scope)) return false;
         const statusUrl = new URL(`/api/projects/${projectId}/init`, window.location.origin);
         statusUrl.searchParams.set('batchId', resultBatchId);
         statusUrl.searchParams.set('wait', String(waitMs));
         const statusResponse = await fetch(statusUrl.toString());
+        if (!isRequestCurrent(scope)) return false;
         if (!statusResponse.ok) return false;
         const result = await statusResponse.json();
+        if (!isRequestCurrent(scope)) return false;
         if (typeof result?.preview === 'string') setPreview(result.preview);
         if (typeof result?.previewHtml === 'string') setPreviewHtml(result.previewHtml);
         return typeof result?.previewHtml === 'string' && result.previewHtml.length > 0;
@@ -91,6 +184,10 @@ export default function ProjectInitPage() {
 
     async function runParse() {
         if (!projectId) return;
+        const scope = captureRequestScope();
+        if (!isRequestCurrent(scope)) return;
+        const requestId = ++parseRequestRef.current;
+        setPreview('');
         setPreviewHtml('');
         setStarting(true);
         try {
@@ -98,7 +195,10 @@ export default function ProjectInitPage() {
             u.searchParams.set('batchId', batchId);
             const r = await fetch(u.toString(), { method: 'POST' });
             const parsed = await r.json().catch(() => ({}));
-            if (!r.ok) throw new Error(parsed?.error || 'parse failed');
+            if (!isRequestCurrent(scope) || requestId !== parseRequestRef.current) return;
+            if (!r.ok) {
+                throw createProjectInitApiError(parsed);
+            }
             if (parsed?.skipped) {
                 const activeBatchId = String(parsed?.activeBatchId || batchId);
                 if (activeBatchId !== batchId) {
@@ -107,43 +207,162 @@ export default function ProjectInitPage() {
                 if (!resumeFromDocumentStatus(parsed?.status)) {
                     let previewReady = false;
                     for (let attempt = 0; attempt < 10 && !previewReady; attempt += 1) {
-                        previewReady = await loadParsePreview(activeBatchId, 30_000);
+                        previewReady = await loadParsePreview(activeBatchId, 30_000, scope);
+                        if (!isRequestCurrent(scope) || requestId !== parseRequestRef.current)
+                            return;
                     }
-                    if (!previewReady) throw new Error('parse result timeout');
+                    if (!previewReady) throw createProjectInitStateError('parse-not-ready');
                 }
                 return;
             }
             // 解析完成后，取一次状态以获取预览，停留等待用户确认
-            await loadParsePreview(batchId, 3000);
+            await loadParsePreview(batchId, 3000, scope);
+            if (!isRequestCurrent(scope) || requestId !== parseRequestRef.current) return;
             updateStep('parse');
-        } catch {
+        } catch (error: unknown) {
+            if (!isRequestCurrent(scope) || requestId !== parseRequestRef.current) return;
             setPhase('ERROR');
-            setPreviewHtml('ERROR:PARSER_FAILED');
+            setPreviewHtml(
+                resolveDocumentInitParseFailureMarker(resolveProjectInitParseFailureCode(error))
+            );
         } finally {
-            setStarting(false);
+            if (requestId === parseRequestRef.current) {
+                setStarting(false);
+            }
         }
     }
+
+    async function persistParseAndAdvance() {
+        if (!projectId || !batchId) return;
+        const scope = captureRequestScope();
+        if (!isRequestCurrent(scope)) return;
+        const requestId = ++persistRequestRef.current;
+        setStarting(true);
+        try {
+            const url = new URL(`/api/projects/${projectId}/init`, window.location.origin);
+            url.searchParams.set('action', 'persist');
+            url.searchParams.set('batchId', batchId);
+            const response = await fetch(url.toString(), { method: 'POST' });
+            const result = await response.json().catch(() => ({}));
+            if (!isRequestCurrent(scope) || requestId !== persistRequestRef.current) return;
+            if (!response.ok) {
+                throw createProjectInitApiError(result);
+            }
+
+            const outcome = resolveProjectInitPersistOutcome(result);
+            if (!outcome) {
+                throw createProjectInitStateError('parse-not-ready');
+            }
+            if (outcome.kind === 'resume') {
+                if (!resumeFromDocumentStatus(result?.status)) {
+                    throw createProjectInitStateError('parse-not-ready');
+                }
+                return;
+            }
+
+            updateStep('segment');
+        } catch (error: unknown) {
+            if (!isRequestCurrent(scope) || requestId !== persistRequestRef.current) return;
+            toast.error(t('parsePersistFailedTitle'), {
+                description: resolveSafeErrorDescription(error, t('parsePersistFailed')),
+            });
+        } finally {
+            if (requestId === persistRequestRef.current) {
+                setStarting(false);
+            }
+        }
+    }
+
+    // Route navigation keeps this client component mounted. Clear its local
+    // view state before a new project's bootstrap request can finish, and
+    // invalidate timers/requests that still belong to the project just left.
+    useEffect(() => {
+        if (localProjectId === projectId) return;
+
+        parseRequestRef.current += 1;
+        persistRequestRef.current += 1;
+        termPreviewRequestRef.current += 1;
+        termStartRequestRef.current += 1;
+        termCancelRequestRef.current += 1;
+        termApplyRequestRef.current += 1;
+        skipTermsRequestRef.current += 1;
+        segRequestRef.current += 1;
+        segmentApplyGateRef.current.cancel();
+        termApplyGateRef.current.cancel();
+        if (applyTimerRef.current) clearTimeout(applyTimerRef.current);
+        if (termApplyTimerRef.current) clearTimeout(termApplyTimerRef.current);
+        if (segDebounceRef.current) clearTimeout(segDebounceRef.current);
+        if (statusAbortRef.current) statusAbortRef.current.abort();
+
+        segPctRef.current = 0;
+        termPctRef.current = 0;
+        termStartInFlightRef.current = false;
+        termCancelIntentRef.current = false;
+        termCancellationHoldRef.current = false;
+        termFailureNotifiedRef.current = false;
+        termCanceledNotifiedRef.current = false;
+        setStarting(false);
+        setPhase('INIT');
+        setPreview('');
+        setPreviewHtml('');
+        setTerms([]);
+        setTermPreview([]);
+        setTermPreviewError(null);
+        setTermPreviewLoading(false);
+        setDictMatches([]);
+        setDictCheckedTerms([]);
+        setSegmentDocumentId('');
+        setSegItems([]);
+        setSegBodyCount(0);
+        setSegLoading(false);
+        setSegError(null);
+        setSegmentShowFull(false);
+        setSegmentGranularity('balanced');
+        setApplying(false);
+        setShowApplyModal(false);
+        setApplyingTerms(false);
+        setTermApplying(false);
+        setShowTermApplyModal(false);
+        setTermFlow('idle');
+        setTermCancelState('idle');
+        resetTermApplyResult();
+        setIsNavigatingToIDE(false);
+        setLocalProjectId(projectId);
+        // All values above deliberately represent only component-local UI
+        // state; the Redux entry stays keyed by project and is not reset.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [localProjectId, projectId]);
 
     // The database status is authoritative. In particular, never re-run parse
     // for a document that has already advanced to segmentation, terms, or IDE.
     useEffect(() => {
         if (!projectId || !batchId) return;
         let cancelled = false;
+        const scope = captureRequestScope();
         void (async () => {
             try {
                 const latest = await getLatestDocumentStatusForProjectAction(projectId);
-                if (cancelled || !latest) return;
+                if (cancelled || !isRequestCurrent(scope) || !latest) return;
                 setSegmentDocumentId(latest.documentId);
-                if (resolveProjectInitResumeTarget(latest.status) === 'terms') {
+                const resumeTarget = resolveProjectInitResumeTarget(latest.status);
+                if (resumeTarget === 'error') {
+                    setPhase('ERROR');
+                    const errorPreviewReady = await loadParsePreview(batchId, 0, scope);
+                    if (cancelled || !isRequestCurrent(scope)) return;
+                    if (!errorPreviewReady) setPreviewHtml(DOCUMENT_INIT_PARSER_FAILED_MARKER);
+                    return;
+                }
+                if (resumeTarget === 'terms') {
                     updateStep('terms');
+                    if (termCancellationHoldRef.current) return;
                     await startTerms();
                     return;
                 }
                 if (!resumeFromDocumentStatus(latest.status)) await runParse();
             } catch {
-                if (!cancelled) {
+                if (!cancelled && isRequestCurrent(scope)) {
                     setPhase('ERROR');
-                    setPreviewHtml('ERROR:PARSER_FAILED');
+                    setPreviewHtml(DOCUMENT_INIT_PARSER_FAILED_MARKER);
                 }
             }
         })();
@@ -186,16 +405,19 @@ export default function ProjectInitPage() {
     const segRequestRef = useRef(0);
     const [applying, setApplying] = useState(false);
     const [showApplyModal, setShowApplyModal] = useState(false);
-    const [cancelApplyRequested, setCancelApplyRequested] = useState(false);
     const applyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const segmentApplyGateRef = useRef(createProjectInitDeferredActionGate());
     // 术语提取的应用模态（与分段类似的体验）
     const [termApplying, setTermApplying] = useState(false);
     const [showTermApplyModal, setShowTermApplyModal] = useState(false);
-    const [cancelTermApplyRequested, setCancelTermApplyRequested] = useState(false);
     const termApplyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const termApplyGateRef = useRef(createProjectInitDeferredActionGate());
+    const termStartInFlightRef = useRef(false);
+    const termCancelIntentRef = useRef(false);
+    const [termCancelState, setTermCancelState] = useState<DocumentTermsCancelState>('idle');
     // 三阶段术语流程（提取 -> 插入已有词条 -> 预翻译未知词条）
     const [termFlow, setTermFlow] = useState<
-        'idle' | 'extracting' | 'review' | 'applying' | 'translating' | 'done'
+        'idle' | 'extracting' | 'canceled' | 'review' | 'applying' | 'translating' | 'done'
     >('idle');
     const [applyStatsInsert, setApplyStatsInsert] = useState<{
         inserted: number;
@@ -216,8 +438,121 @@ export default function ProjectInitPage() {
         setTranslateCount(null);
     }
 
+    function moveCanceledTermsToRetryBatch(
+        expectedCurrentBatchId: string,
+        scope: ProjectInitRequestScope = captureRequestScope()
+    ) {
+        if (
+            !isRequestCurrent(scope) ||
+            !expectedCurrentBatchId ||
+            expectedCurrentBatchId !== batchId ||
+            termCancellationHoldRef.current
+        )
+            return;
+        const nextBatchId = createDocumentTermsRetryBatchId(projectId);
+        termCancellationHoldRef.current = true;
+        termPctRef.current = 0;
+        updateProgress(undefined, 0);
+        setTerms([]);
+        setDictMatches([]);
+        setDictCheckedTerms([]);
+        setTermsApplied(false);
+        setTermApplying(false);
+        setShowTermApplyModal(false);
+        setTermFlow('canceled');
+        setPhase('CANCELED');
+        updateBatchId(nextBatchId);
+    }
+
+    async function requestStartedTermsCancellation(
+        cancelBatchId: string,
+        scope: ProjectInitRequestScope = captureRequestScope()
+    ) {
+        if (!projectId || !cancelBatchId || !isRequestCurrent(scope)) return false;
+        const requestId = ++termCancelRequestRef.current;
+        const nextState = beginDocumentTermsCancel(termCancelState, true);
+        setTermCancelState(nextState);
+        try {
+            const response = await fetch(`/api/projects/${projectId}/terms/cancel`, {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ batchId: cancelBatchId }),
+            });
+            const result = await response.json().catch(() => ({}));
+            if (!isRequestCurrent(scope) || requestId !== termCancelRequestRef.current) {
+                return false;
+            }
+            const accepted = response.ok && result?.canceled === true;
+            setTermCancelState(accepted ? 'confirmed' : 'idle');
+            if (!accepted) {
+                termCancelIntentRef.current = false;
+                setTermApplying(false);
+                setTermFlow('extracting');
+                restartStatusPollingRef.current?.();
+                toast.error(t('termsStopRejected'), {
+                    description: resolveSafeErrorDescription(
+                        createProjectInitApiError(result),
+                        t('termsStopRejectedDescription')
+                    ),
+                });
+                return false;
+            }
+
+            termCancelIntentRef.current = false;
+            termCanceledNotifiedRef.current = true;
+            moveCanceledTermsToRetryBatch(cancelBatchId, scope);
+            toast.success(t('termsStopped'));
+            return true;
+        } catch (error: unknown) {
+            if (!isRequestCurrent(scope) || requestId !== termCancelRequestRef.current) {
+                return false;
+            }
+            termCancelIntentRef.current = false;
+            setTermCancelState('idle');
+            setTermApplying(false);
+            setTermFlow('extracting');
+            restartStatusPollingRef.current?.();
+            toast.error(t('termsStopRejected'), {
+                description: resolveSafeErrorDescription(error, t('termsStopRejectedDescription')),
+            });
+            return false;
+        }
+    }
+
+    async function stopTermsExtraction() {
+        const scope = captureRequestScope();
+        if (!isRequestCurrent(scope)) return;
+        termApplyGateRef.current.cancel();
+        if (termApplyTimerRef.current) clearTimeout(termApplyTimerRef.current);
+
+        const hasStartedBatch = termApplying || termStartInFlightRef.current || phase === 'RUNNING';
+        if (!hasStartedBatch) {
+            // The server request has not begun: this is a genuine local stop,
+            // not a claim that a queued worker was canceled.
+            termCancelIntentRef.current = false;
+            setTermCancelState('idle');
+            setShowTermApplyModal(false);
+            setTermFlow('idle');
+            return;
+        }
+
+        termCancelIntentRef.current = true;
+        const nextState = beginDocumentTermsCancel(termCancelState, !termStartInFlightRef.current);
+        setTermCancelState(nextState);
+        // If POST /terms is still in flight, startTerms sends this request as
+        // soon as its server-created batch is known. This closes the client
+        // stop-vs-enqueue race without pretending it was already stopped.
+        if (termStartInFlightRef.current) return;
+        await requestStartedTermsCancellation(batchId, scope);
+    }
+
     async function startTerms(options?: { retry?: boolean }) {
         if (!projectId) return false;
+        const scope = captureRequestScope();
+        if (!isRequestCurrent(scope)) return false;
+        const requestId = ++termStartRequestRef.current;
+        const startedBatchId = batchId;
+        termStartInFlightRef.current = true;
         setStarting(true);
         setTerms([]);
         setDictMatches([]);
@@ -226,37 +561,56 @@ export default function ProjectInitPage() {
         termPctRef.current = 0;
         updateProgress(undefined, 0);
         termFailureNotifiedRef.current = false;
+        termCanceledNotifiedRef.current = false;
         try {
             const r = await fetch(`/api/projects/${projectId}/terms`, {
                 method: 'POST',
                 headers: { 'content-type': 'application/json' },
                 body: JSON.stringify({
-                    batchId,
+                    batchId: startedBatchId,
                     retry: options?.retry === true,
                     terms: { maxTerms, chunkSize, overlap, prompt: termPrompt },
                 }),
             });
             const response = await r.json().catch(() => ({}));
-            if (!r.ok) throw new Error(response?.error || '术语提取任务启动失败，请重试');
-            if (response?.activeBatchId && response.activeBatchId !== batchId) {
+            if (!isRequestCurrent(scope) || requestId !== termStartRequestRef.current) {
+                return false;
+            }
+            if (!r.ok) throw createProjectInitApiError(response);
+            const activeBatchId = String(response?.activeBatchId || startedBatchId);
+            if (response?.termsStatus === 'canceled') {
+                moveCanceledTermsToRetryBatch(startedBatchId, scope);
+                return false;
+            }
+            if (response?.activeBatchId && response.activeBatchId !== startedBatchId) {
                 updateBatchId(String(response.activeBatchId));
+            }
+            if (termCancelIntentRef.current) {
+                await requestStartedTermsCancellation(activeBatchId, scope);
+                return false;
             }
             setPhase('RUNNING');
             restartStatusPollingRef.current?.();
             // 状态由全局轮询同步
             return true;
-        } catch (error: any) {
+        } catch (error: unknown) {
+            if (!isRequestCurrent(scope) || requestId !== termStartRequestRef.current) {
+                return false;
+            }
             setPhase('ERROR');
             setTermFlow('idle');
             setTermApplying(false);
             setShowTermApplyModal(false);
             termFailureNotifiedRef.current = true;
-            toast.error('术语提取未启动', {
-                description: error?.message || '术语提取任务启动失败，请重试',
+            toast.error(t('termsStartFailedTitle'), {
+                description: resolveSafeErrorDescription(error, t('termsStartFailed')),
             });
             return false;
         } finally {
-            setStarting(false);
+            if (requestId === termStartRequestRef.current) {
+                termStartInFlightRef.current = false;
+                setStarting(false);
+            }
         }
     }
 
@@ -273,8 +627,8 @@ export default function ProjectInitPage() {
                 finalize,
             }),
         });
-        const j = await r.json();
-        if (!r.ok) throw new Error(j?.error || 'apply terms failed');
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) throw createProjectInitApiError(j);
         const inserted = Number(j?.inserted || 0);
         const updated = Number(j?.updated || 0);
         const skipped = Number(j?.skipped || 0);
@@ -285,15 +639,24 @@ export default function ProjectInitPage() {
     // 二阶段应用：先插入，再（可选）预翻译
     async function applyTermsPipeline() {
         if (!projectId || !batchId) return false;
+        const scope = captureRequestScope();
+        if (!isRequestCurrent(scope)) return false;
+        const requestId = ++termApplyRequestRef.current;
         resetTermApplyResult();
         setApplyingTerms(true);
         try {
             setTermFlow('applying');
             const s1 = await applyTermsOnce(false, !autoApplyTerms);
+            if (!isRequestCurrent(scope) || requestId !== termApplyRequestRef.current) {
+                return false;
+            }
             setApplyStatsInsert(s1);
             if (autoApplyTerms) {
                 setTermFlow('translating');
                 const s2 = await applyTermsOnce(true, true);
+                if (!isRequestCurrent(scope) || requestId !== termApplyRequestRef.current) {
+                    return false;
+                }
                 setApplyStatsTranslate(s2);
                 setTranslateCount(s2.translated);
             }
@@ -301,14 +664,19 @@ export default function ProjectInitPage() {
             setTermFlow('done');
             toast.success('术语已写入项目词库');
             return true;
-        } catch (e: any) {
+        } catch (error: unknown) {
+            if (!isRequestCurrent(scope) || requestId !== termApplyRequestRef.current) {
+                return false;
+            }
             setTermFlow('idle');
             setTermApplying(false);
             setShowTermApplyModal(false);
-            toast.error('写入项目词库失败', { description: e?.message || 'apply terms failed' });
+            toast.error(t('termsApplyFailedTitle'), {
+                description: resolveSafeErrorDescription(error, t('termsApplyFailed')),
+            });
             return false;
         } finally {
-            setApplyingTerms(false);
+            if (requestId === termApplyRequestRef.current) setApplyingTerms(false);
         }
     }
 
@@ -317,24 +685,32 @@ export default function ProjectInitPage() {
             toast.error('无法完成初始化', { description: '未找到当前文档' });
             return;
         }
+        const scope = captureRequestScope();
+        if (!isRequestCurrent(scope)) return;
+        const requestId = ++skipTermsRequestRef.current;
         setStarting(true);
         try {
             const completed = await updateDocumentStatusByIdAction(segmentDocumentId, 'COMPLETED');
-            if (!completed) throw new Error('文档阶段已变化，请刷新后重试');
+            if (!isRequestCurrent(scope) || requestId !== skipTermsRequestRef.current) return;
+            if (!completed) throw createProjectInitStateError('document-stage-changed');
             termPctRef.current = 100;
             updateProgress(undefined, 100);
             updateStep('done');
             toast.success('已跳过术语写入，文档初始化已完成');
-        } catch (error: any) {
-            toast.error('跳过术语失败', {
-                description: error?.message || '文档状态更新失败，请重试',
+        } catch (error: unknown) {
+            if (!isRequestCurrent(scope) || requestId !== skipTermsRequestRef.current) return;
+            toast.error(t('skipTermsFailedTitle'), {
+                description: resolveSafeErrorDescription(error, t('skipTermsFailed')),
             });
         } finally {
-            setStarting(false);
+            if (requestId === skipTermsRequestRef.current) setStarting(false);
         }
     }
     async function loadTermPreview() {
         if (!projectId || !batchId) return;
+        const scope = captureRequestScope();
+        if (!isRequestCurrent(scope)) return;
+        const requestId = ++termPreviewRequestRef.current;
         setTermPreviewLoading(true);
         setTermPreviewError(null);
         setTermPreview([]);
@@ -345,25 +721,30 @@ export default function ProjectInitPage() {
                 body: JSON.stringify({ batchId, maxTerms, chunkSize, overlap, prompt: termPrompt }),
             });
             const j = await r.json().catch(() => ({}));
-            if (!r.ok) throw new Error(j?.error || '术语预览生成失败，请重试');
+            if (!isRequestCurrent(scope) || requestId !== termPreviewRequestRef.current) return;
+            if (!r.ok) throw createProjectInitApiError(j);
             setTermPreview(Array.isArray(j?.terms) ? j.terms : []);
-        } catch (error: any) {
-            setTermPreviewError(error?.message || '术语预览生成失败，请重试');
+        } catch (error: unknown) {
+            if (!isRequestCurrent(scope) || requestId !== termPreviewRequestRef.current) return;
+            setTermPreviewError(resolveSafeErrorDescription(error, t('termsPreviewFailed')));
         } finally {
-            setTermPreviewLoading(false);
+            if (requestId === termPreviewRequestRef.current) setTermPreviewLoading(false);
         }
     }
 
     // 提取 Button 内联的“应用到文档”逻辑为独立函数
     function handleApplySegmentsClick() {
         if (!segmentDocumentId || !segItems.length) return;
+        const scope = captureRequestScope();
+        if (!isRequestCurrent(scope)) return;
         // 打开模态并延迟启动，允许用户在极短时间内取消
+        const actionToken = segmentApplyGateRef.current.begin();
         setShowApplyModal(true);
-        setCancelApplyRequested(false);
 
         if (applyTimerRef.current) clearTimeout(applyTimerRef.current);
         applyTimerRef.current = setTimeout(async () => {
-            if (cancelApplyRequested) return;
+            if (!isRequestCurrent(scope) || !segmentApplyGateRef.current.isCurrent(actionToken))
+                return;
             try {
                 setApplying(true);
                 const uPost = new URL(`/api/projects/${projectId}/segment`, window.location.origin);
@@ -374,18 +755,32 @@ export default function ProjectInitPage() {
                     body: JSON.stringify({ segment: { granularity: segmentGranularity } }),
                 });
                 const result = await response.json().catch(() => ({}));
-                if (!response.ok) throw new Error(result?.error || '应用全文分割失败，请重试');
-                if (Number(result?.count || 0) <= 0) throw new Error('全文没有可应用的分割结果');
+                if (
+                    !isRequestCurrent(scope) ||
+                    !segmentApplyGateRef.current.isCurrent(actionToken)
+                ) {
+                    return;
+                }
+                if (!response.ok) throw createProjectInitApiError(result);
+                if (Number(result?.count || 0) <= 0) throw createProjectInitStateError('retry');
                 updateProgress(100, undefined);
                 segPctRef.current = 100;
                 updateStep('terms');
-            } catch (error: any) {
-                toast.error('应用全文分割失败', {
-                    description: error?.message || '请重试',
+            } catch (error: unknown) {
+                if (
+                    !isRequestCurrent(scope) ||
+                    !segmentApplyGateRef.current.isCurrent(actionToken)
+                ) {
+                    return;
+                }
+                toast.error(t('segmentApplyFailedTitle'), {
+                    description: resolveSafeErrorDescription(error, t('segmentApplyFailed')),
                 });
             } finally {
-                setApplying(false);
-                setShowApplyModal(false);
+                if (isRequestCurrent(scope) && segmentApplyGateRef.current.isCurrent(actionToken)) {
+                    setApplying(false);
+                    setShowApplyModal(false);
+                }
             }
         }, 500);
     }
@@ -398,8 +793,9 @@ export default function ProjectInitPage() {
         }
 
         let stopped = false;
+        const scope = captureRequestScope();
         const longPoll = async (prevSeg: number, prevTerms: number) => {
-            if (!projectId || !batchId || stopped) return;
+            if (!projectId || !batchId || stopped || !isRequestCurrent(scope)) return;
             // 中止上一轮
             if (statusAbortRef.current) {
                 try {
@@ -412,8 +808,9 @@ export default function ProjectInitPage() {
                 const url = `/api/projects/${projectId}/init?batchId=${encodeURIComponent(batchId)}&wait=30000&lastSeg=${prevSeg}&lastTerms=${prevTerms}`;
                 //logger.info('/api/projects/projectId/init url: ', url)
                 const s = await fetch(url, { signal: controller.signal });
-                if (!s.ok) throw new Error('status failed');
+                if (!s.ok) throw createProjectInitStateError('retry');
                 const j = await s.json();
+                if (stopped || !isRequestCurrent(scope)) return;
                 const a = Math.max(0, Math.min(100, Number(j?.segProgress || 0)));
                 const b = Math.max(0, Math.min(100, Number(j?.termsProgress || 0)));
                 if (j?.termsStatus === 'failed') {
@@ -423,10 +820,23 @@ export default function ProjectInitPage() {
                     setShowTermApplyModal(false);
                     if (!termFailureNotifiedRef.current) {
                         termFailureNotifiedRef.current = true;
-                        toast.error('术语提取失败', {
-                            description: j?.termsError || '请重试',
+                        toast.error(t('termsRunFailedTitle'), {
+                            description: resolveSafeErrorDescription(
+                                createProjectInitApiError({ error: j?.termsError }),
+                                t('termsRunFailed')
+                            ),
                         });
                     }
+                    return;
+                }
+                if (j?.termsStatus === 'canceled') {
+                    termCancelIntentRef.current = false;
+                    setTermCancelState('confirmed');
+                    if (!termCanceledNotifiedRef.current) {
+                        termCanceledNotifiedRef.current = true;
+                        toast.success(t('termsStopped'));
+                    }
+                    moveCanceledTermsToRetryBatch(batchId, scope);
                     return;
                 }
                 const nextA = Math.max(a, segPctRef.current);
@@ -437,15 +847,19 @@ export default function ProjectInitPage() {
                 if (Array.isArray(j?.terms)) setTerms(j.terms);
                 if (Array.isArray(j?.dict)) setDictMatches(j.dict);
                 if (Array.isArray(j?.dictCheckedTerms)) setDictCheckedTerms(j.dictCheckedTerms);
-                if (b >= 100) termFailureNotifiedRef.current = false;
+                if (b >= 100) {
+                    termFailureNotifiedRef.current = false;
+                    setPhase('DONE');
+                    setTermApplying(false);
+                }
                 if (!(a >= 100 && b >= 100)) {
                     longPoll(a, b);
                 } else {
                     // 保持停留在术语步骤，避免术语未确认时提前进入完成页
                     updateStep('terms');
                 }
-            } catch (e: any) {
-                if (controller.signal.aborted || stopped) return;
+            } catch {
+                if (controller.signal.aborted || stopped || !isRequestCurrent(scope)) return;
                 setTimeout(() => longPoll(prevSeg, prevTerms), 6000);
             }
         };
@@ -470,6 +884,15 @@ export default function ProjectInitPage() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [projectId, batchId]);
 
+    useEffect(() => {
+        return () => {
+            segmentApplyGateRef.current.cancel();
+            termApplyGateRef.current.cancel();
+            if (applyTimerRef.current) clearTimeout(applyTimerRef.current);
+            if (termApplyTimerRef.current) clearTimeout(termApplyTimerRef.current);
+        };
+    }, []);
+
     // 正式提取完成后先回到结果页审阅，不自动写入词库。
     useEffect(() => {
         if (termPct >= 100 && showTermApplyModal && termFlow === 'extracting') {
@@ -482,6 +905,8 @@ export default function ProjectInitPage() {
 
     async function loadSegPreview(opts?: { all?: boolean; regenerate?: boolean }) {
         if (!projectId || !batchId) return;
+        const scope = captureRequestScope();
+        if (!isRequestCurrent(scope)) return;
         const requestId = ++segRequestRef.current;
         setSegLoading(true);
         setSegError(null);
@@ -496,8 +921,8 @@ export default function ProjectInitPage() {
                     body: JSON.stringify({ segment: { granularity: segmentGranularity } }),
                 });
                 const previewResult = await previewResponse.json().catch(() => ({}));
-                if (!previewResponse.ok)
-                    throw new Error(previewResult?.error || '分割预览生成失败，请重试');
+                if (!isRequestCurrent(scope) || requestId !== segRequestRef.current) return;
+                if (!previewResponse.ok) throw createProjectInitApiError(previewResult);
             }
 
             const u = new URL(`/api/projects/${projectId}/segment`, window.location.origin);
@@ -507,8 +932,8 @@ export default function ProjectInitPage() {
             if (opts?.all ?? segmentShowFull) u.searchParams.set('all', '1');
             const response = await fetch(u.toString());
             const result = await response.json().catch(() => ({}));
-            if (!response.ok) throw new Error(result?.error || '分割预览读取失败，请重试');
-            if (requestId === segRequestRef.current) {
+            if (!response.ok) throw createProjectInitApiError(result);
+            if (isRequestCurrent(scope) && requestId === segRequestRef.current) {
                 setSegItems(Array.isArray(result?.segments) ? result.segments : []);
                 setSegBodyCount(
                     Number(
@@ -522,8 +947,10 @@ export default function ProjectInitPage() {
                     )
                 );
             }
-        } catch (e: any) {
-            if (requestId === segRequestRef.current) setSegError(String(e?.message || e));
+        } catch (error: unknown) {
+            if (isRequestCurrent(scope) && requestId === segRequestRef.current) {
+                setSegError(resolveSafeErrorDescription(error, t('segmentPreviewFailed')));
+            }
         } finally {
             if (requestId === segRequestRef.current) setSegLoading(false);
         }
@@ -551,6 +978,20 @@ export default function ProjectInitPage() {
     }, [currentStep, segmentDocumentId, segmentGranularity]);
 
     // 顶部步骤条使用统一 Stepper 组件
+    const hasCurrentProjectView = localProjectId === projectId;
+    const visibleStarting = hasCurrentProjectView ? starting : false;
+    const visiblePreviewHtml = hasCurrentProjectView ? previewHtml : '';
+    const visibleSegItems = hasCurrentProjectView ? segItems : [];
+    const visibleSegBodyCount = hasCurrentProjectView ? segBodyCount : 0;
+    const visibleSegLoading = !hasCurrentProjectView || segLoading;
+    const visibleSegError = hasCurrentProjectView ? segError : null;
+    const visibleTerms = hasCurrentProjectView ? terms : [];
+    const visibleTermPreview = hasCurrentProjectView ? termPreview : [];
+    const visibleTermPreviewLoading = !hasCurrentProjectView || termPreviewLoading;
+    const visibleTermPreviewError = hasCurrentProjectView ? termPreviewError : null;
+    const visibleApplyingTerms = hasCurrentProjectView ? applyingTerms : false;
+    const visibleApplying = hasCurrentProjectView ? applying : false;
+    const visibleTermsApplied = hasCurrentProjectView ? termsApplied : false;
 
     return (
         <div className="px-6 py-6">
@@ -585,10 +1026,10 @@ export default function ProjectInitPage() {
                                         restart();
                                         updateBatchId(newId);
                                     }}
-                                    disabled={starting}
+                                    disabled={!hasCurrentProjectView || visibleStarting}
                                     className="gap-1"
                                 >
-                                    {starting ? (
+                                    {visibleStarting ? (
                                         <>
                                             <Loader className="h-4 w-4 animate-spin" />
                                             {t('processing')}
@@ -607,34 +1048,41 @@ export default function ProjectInitPage() {
                             currentStep={currentStep}
                             segPct={segPct}
                             termPct={termPct}
-                            onStepClick={s => {
-                                // 仅允许回退：parse <- segment <- terms <- done
-                                const order: Array<typeof currentStep> = [
-                                    'parse',
-                                    'segment',
-                                    'terms',
-                                    'done',
-                                ];
-                                const cur = order.indexOf(currentStep);
-                                const tar = order.indexOf(s);
-                                if (tar >= 0 && tar < cur) updateStep(s);
-                            }}
+                            onStepClick={
+                                hasCurrentProjectView
+                                    ? s => {
+                                          // 仅允许回退：parse <- segment <- terms <- done
+                                          const order: Array<typeof currentStep> = [
+                                              'parse',
+                                              'segment',
+                                              'terms',
+                                              'done',
+                                          ];
+                                          const cur = order.indexOf(currentStep);
+                                          const tar = order.indexOf(s);
+                                          if (tar >= 0 && tar < cur) updateStep(s);
+                                      }
+                                    : undefined
+                            }
                         />
                     </div>
                     <div className="space-y-6 px-5 py-6">
                         {/* 步骤结果区域 */}
-                        {currentStep === 'parse' && <ParsePanel previewHtml={previewHtml} />}
+                        {currentStep === 'parse' && <ParsePanel previewHtml={visiblePreviewHtml} />}
 
                         {currentStep === 'segment' && (
                             <SegmentPanel
-                                segItems={segItems}
-                                bodyCount={segBodyCount}
-                                segLoading={segLoading}
-                                segError={segError}
+                                segItems={visibleSegItems}
+                                bodyCount={visibleSegBodyCount}
+                                segLoading={visibleSegLoading}
+                                segError={visibleSegError}
                                 granularity={segmentGranularity}
-                                onGranularityChange={setSegmentGranularity}
-                                showFull={segmentShowFull}
+                                onGranularityChange={value => {
+                                    if (hasCurrentProjectView) setSegmentGranularity(value);
+                                }}
+                                showFull={hasCurrentProjectView ? segmentShowFull : false}
                                 onShowFullChange={value => {
+                                    if (!hasCurrentProjectView) return;
                                     setSegmentShowFull(value);
                                     if (segmentDocumentId)
                                         void loadSegPreview({
@@ -642,7 +1090,9 @@ export default function ProjectInitPage() {
                                             regenerate: false,
                                         });
                                 }}
-                                busy={segLoading || starting}
+                                busy={
+                                    !hasCurrentProjectView || visibleSegLoading || visibleStarting
+                                }
                             />
                         )}
 
@@ -656,23 +1106,39 @@ export default function ProjectInitPage() {
                                 setOverlap={setOverlap}
                                 termPrompt={termPrompt}
                                 setTermPrompt={setTermPrompt}
-                                termPreview={termPreview}
-                                termPreviewLoading={termPreviewLoading}
-                                termPreviewError={termPreviewError}
-                                terms={terms}
-                                dict={dictMatches}
-                                dictCheckedTerms={dictCheckedTerms}
+                                termPreview={visibleTermPreview}
+                                termPreviewLoading={visibleTermPreviewLoading}
+                                termPreviewError={visibleTermPreviewError}
+                                terms={visibleTerms}
+                                dict={hasCurrentProjectView ? dictMatches : []}
+                                dictCheckedTerms={hasCurrentProjectView ? dictCheckedTerms : []}
                                 autoApplyTerms={autoApplyTerms}
                                 setAutoApplyTerms={setAutoApplyTerms}
                                 termPct={termPct}
-                                starting={starting}
+                                starting={!hasCurrentProjectView || visibleStarting}
+                                canceled={hasCurrentProjectView && termFlow === 'canceled'}
+                                canCancel={
+                                    hasCurrentProjectView &&
+                                    termPct < 100 &&
+                                    (termFlow === 'extracting' || phase === 'RUNNING')
+                                }
+                                cancellationState={hasCurrentProjectView ? termCancelState : 'idle'}
                                 onPreview={loadTermPreview}
+                                onCancel={() => void stopTermsExtraction()}
+                                onRetry={() => {
+                                    termCancellationHoldRef.current = false;
+                                    termCancelIntentRef.current = false;
+                                    setTermCancelState('idle');
+                                    setTermFlow('extracting');
+                                    setTermApplying(true);
+                                    void startTerms({ retry: true });
+                                }}
                                 onApply={async () => {
                                     await applyTermsPipeline();
                                 }}
-                                applying={applyingTerms}
+                                applying={visibleApplyingTerms}
                                 onViewDictionary={() =>
-                                    router.push(`/dashboard/dictionaries/${projectId}`)
+                                    router.push(`/dashboard/dictionaries/project/${projectId}`)
                                 }
                                 onSkip={() => void skipTerms()}
                             />
@@ -681,7 +1147,13 @@ export default function ProjectInitPage() {
                         {currentStep === 'done' && (
                             <section className="space-y-2" id="step-done">
                                 <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-4 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-200">
-                                    <div className="text-sm">🎉 {t('doneTip')}</div>
+                                    <div className="flex items-center gap-2 text-sm">
+                                        <SquareCheckBig
+                                            className="size-4 shrink-0"
+                                            aria-hidden="true"
+                                        />
+                                        <span>{t('doneTip')}</span>
+                                    </div>
                                 </div>
                             </section>
                         )}
@@ -696,25 +1168,18 @@ export default function ProjectInitPage() {
                                             updateProgress(0, 0);
                                             runParse();
                                         }}
-                                        disabled={starting}
+                                        disabled={!hasCurrentProjectView || visibleStarting}
                                     >
                                         {t('retryParse')}
                                     </Button>
                                     <Button
-                                        onClick={() => {
-                                            const u = new URL(
-                                                `/api/projects/${projectId}/init`,
-                                                window.location.origin
-                                            );
-                                            u.searchParams.set('action', 'persist');
-                                            u.searchParams.set('batchId', batchId);
-                                            void fetch(u.toString(), { method: 'POST' });
-                                            updateStep('segment');
-                                        }}
+                                        onClick={() => void persistParseAndAdvance()}
                                         disabled={
-                                            starting ||
-                                            !previewHtml ||
-                                            previewHtml.startsWith('ERROR:')
+                                            !hasCurrentProjectView ||
+                                            visibleStarting ||
+                                            !isDocumentInitParsePreviewAdvanceable(
+                                                visiblePreviewHtml
+                                            )
                                         }
                                     >
                                         {t('next')}
@@ -726,17 +1191,27 @@ export default function ProjectInitPage() {
                                     <Button
                                         variant="outline"
                                         onClick={() => {
-                                            if (segmentDocumentId) void loadSegPreview();
+                                            if (hasCurrentProjectView && segmentDocumentId)
+                                                void loadSegPreview();
                                         }}
-                                        disabled={segLoading || starting}
+                                        disabled={
+                                            !hasCurrentProjectView ||
+                                            visibleSegLoading ||
+                                            visibleStarting
+                                        }
                                     >
                                         {t('resegment')}
                                     </Button>
                                     <Button
                                         onClick={handleApplySegmentsClick}
-                                        disabled={!segItems.length || applying || starting}
+                                        disabled={
+                                            !hasCurrentProjectView ||
+                                            !visibleSegItems.length ||
+                                            visibleApplying ||
+                                            visibleStarting
+                                        }
                                     >
-                                        {applying ? t('applying') : t('next')}
+                                        {visibleApplying ? t('applying') : t('next')}
                                     </Button>
                                 </>
                             )}
@@ -745,24 +1220,41 @@ export default function ProjectInitPage() {
                                     {termPct < 100 && (
                                         <Button
                                             onClick={() => {
-                                                // 弹出模态，允许短时间取消
+                                                // The first 500ms can be stopped locally; after
+                                                // enqueue the same control calls the server-side
+                                                // cancellation endpoint and waits for confirmation.
+                                                termCancellationHoldRef.current = false;
+                                                termCancelIntentRef.current = false;
+                                                setTermCancelState('idle');
                                                 resetTermApplyResult();
                                                 setShowTermApplyModal(true);
-                                                setCancelTermApplyRequested(false);
                                                 setTermFlow('extracting');
+                                                const actionToken =
+                                                    termApplyGateRef.current.begin();
                                                 if (termApplyTimerRef.current)
                                                     clearTimeout(termApplyTimerRef.current);
                                                 termApplyTimerRef.current = setTimeout(async () => {
-                                                    if (cancelTermApplyRequested) return;
+                                                    if (
+                                                        !termApplyGateRef.current.isCurrent(
+                                                            actionToken
+                                                        )
+                                                    )
+                                                        return;
                                                     try {
                                                         setTermApplying(true);
                                                         await startTerms({
-                                                            retry: phase === 'ERROR',
+                                                            retry:
+                                                                phase === 'ERROR' ||
+                                                                phase === 'CANCELED',
                                                         });
                                                     } catch {}
                                                 }, 500);
                                             }}
-                                            disabled={starting || (termPct > 0 && termPct < 100)}
+                                            disabled={
+                                                !hasCurrentProjectView ||
+                                                visibleStarting ||
+                                                (termPct > 0 && termPct < 100)
+                                            }
                                         >
                                             {t('next')}
                                         </Button>
@@ -776,26 +1268,29 @@ export default function ProjectInitPage() {
                                                 void applyTermsPipeline();
                                             }}
                                             disabled={
-                                                applyingTerms || (!termsApplied && !terms.length)
+                                                !hasCurrentProjectView ||
+                                                visibleApplyingTerms ||
+                                                (!visibleTermsApplied && !visibleTerms.length)
                                             }
                                         >
-                                            {applyingTerms ? '写入中…' : '手动写入词库'}
+                                            {visibleApplyingTerms ? '写入中…' : '手动写入词库'}
                                         </Button>
                                     )}
                                     {termPct >= 100 && (
                                         <Button
                                             onClick={() => {
-                                                if (termsApplied) {
+                                                if (visibleTermsApplied) {
                                                     updateStep('done');
                                                     return;
                                                 }
                                                 setShowTermApplyModal(true);
-                                                setCancelTermApplyRequested(false);
                                                 setTermFlow('applying');
                                                 void applyTermsPipeline();
                                             }}
                                             disabled={
-                                                applyingTerms || (!termsApplied && !terms.length)
+                                                !hasCurrentProjectView ||
+                                                visibleApplyingTerms ||
+                                                (!visibleTermsApplied && !visibleTerms.length)
                                             }
                                         >
                                             {t('next')}
@@ -806,6 +1301,7 @@ export default function ProjectInitPage() {
                             {currentStep === 'done' && (
                                 <>
                                     <Button
+                                        disabled={!hasCurrentProjectView}
                                         onClick={() =>
                                             router.push(
                                                 `/dashboard/dictionaries/project/${projectId}`
@@ -815,7 +1311,7 @@ export default function ProjectInitPage() {
                                         {t('gotoDict')}
                                     </Button>
                                     <Button
-                                        disabled={isNavigatingToIDE} // 跳转过程中禁用按钮
+                                        disabled={!hasCurrentProjectView || isNavigatingToIDE} // 跳转过程中禁用按钮
                                         onClick={() => {
                                             setIsNavigatingToIDE(true); // 开启遮罩
                                             // 使用 setTimeout 稍微延迟跳转，确保 React 先渲染出遮罩（可选，通常直接 push 也可以）
@@ -836,24 +1332,24 @@ export default function ProjectInitPage() {
                     </div>
                 </div>
             </div>
-            {showApplyModal && (
+            {hasCurrentProjectView && showApplyModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
                     <div className="w-[360px] rounded-lg bg-white p-6 text-center shadow-lg dark:bg-gray-900">
                         <div className="flex flex-col items-center gap-3">
                             <Coffee className="h-8 w-8 text-amber-600" />
                             <div className="text-sm font-medium">
-                                {applying ? t('applyToFull') : t('prepareApply')}
+                                {visibleApplying ? t('applyToFull') : t('prepareApply')}
                             </div>
                             <div className="text-xs text-muted-foreground">{t('applyNotice')}</div>
                             <div className="text-xs text-muted-foreground">
                                 {t('segProgress', { pct: Math.max(0, Math.min(100, segPct)) })}
                             </div>
                             <div className="mt-2 flex gap-2">
-                                {!applying ? (
+                                {!visibleApplying ? (
                                     <Button
                                         variant="outline"
                                         onClick={() => {
-                                            setCancelApplyRequested(true);
+                                            segmentApplyGateRef.current.cancel();
                                             if (applyTimerRef.current)
                                                 clearTimeout(applyTimerRef.current);
                                             setShowApplyModal(false);
@@ -871,7 +1367,7 @@ export default function ProjectInitPage() {
                     </div>
                 </div>
             )}
-            {showTermApplyModal && (
+            {hasCurrentProjectView && showTermApplyModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
                     <div className="w-[360px] rounded-lg bg-white p-6 text-center shadow-lg dark:bg-gray-900">
                         <div className="flex flex-col items-center gap-3">
@@ -942,15 +1438,16 @@ export default function ProjectInitPage() {
                                 {termFlow === 'idle' || termFlow === 'extracting' ? (
                                     <Button
                                         variant="outline"
-                                        onClick={() => {
-                                            setCancelTermApplyRequested(true);
-                                            if (termApplyTimerRef.current)
-                                                clearTimeout(termApplyTimerRef.current);
-                                            setShowTermApplyModal(false);
-                                            setTermFlow('idle');
-                                        }}
+                                        onClick={() => void stopTermsExtraction()}
+                                        disabled={
+                                            termCancelState === 'requested' ||
+                                            termCancelState === 'requesting'
+                                        }
                                     >
-                                        {t('modalStop')}
+                                        {termCancelState === 'requested' ||
+                                        termCancelState === 'requesting'
+                                            ? t('termsStopping')
+                                            : t('modalStop')}
                                     </Button>
                                 ) : termFlow !== 'done' ? (
                                     <Button variant="outline" disabled>
@@ -972,7 +1469,7 @@ export default function ProjectInitPage() {
                     </div>
                 </div>
             )}
-            {isNavigatingToIDE && (
+            {hasCurrentProjectView && isNavigatingToIDE && (
                 <div className="fixed inset-0 z-[60] flex flex-col items-center justify-center gap-4 bg-black/50 backdrop-blur-sm transition-all duration-300">
                     <div className="flex flex-col items-center justify-center gap-3 rounded-xl bg-white p-8 shadow-2xl dark:bg-gray-900">
                         <Loader2 className="h-10 w-10 animate-spin text-primary" />

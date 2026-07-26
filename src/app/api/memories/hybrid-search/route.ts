@@ -1,7 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { searchMemoryAction } from '@/actions/memories';
-import { guardMessage, guardStatus, requireUser } from '@/lib/guards';
+import { GuardError, guardMessage, guardStatus, requireUser } from '@/lib/guards';
+import { memorySearchFailurePayload } from '@/lib/memory-search';
 import { HybridSearchConfig } from '@/types/hybrid-search';
+
+function failureResponse(error: unknown) {
+    if (error instanceof GuardError) {
+        return NextResponse.json({ error: guardMessage(error) }, { status: guardStatus(error) });
+    }
+
+    return NextResponse.json(memorySearchFailurePayload(error), { status: 500 });
+}
 
 export async function POST(request: NextRequest) {
     try {
@@ -20,22 +29,26 @@ export async function POST(request: NextRequest) {
 
         return NextResponse.json(result);
     } catch (error) {
-        return NextResponse.json({ error: guardMessage(error) }, { status: guardStatus(error) });
+        return failureResponse(error);
     }
 }
 
 // 获取默认配置
 export async function GET() {
-    await requireUser();
-    const { DEFAULT_HYBRID_CONFIG } = await import('@/types/hybrid-search');
+    try {
+        await requireUser();
+        const { DEFAULT_HYBRID_CONFIG } = await import('@/types/hybrid-search');
 
-    return NextResponse.json({
-        success: true,
-        data: {
-            defaultConfig: DEFAULT_HYBRID_CONFIG,
-            availableModes: ['vector', 'keyword', 'hybrid'],
-            fusionMethods: ['weighted_sum', 'rank_fusion', 'reciprocal_rank_fusion'],
-            matchTypes: ['exact', 'phrase', 'fuzzy', 'contains'],
-        },
-    });
+        return NextResponse.json({
+            success: true,
+            data: {
+                defaultConfig: DEFAULT_HYBRID_CONFIG,
+                availableModes: ['vector', 'keyword', 'hybrid'],
+                fusionMethods: ['weighted_sum', 'rank_fusion', 'reciprocal_rank_fusion'],
+                matchTypes: ['exact', 'phrase', 'fuzzy', 'contains'],
+            },
+        });
+    } catch (error) {
+        return failureResponse(error);
+    }
 }

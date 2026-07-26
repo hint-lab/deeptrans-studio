@@ -7,7 +7,7 @@ import {
     updateDictionaryEntryAction,
 } from '@/actions/dictionary';
 import { baselineTranslateAction, embedAndTranslateAction } from '@/actions/pre-translate';
-import { savePreTranslateResultsAction } from '@/actions/intermediate-results';
+import { applyMtReviewCandidateAction } from '@/actions/intermediate-results';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
@@ -15,6 +15,8 @@ import { Switch } from '@/components/ui/switch';
 import { useActiveDocumentItem } from '@/hooks/useActiveDocumentItem';
 import { useAgentWorkflowSteps } from '@/hooks/useAgentWorkflowSteps';
 import { useTranslationContent, useTranslationLanguage } from '@/hooks/useTranslation';
+import { resolveMtReviewErrorKey } from '@/lib/ide-review-error';
+import { getItemScopedValue, type ItemScopedValue } from '@/lib/item-scoped-state';
 import { wordDiff } from '@/lib/text-diff';
 import { cn } from '@/lib/utils';
 import { Check, Loader2, X } from 'lucide-react';
@@ -54,8 +56,8 @@ export default function PreTranslatePanel() {
     const { contentItemId, sourceText, targetText, setTargetTranslationText } =
         useTranslationContent();
     const { sourceLanguage, targetLanguage } = useTranslationLanguage();
-    const [baseline, setBaseline] = useState<string | null>(null);
-    const [loadingBaseline, setLoadingBaseline] = useState(false);
+    const [baselineState, setBaselineState] = useState<ItemScopedValue<string> | null>(null);
+    const baseline = getItemScopedValue(baselineState, activeItemId) ?? null;
     const [showDiff, setShowDiff] = useState(false);
     const [loadingEmbedded, setLoadingEmbedded] = useState(false);
     const [appliedKind, setAppliedKind] = useState<'baseline' | 'embedded' | null>(null);
@@ -63,8 +65,11 @@ export default function PreTranslatePanel() {
     const embeddedRequestRef = useRef(0);
     const activeItemIdRef = useRef(activeItemId);
     const sourceTextRef = useRef(sourceText);
+    const targetTextRef = useRef(targetText);
+    const applyingItemIdRef = useRef<string | null>(null);
     activeItemIdRef.current = activeItemId;
     sourceTextRef.current = sourceText;
+    targetTextRef.current = targetText;
 
     // 词典编辑状态
     const [editingId, setEditingId] = useState<string | null>(null);
@@ -73,22 +78,31 @@ export default function PreTranslatePanel() {
     const applyToTarget = async (text: string) => {
         const itemId = activeItemId;
         const inputText = String(sourceText || '');
+        const inputTarget = String(targetText || '');
         try {
             if (!itemId || contentItemId !== itemId || !inputText) {
                 toast.error(t('applyFailed'));
                 return;
             }
+            if (applyingItemIdRef.current === itemId) return;
+            applyingItemIdRef.current = itemId;
             const content = String(text || '');
-            await savePreTranslateResultsAction(itemId, { targetText: content }, inputText);
+            const applied = await applyMtReviewCandidateAction(itemId, content, {
+                sourceText: inputText,
+                targetText: inputTarget,
+            });
             if (
                 activeItemIdRef.current !== itemId ||
-                sourceTextRef.current !== inputText
+                sourceTextRef.current !== inputText ||
+                targetTextRef.current !== inputTarget
             )
                 return;
-            setTargetTranslationText(content);
+            setTargetTranslationText(applied.targetText);
             toast.success(t('applied'));
-        } catch {
-            toast.error(t('applyFailed'));
+        } catch (error) {
+            toast.error(t(resolveMtReviewErrorKey(error, 'applyFailed')));
+        } finally {
+            if (applyingItemIdRef.current === itemId) applyingItemIdRef.current = null;
         }
     };
 
@@ -101,12 +115,10 @@ export default function PreTranslatePanel() {
                 toast.error(t('noSourceForBaseline'));
                 return;
             }
-            setLoadingBaseline(true);
             const baselineResult = await baselineTranslateAction(
                 inputText,
                 sourceLanguage || 'auto',
-                targetLanguage || 'auto',
-                { prompt: undefined }
+                targetLanguage || 'auto'
             );
             if (
                 requestId !== baselineRequestRef.current ||
@@ -115,11 +127,15 @@ export default function PreTranslatePanel() {
             )
                 return;
             const baselineText = baselineResult || '';
-            setBaseline(baselineText);
-        } catch (e: any) {
-            toast.error(String(e?.message || t('baselineGenerationFailed')));
-        } finally {
-            if (requestId === baselineRequestRef.current) setLoadingBaseline(false);
+            setBaselineState({ itemId, value: baselineText });
+        } catch (error) {
+            if (
+                requestId === baselineRequestRef.current &&
+                activeItemIdRef.current === itemId &&
+                sourceTextRef.current === inputText
+            ) {
+                toast.error(t(resolveMtReviewErrorKey(error, 'baselineGenerationFailed')));
+            }
         }
     };
 
@@ -163,8 +179,14 @@ export default function PreTranslatePanel() {
                 return;
             setPreOutputs({ itemId, terms, dict, translation: embeddedText });
             if (baseline) setShowDiff(true);
-        } catch (e: any) {
-            toast.error(String(e?.message || t('embeddingGenerationFailed')));
+        } catch (error) {
+            if (
+                requestId === embeddedRequestRef.current &&
+                activeItemIdRef.current === itemId &&
+                sourceTextRef.current === inputText
+            ) {
+                toast.error(t(resolveMtReviewErrorKey(error, 'embeddingGenerationFailed')));
+            }
         } finally {
             if (requestId === embeddedRequestRef.current) setLoadingEmbedded(false);
         }
@@ -174,20 +196,18 @@ export default function PreTranslatePanel() {
     useEffect(() => {
         baselineRequestRef.current += 1;
         embeddedRequestRef.current += 1;
-        setBaseline(null);
+        setBaselineState(null);
         setShowDiff(false);
         setAppliedKind(null);
-        setLoadingBaseline(false);
         setLoadingEmbedded(false);
     }, [activeItemId]);
 
-    // Generate a baseline for the current item only. A late response for a
-    // previous item/source is discarded by the request checks above.
+    // Generate a baseline for the current item only. Do not wait on a loading
+    // flag from the prior segment: request IDs discard that late response.
     useEffect(() => {
         if (
             contentItemId === activeItemId &&
             sourceText &&
-            !loadingBaseline &&
             (baseline === null || baseline === '')
         ) {
             genBaseline();
@@ -426,20 +446,34 @@ export default function PreTranslatePanel() {
                                 try {
                                     const idStr = String(row.id || '');
                                     if (idStr.startsWith('temp:')) {
-                                        if (!projectId) throw new Error(t('missingProjectId'));
+                                        if (!projectId) {
+                                            toast.error(t('missingProjectId'));
+                                            return;
+                                        }
                                         const fp = (await findProjectDictionaryAction(
                                             projectId
                                         )) as any;
-                                        if (!fp?.success || !fp?.data?.id)
-                                            throw new Error(t('cannotLocateProjectDict'));
+                                        if (!fp?.success || !fp?.data?.id) {
+                                            toast.error(t('cannotLocateProjectDict'));
+                                            return;
+                                        }
                                         const created = (await createDictionaryEntryAction({
                                             dictionaryId: fp.data.id,
                                             sourceText: String(row.term || ''),
                                             targetText: String(editValue || ''),
                                             origin: 'apply:user',
                                         })) as any;
-                                        if (!created?.success || !created?.data?.id)
-                                            throw new Error(created?.error || t('createFailed'));
+                                        if (!created?.success || !created?.data?.id) {
+                                            toast.error(
+                                                t(
+                                                    resolveMtReviewErrorKey(
+                                                        created?.error,
+                                                        'createFailed'
+                                                    )
+                                                )
+                                            );
+                                            return;
+                                        }
                                         // 获取词库元信息用于展示来源
                                         let sourceLabel = t('projectDictionary');
                                         try {
@@ -491,8 +525,12 @@ export default function PreTranslatePanel() {
                                             String(row.id),
                                             { targetText: editValue }
                                         )) as any;
-                                        if (!res?.success)
-                                            throw new Error(res?.error || t('saveFailed'));
+                                        if (!res?.success) {
+                                            toast.error(
+                                                t(resolveMtReviewErrorKey(res?.error, 'saveFailed'))
+                                            );
+                                            return;
+                                        }
                                         toast.success(t('savedDictTranslation'));
                                         // 更新本地词典译文（避免直接修改只读对象）
                                         const dictArr = Array.isArray(dict) ? (dict as any[]) : [];
@@ -513,8 +551,8 @@ export default function PreTranslatePanel() {
                                         }
                                         cancelEdit();
                                     }
-                                } catch (e: any) {
-                                    toast.error(e?.message || t('saveFailed'));
+                                } catch (error) {
+                                    toast.error(t(resolveMtReviewErrorKey(error, 'saveFailed')));
                                 }
                             };
 
@@ -615,10 +653,18 @@ export default function PreTranslatePanel() {
                                                                 idStr,
                                                                 { enabled: !!next }
                                                             )) as any;
-                                                        if (!res?.success)
-                                                            throw new Error(
-                                                                res?.error || t('saveFailed')
+                                                        if (!res?.success) {
+                                                            setRowEnabled(rowId, prev);
+                                                            toast.error(
+                                                                t(
+                                                                    resolveMtReviewErrorKey(
+                                                                        res?.error,
+                                                                        'saveStatusFailed'
+                                                                    )
+                                                                )
                                                             );
+                                                            return;
+                                                        }
                                                         const srcLabel = String(
                                                             (row as any)?.source || ''
                                                         ).trim();
@@ -633,10 +679,15 @@ export default function PreTranslatePanel() {
                                                         toast.success(
                                                             `${next ? t('enabled') : t('disabled')}${t('term')}：${row.term}${lib ? `（${lib}）` : ''}`
                                                         );
-                                                    } catch (e: any) {
+                                                    } catch (error) {
                                                         setRowEnabled(rowId, prev);
                                                         toast.error(
-                                                            e?.message || t('saveStatusFailed')
+                                                            t(
+                                                                resolveMtReviewErrorKey(
+                                                                    error,
+                                                                    'saveStatusFailed'
+                                                                )
+                                                            )
                                                         );
                                                     }
                                                 }}

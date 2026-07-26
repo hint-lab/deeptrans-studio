@@ -1,0 +1,65 @@
+# Isolated local dependencies only. This file deliberately does not start the
+# app, worker, Traefik, or any cloud service.
+services:
+    db:
+        build:
+            context: ./docker/postgres-pgvector-pgroonga
+        image: deeptrans/postgres-pgvector-pgroonga:18
+        environment:
+            POSTGRES_USER: ${LOCAL_POSTGRES_USER:?copy .env.local.example to .env.local first}
+            POSTGRES_PASSWORD: ${LOCAL_POSTGRES_PASSWORD:?copy .env.local.example to .env.local first}
+            POSTGRES_DB: ${LOCAL_POSTGRES_DB:?copy .env.local.example to .env.local first}
+        ports:
+            - '127.0.0.1:55432:5432'
+        volumes:
+            - deeptrans_local_postgres_data:/var/lib/postgresql
+        healthcheck:
+            test: ['CMD-SHELL', 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+            interval: 5s
+            timeout: 5s
+            retries: 20
+        restart: 'no'
+
+    valkey:
+        image: valkey/valkey:8-alpine
+        command: ['valkey-server', '--save', '60', '1', '--loglevel', 'warning']
+        ports:
+            - '127.0.0.1:56379:6379'
+        volumes:
+            - deeptrans_local_valkey_data:/data
+        healthcheck:
+            test: ['CMD', 'valkey-cli', 'ping']
+            interval: 5s
+            timeout: 5s
+            retries: 20
+        restart: 'no'
+
+    minio:
+        # Pin the local object-store release so a first setup is reproducible.
+        # The health command below is the one supported by MinIO's Compose
+        # example for this image family.
+        image: quay.io/minio/minio:RELEASE.2025-09-06T17-38-46Z
+        environment:
+            MINIO_ROOT_USER: ${LOCAL_MINIO_USER:?copy .env.local.example to .env.local first}
+            MINIO_ROOT_PASSWORD: ${LOCAL_MINIO_PASSWORD:?copy .env.local.example to .env.local first}
+        command: server /data --console-address ':9001'
+        ports:
+            # Keep the S3 API and Console mappings in sync with local-dev.mjs.
+            - '127.0.0.1:59002:9000'
+            - '127.0.0.1:59003:9001'
+        volumes:
+            - deeptrans_local_minio_data:/data
+        healthcheck:
+            test: ['CMD', 'mc', 'ready', 'local']
+            interval: 5s
+            timeout: 5s
+            retries: 20
+        restart: 'no'
+
+volumes:
+    deeptrans_local_postgres_data:
+        name: deeptrans_local_postgres_data
+    deeptrans_local_valkey_data:
+        name: deeptrans_local_valkey_data
+    deeptrans_local_minio_data:
+        name: deeptrans_local_minio_data

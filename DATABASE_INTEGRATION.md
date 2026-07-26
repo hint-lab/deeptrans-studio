@@ -12,6 +12,7 @@
 ## 数据库模型
 
 ### Dictionary（词典）
+
 - `id`: 唯一标识符
 - `name`: 词典名称
 - `description`: 词典描述
@@ -22,6 +23,7 @@
 - `updatedAt`: 更新时间
 
 ### DictionaryEntry（词典条目）
+
 - `id`: 唯一标识符
 - `sourceText`: 源语言文本
 - `targetText`: 目标语言文本
@@ -33,46 +35,55 @@
 ## 安装和设置
 
 ### 1. 安装依赖
+
 ```bash
 npm install
 ```
 
-### 2. 设置数据库
+### 2. 创建隔离本地配置
+
 ```bash
-# 生成Prisma客户端
-npm run db:generate
-
-# 推送数据库架构
-npm run db:push
-
-# 或者使用迁移（推荐生产环境）
-npm run db:migrate
+cp .env.local.example .env.local
+# 使用 npm run local:secret 生成随机的本地值并填入 AUTH_SECRET；不要复制 .env 或生产配置。
 ```
 
-### 3. 初始化示例数据
+### 3. 初始化受管本地依赖与演示数据
+
 ```bash
-npm run db:seed
+# local:setup 会启动本地 PostgreSQL、Valkey、MinIO，迁移 deeptrans_local，
+# 并创建演示账号。
+npm run local:setup
+
+# setup 成功后再执行只读就绪检查。
+npm run local:check
 ```
 
 ### 4. 启动开发服务器
+
 ```bash
 npm run dev
+# 如需后台任务，在另一终端运行 npm run worker
 ```
+
+本地开发不要直接运行 `db:push`、`db:migrate`、`db:seed`、`db:reset` 或裸 Prisma 命令：它们会使用当前 shell 的数据库配置，而不经过隔离启动器。生产迁移应遵循 README 中已批准的生产部署流程。
 
 ## 主要功能
 
 ### 词典管理
+
 - **创建词典**: 点击"增加词库"按钮，填写表单创建新词典
 - **编辑词典**: 支持修改词典名称、描述、领域和公开状态
 - **删除词典**: 删除词典及其所有条目
 
 ### 词库管理
+
 - **添加词条**: 在词典详情页面添加新的术语对照
 - **编辑词条**: 修改源语言、目标语言和备注
 - **删除词条**: 删除不需要的词条
 - **搜索词条**: 支持按源语言、目标语言或备注搜索
 
 ### 分类管理
+
 - **公共词库**: 所有用户可见的词典
 - **领域词库**: 按专业领域分类的词典
 - **私有词库**: 用户个人创建的词典
@@ -80,6 +91,7 @@ npm run dev
 ## API接口
 
 ### 词典操作
+
 - `createDictionary()`: 创建词典
 - `getAllDictionaries()`: 获取所有词典
 - `getDictionaries()`: 获取词典
@@ -87,6 +99,7 @@ npm run dev
 - `deleteDictionary()`: 删除词典
 
 ### 词条操作
+
 - `createDictionaryEntry()`: 创建词条
 - `updateDictionaryEntry()`: 更新词条
 - `deleteDictionaryEntry()`: 删除词条
@@ -96,32 +109,35 @@ npm run dev
 ## 使用示例
 
 ### 创建新词典
+
 ```typescript
-import { createDictionary } from "@/actions/dictionary"
+import { createDictionary } from '@/actions/dictionary';
 
 const result = await createDictionary({
-    name: "我的专业词典",
-    description: "个人专业术语集合",
-    domain: "technology",
-    isPublic: false
-})
+    name: '我的专业词典',
+    description: '个人专业术语集合',
+    domain: 'technology',
+    isPublic: false,
+});
 ```
 
 ### 添加词条
+
 ```typescript
-import { createDictionaryEntry } from "@/actions/dictionary"
+import { createDictionaryEntry } from '@/actions/dictionary';
 
 const result = await createDictionaryEntry({
-    sourceText: "machine learning",
-    targetText: "机器学习",
-    notes: "AI领域术语",
-    dictionaryId: "dict-id"
-})
+    sourceText: 'machine learning',
+    targetText: '机器学习',
+    notes: 'AI领域术语',
+    dictionaryId: 'dict-id',
+});
 ```
 
 ## 错误处理
 
 所有数据库操作都包含完整的错误处理：
+
 - 成功操作返回 `{ success: true, data: result }`
 - 失败操作返回 `{ success: false, error: "错误信息" }`
 - 使用Toast组件显示操作结果
@@ -145,33 +161,33 @@ const result = await createDictionaryEntry({
 ### 常见问题
 
 1. **数据库连接失败**
-   - 检查环境变量配置
-   - 确认数据库服务运行状态
+    - 检查环境变量配置
+    - 确认数据库服务运行状态
 
-2. **Prisma客户端错误**
-   - 运行 `npm run db:generate` 重新生成客户端
-   - 检查数据库架构是否最新
+2. **本地初始化或迁移错误**
+    - 重新运行 `npm run local:setup`，它会使用受管的本地数据库
+    - setup 成功后运行 `npm run local:check` 确认迁移状态
 
 3. **数据不显示**
-   - 确认已运行种子脚本
-   - 检查数据库权限
+    - 确认已运行种子脚本
+    - 检查数据库权限
 
 ### 调试模式
 
 ```bash
-# 查看数据库
-npm run db:studio
+# 检查受管本地依赖、凭据与迁移状态
+npm run local:check
 
-# 重置数据库
-npm run db:reset
-
-# 查看Prisma日志
-DEBUG=prisma:* npm run dev
+# 查看本地应用日志
+npm run dev
 ```
+
+本地路径不提供通用重置命令；不要对未知 `DATABASE_URL` 使用 `db:reset`、`db:push` 或 Prisma Studio。
 
 ## 扩展功能
 
 ### 计划中的功能
+
 - 批量导入/导出词条
 - 词条版本控制
 - 协作编辑
@@ -179,6 +195,7 @@ DEBUG=prisma:* npm run dev
 - 词条使用统计
 
 ### 自定义扩展
+
 - 添加新的领域分类
 - 自定义词条字段
 - 集成外部词典API
@@ -187,7 +204,8 @@ DEBUG=prisma:* npm run dev
 ## 技术支持
 
 如有问题，请检查：
+
 1. 控制台错误日志
 2. 数据库连接状态
 3. Prisma客户端版本
-4. 环境变量配置 
+4. 环境变量配置

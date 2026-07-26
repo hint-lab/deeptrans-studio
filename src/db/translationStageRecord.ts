@@ -11,6 +11,7 @@ export type TranslationStageRecordCreateInput = {
     stepKey: TranslationStage | keyof typeof TranslationStage | string;
     actorType?: TranslationProcessActorType | keyof typeof TranslationProcessActorType | string;
     actorId?: string | null;
+    userId?: string | null;
     model?: string | null;
     status?:
         | TranslationProcessStepStatus
@@ -28,6 +29,7 @@ export const createTranslationStageRecordDB = async (
         stepKey,
         actorType = TranslationProcessActorType.AGENT,
         actorId,
+        userId,
         model,
         status = TranslationProcessStepStatus.SUCCESS,
         metadata,
@@ -38,6 +40,7 @@ export const createTranslationStageRecordDB = async (
             stepKey: stepKey as TranslationStage,
             actorType: actorType as TranslationProcessActorType,
             actorId: actorId ?? null,
+            userId: userId ?? null,
             model: model ?? null,
             status:
                 (status as TranslationProcessStepStatus) ?? TranslationProcessStepStatus.SUCCESS,

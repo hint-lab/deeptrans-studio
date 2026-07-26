@@ -10,6 +10,29 @@ export type StepperProps = {
     onStepClick?: (step: 'parse' | 'segment' | 'terms' | 'done') => void;
 };
 
+const stepOrder: Array<StepperProps['currentStep']> = ['parse', 'segment', 'terms', 'done'];
+
+export function isInitStepVisuallyComplete(
+    step: StepperProps['currentStep'],
+    currentStep: StepperProps['currentStep'],
+    segPct: number,
+    termPct: number
+) {
+    // Reaching 100% can still leave a stage awaiting the user's confirmation.
+    // A non-terminal step becomes complete only after the flow advances past it.
+    if (step === 'done') {
+        return currentStep === 'done' && segPct >= 100 && termPct >= 100;
+    }
+
+    const currentStepIndex = stepOrder.indexOf(currentStep);
+    const stepIndex = stepOrder.indexOf(step);
+    if (stepIndex >= currentStepIndex) return false;
+
+    if (step === 'parse') return true;
+    if (step === 'segment') return segPct >= 100;
+    return termPct >= 100;
+}
+
 const StepDot = ({
     active,
     done,
@@ -36,6 +59,9 @@ const StepDot = ({
 
 export default function Stepper({ currentStep, segPct, termPct, onStepClick }: StepperProps) {
     const t = useTranslations('Dashboard.Init');
+    const isDone = (k: StepperProps['currentStep']) =>
+        isInitStepVisuallyComplete(k, currentStep, segPct, termPct);
+    const isActive = (k: StepperProps['currentStep']) => currentStep === k && !isDone(k);
     const steps: Array<{
         key: StepperProps['currentStep'];
         label: string;
@@ -54,18 +80,9 @@ export default function Stepper({ currentStep, segPct, termPct, onStepClick }: S
             key: 'done',
             label: t('stepDone'),
             icon: CheckCircle2,
-            sub: segPct >= 100 && termPct >= 100 ? t('completed') : '',
+            sub: isDone('done') ? t('completed') : '',
         },
     ];
-
-    const isDone = (k: StepperProps['currentStep']) => {
-        if (k === 'parse') return currentStep !== 'parse';
-        if (k === 'segment') return segPct >= 100;
-        if (k === 'terms') return termPct >= 100;
-        if (k === 'done') return segPct >= 100 && termPct >= 100;
-        return false;
-    };
-    const isActive = (k: StepperProps['currentStep']) => currentStep === k && !isDone(k);
 
     // 计算中心点百分比（基于 4 个等分列）
     const centersPct: number[] = [0, 1, 2, 3].map(i => ((i * 2 + 1) / (4 * 2)) * 100);
@@ -95,72 +112,85 @@ export default function Stepper({ currentStep, segPct, termPct, onStepClick }: S
     return (
         <div className="relative mt-4 w-full">
             {/* 基线（连续） */}
-            <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2 px-[12.5%]">
+            <div className="pointer-events-none absolute left-0 right-0 top-1/2 hidden -translate-y-1/2 px-[12.5%] sm:block">
                 <div className="h-[2px] w-full rounded bg-gray-200 dark:bg-gray-800" />
             </div>
             {/* 已完成进度（绿色，连续） */}
             <div
-                className="absolute left-[12.5%] top-1/2 -translate-y-1/2"
+                className="pointer-events-none absolute left-[12.5%] top-1/2 hidden -translate-y-1/2 sm:block"
                 style={{ width: `${Math.max(0, completedRight - baseLeft)}%` }}
             >
                 <div className="h-[2px] rounded bg-emerald-400 dark:bg-emerald-500" />
             </div>
             {/* 当前步骤进行中（紫色） */}
             <div
-                className="absolute left-[12.5%] top-1/2 -translate-y-1/2"
+                className="pointer-events-none absolute left-[12.5%] top-1/2 hidden -translate-y-1/2 sm:block"
                 style={{ width: `${Math.max(0, activeRight - completedRight)}%` }}
             >
                 <div className="h-[2px] rounded bg-indigo-500/90" />
             </div>
 
             {/* 四个步骤卡片（置于连线之上） */}
-            <div className="relative grid grid-cols-4 items-center">
-                {steps.map((s, idx) => {
+            <ol className="relative grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-0">
+                {steps.map(s => {
                     const done = isDone(s.key);
                     const active = isActive(s.key);
+                    const isCurrent = currentStep === s.key;
                     const Icon = s.icon;
-                    const order: Array<StepperProps['currentStep']> = [
-                        'parse',
-                        'segment',
-                        'terms',
-                        'done',
-                    ];
-                    const curIdx = order.indexOf(currentStep);
-                    const targetIdx = order.indexOf(s.key);
-                    const isClickable =
-                        typeof onStepClick === 'function' && targetIdx >= 0 && targetIdx < curIdx;
-                    return (
-                        <div key={s.key} className="flex items-center justify-center py-1">
-                            <button
-                                type="button"
-                                onClick={isClickable ? () => onStepClick?.(s.key) : undefined}
-                                className={`relative z-10 inline-flex w-32 items-center gap-2 rounded-md border px-3 py-2 shadow-sm transition-colors ${done ? 'border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-900 dark:text-emerald-200' : active ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-gray-300 bg-white text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300'} ${isClickable ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800' : 'cursor-default'}`}
-                                aria-disabled={!isClickable}
+                    const curIdx = stepOrder.indexOf(currentStep);
+                    const targetIdx = stepOrder.indexOf(s.key);
+                    const isReviewable =
+                        typeof onStepClick === 'function' &&
+                        done &&
+                        targetIdx >= 0 &&
+                        targetIdx < curIdx;
+                    const cardClassName = `relative z-10 inline-flex w-full min-w-0 items-center gap-1.5 rounded-md border px-2 py-2 text-left shadow-sm transition-colors sm:w-32 sm:gap-2 sm:px-3 ${done ? 'border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-900 dark:text-emerald-200' : active ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-gray-300 bg-white text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300'} ${isReviewable ? 'cursor-pointer hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 dark:hover:bg-gray-800' : 'cursor-default'}`;
+                    const content = (
+                        <>
+                            <div
+                                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md ${done ? 'bg-emerald-600 text-white' : active ? 'bg-white/15 text-white' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'}`}
                             >
-                                <div
-                                    className={`flex h-6 w-6 items-center justify-center rounded-md ${done ? 'bg-emerald-600 text-white' : active ? 'bg-white/15 text-white' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'}`}
+                                {done ? (
+                                    <CheckCircle2 className="h-4 w-4" />
+                                ) : (
+                                    <Icon className="h-4 w-4" />
+                                )}
+                            </div>
+                            <div className="min-w-0 leading-tight">
+                                <div className="break-words text-xs font-medium sm:text-[13px]">
+                                    {s.label}
+                                </div>
+                                {s.sub ? (
+                                    <div
+                                        className={`text-[11px] ${active ? 'text-white/90' : 'text-muted-foreground'}`}
+                                    >
+                                        {s.sub}
+                                    </div>
+                                ) : null}
+                            </div>
+                        </>
+                    );
+                    return (
+                        <li
+                            key={s.key}
+                            aria-current={isCurrent ? 'step' : undefined}
+                            className="flex min-w-0 items-stretch justify-center sm:items-center sm:py-1"
+                        >
+                            {isReviewable ? (
+                                <button
+                                    type="button"
+                                    onClick={() => onStepClick?.(s.key)}
+                                    className={cardClassName}
                                 >
-                                    {done ? (
-                                        <CheckCircle2 className="h-4 w-4" />
-                                    ) : (
-                                        <Icon className="h-4 w-4" />
-                                    )}
-                                </div>
-                                <div className="leading-tight">
-                                    <div className="text-[13px] font-medium">{s.label}</div>
-                                    {s.sub ? (
-                                        <div
-                                            className={`text-[11px] ${active ? 'text-white/90' : 'text-muted-foreground'}`}
-                                        >
-                                            {s.sub}
-                                        </div>
-                                    ) : null}
-                                </div>
-                            </button>
-                        </div>
+                                    {content}
+                                </button>
+                            ) : (
+                                <div className={cardClassName}>{content}</div>
+                            )}
+                        </li>
                     );
                 })}
-            </div>
+            </ol>
         </div>
     );
 }

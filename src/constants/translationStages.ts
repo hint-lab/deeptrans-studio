@@ -11,6 +11,7 @@ const TRANSLATION_STAGE_LABEL_KEYS: Record<TranslationStage, string> = {
     SIGN_OFF: 'SIGN_OFF',
     COMPLETED: 'COMPLETED',
     ERROR: 'ERROR',
+    CANCELED: 'CANCELED',
 };
 
 export const TRANSLATION_STAGES_SEQUENCE: TranslationStage[] = [
@@ -127,6 +128,7 @@ export function getTranslationStageGroup(stage: string | null | undefined): Tran
         case 'COMPLETED':
             return 'signoff';
         case 'ERROR':
+        case 'CANCELED':
             return 'error';
         case 'NOT_STARTED':
         default:
@@ -136,7 +138,7 @@ export function getTranslationStageGroup(stage: string | null | undefined): Tran
 
 export function getTranslationStageDotClass(stage: string | null | undefined): string {
     if (stage === 'COMPLETED' || stage === 'SIGN_OFF') return 'bg-emerald-500';
-    if (stage === 'ERROR') return 'bg-red-500';
+    if (stage === 'ERROR' || stage === 'CANCELED') return 'bg-red-500';
     if (isReviewStage(stage)) return 'bg-orange-500';
     if (stage && stage !== 'NOT_STARTED') return 'bg-indigo-500';
     return 'bg-gray-400';
@@ -148,7 +150,7 @@ export function getTranslationStageBadgeClass(stage: string | null | undefined):
     if (stage === 'COMPLETED' || stage === 'SIGN_OFF') {
         return `${base} bg-emerald-600 border-emerald-700 text-white shadow`;
     }
-    if (stage === 'ERROR') {
+    if (stage === 'ERROR' || stage === 'CANCELED') {
         return `${base} bg-red-600 border-red-700 text-white shadow`;
     }
     if (isReviewStage(stage)) {

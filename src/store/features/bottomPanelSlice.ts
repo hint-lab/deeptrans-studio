@@ -15,8 +15,11 @@ export const bottomPanelSlice = createSlice({
         toggle: state => {
             state.isOpen = !state.isOpen;
         },
+        setOpen: (state, action: { payload: boolean }) => {
+            state.isOpen = action.payload;
+        },
     },
 });
 
-export const { toggle } = bottomPanelSlice.actions;
+export const { toggle, setOpen } = bottomPanelSlice.actions;
 export default bottomPanelSlice.reducer;

@@ -1,10 +1,10 @@
 'use client';
+import { ProtectedSessionGuard } from '@/components/protected-session-guard';
 import { useRightPanel } from '@/hooks/useRightPanel';
 import { useSidebar } from '@/hooks/useSidebar';
-import { useSession } from 'next-auth/react';
-import { useTranslations } from 'next-intl';
+import { getIDEExplorerPanelSize, getIDELayoutSizes } from '@/lib/ide-layout';
 import { useParams } from 'next/navigation';
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { ImperativePanelHandle } from 'react-resizable-panels';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from 'src/components/ui/resizable';
 import { cn } from 'src/lib/utils';
@@ -16,53 +16,25 @@ import { Menu } from './components/menu';
 import ParallelEditor from './components/parallel-editor';
 import PreviewCard from './components/preview';
 import RightSidebar from './components/right-sidebar';
+
 function IDELayout({ children }: { children: React.ReactNode }) {
-    const t = useTranslations('IDE');
-    const { status, update } = useSession();
     const params = useParams();
-    const { isSidebarOpen, toggleSidebar } = useSidebar();
+    const { isSidebarOpen } = useSidebar();
     const { mode } = useRightPanel();
     const sidebarPanelRef = useRef<ImperativePanelHandle>(null);
+    const layoutSizes = useMemo(
+        () => getIDELayoutSizes(isSidebarOpen, mode),
+        [isSidebarOpen, mode]
+    );
+
+    // 只在侧栏开关变化时调整 Explorer；拖拽后的宽度不应被普通渲染重置。
     useEffect(() => {
-        const handleVisibilityChange = () => {
-            if (document.visibilityState === 'visible') {
-                // 页面变为可见，检查session
-                if (status !== "authenticated") {
-                    update();
-                }
-
-            }
-        };
-
-        document.addEventListener('visibilitychange', handleVisibilityChange);
-
-        return () => {
-            document.removeEventListener('visibilitychange', handleVisibilityChange);
-        };
-    }, [status, update]);
-    // 动态计算布局
-    const getLayoutSizes = () => {
-        if (mode === 'none') {
-            // 没有右侧面板时
-            return isSidebarOpen ? [15, 85] : [0, 100];
-        } else {
-            // 有右侧面板时
-            return isSidebarOpen ? [15, 60, 25] : [0, 75, 25];
-        }
-    };
-
-    const layoutSizes = getLayoutSizes();
-
-    // 当sidebar状态改变时，同步ResizablePanel的状态
-    useEffect(() => {
-        if (sidebarPanelRef.current) {
-            const newSize = layoutSizes[0] || 0;
-            sidebarPanelRef.current.resize(newSize);
-        }
-    }, [isSidebarOpen, layoutSizes]);
+        sidebarPanelRef.current?.resize(getIDEExplorerPanelSize(isSidebarOpen));
+    }, [isSidebarOpen]);
 
     return (
         <div className="fixed inset-0 bg-secondary">
+            <ProtectedSessionGuard />
             {/* Menu */}
             <div className="z-60 fixed left-0 right-0 top-0 h-10 pr-10">
                 <Menu />
@@ -70,6 +42,7 @@ function IDELayout({ children }: { children: React.ReactNode }) {
             {/* IDE */}
             <div className="fixed bottom-6 left-0 top-10 z-40 mt-1 w-full bg-secondary xl:pr-8">
                 <ResizablePanelGroup
+                    id="ide-workspace-panels"
                     direction="horizontal"
                     onLayout={sizes => {
                         document.cookie = `react-resizable-panels:layout=${JSON.stringify(sizes)}`;
@@ -79,6 +52,8 @@ function IDELayout({ children }: { children: React.ReactNode }) {
                     {/* 左侧 Explorer 面板 */}
                     <ResizablePanel
                         ref={sidebarPanelRef}
+                        id="ide-explorer-panel"
+                        order={1}
                         defaultSize={layoutSizes[0]}
                         collapsedSize={0}
                         collapsible={true}
@@ -93,6 +68,8 @@ function IDELayout({ children }: { children: React.ReactNode }) {
 
                     {/* 中间主编辑区域 */}
                     <ResizablePanel
+                        id="ide-editor-panel"
+                        order={2}
                         defaultSize={layoutSizes[1]}
                         minSize={40}
                         maxSize={mode === 'none' ? 100 : 80}
@@ -106,7 +83,8 @@ function IDELayout({ children }: { children: React.ReactNode }) {
                         <>
                             <ResizableHandle className="w-1 bg-secondary" />
                             <ResizablePanel
-                                key={mode}
+                                id="ide-right-panel"
+                                order={3}
                                 defaultSize={layoutSizes[2]}
                                 collapsedSize={5}
                                 collapsible={true}

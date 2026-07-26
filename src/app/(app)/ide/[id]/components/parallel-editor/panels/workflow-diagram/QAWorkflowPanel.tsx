@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { ReactFlowProvider } from '@xyflow/react';
 import {
     ReactFlow,
-    addEdge,
     Background,
+    Controls,
     useNodesState,
     useEdgesState,
     BackgroundVariant,
@@ -15,72 +15,109 @@ import { nodeTypes } from './nodes';
 import { edgeTypes } from './edges';
 import { useWorkflowData } from './data/workflows';
 import { useAgentWorkflowSteps } from '@/hooks/useAgentWorkflowSteps';
+import { useTranslationState } from '@/hooks/useTranslation';
+import {
+    getWorkflowDiagramNodeState,
+    getWorkflowDiagramTerminalState,
+    isWorkflowDiagramComplete,
+} from '@/lib/workflow-diagram-state';
+import { useTranslations } from 'next-intl';
+import {
+    preserveWorkflowPromptNodeClicks,
+    readOnlyWorkflowDiagramProps,
+    workflowDiagramFitViewOptions,
+} from './workflow-diagram-canvas';
 import '@xyflow/react/dist/style.css';
 
 export default function QAWorkflowPanel() {
     const { theme } = useTheme();
     const [mounted, setMounted] = useState(false);
     const { qaStep, isQARunning } = useAgentWorkflowSteps();
+    const { currentStage } = useTranslationState();
     const workflows = useWorkflowData();
     const flow = workflows['evaluate'];
     const [nodes, setNodes, onNodesChange] = useNodesState(flow?.nodes || []);
     const [edges, setEdges, onEdgesChange] = useEdgesState(flow?.edges || []);
-
-    const onConnect = useCallback(
-        (connection: any) => {
-            const edge = { ...connection, type: 'custom-edge' };
-            setEdges(eds => addEdge(edge, eds));
-        },
-        [setEdges]
-    );
+    const t = useTranslations('IDE.workflowDiagram');
+    const isComplete = isWorkflowDiagramComplete('evaluate', currentStage);
+    const activeNode = flow?.nodes?.find((node: any) => node.data?.qaPhase === qaStep);
+    const status = isComplete
+        ? t('completed')
+        : isQARunning
+          ? t('running', { step: String(activeNode?.data?.label || '') || t('preparing') })
+          : t('waiting');
 
     // 更新节点状态以反映当前QA workflow步骤（直接使用 store 中定义的 qaStep 值）
     useEffect(() => {
         if (!flow?.nodes) return;
-        const mapped = qaStep as any;
         const updatedNodes = flow.nodes.map((node: any) => {
-            const isCurrentStep = node.data?.qaPhase === mapped;
-            const isRunning = isCurrentStep && isQARunning;
-
+            const workflowState =
+                node.type === 'terminalNode'
+                    ? getWorkflowDiagramTerminalState({
+                          workflow: 'evaluate',
+                          stage: currentStage,
+                          isRunning: isQARunning,
+                          terminal: node.data?.variant === 'end' ? 'end' : 'start',
+                      })
+                    : getWorkflowDiagramNodeState({
+                          workflow: 'evaluate',
+                          stage: currentStage,
+                          isRunning: isQARunning,
+                          currentStep: qaStep,
+                          nodeStep: node.data?.qaPhase,
+                      });
             return {
                 ...node,
                 data: {
                     ...node.data,
-                    isActive: isCurrentStep,
-                    isRunning: isRunning,
+                    workflowState,
+                    isActive: workflowState === 'active',
+                    isRunning: workflowState === 'active',
+                    isCompleted: workflowState === 'completed',
                 },
-                className: isCurrentStep ? 'current-step' : '',
             };
         });
-
         setNodes(updatedNodes);
-    }, [qaStep, isQARunning, flow?.nodes, setNodes]);
+        setEdges(flow.edges || []);
+    }, [currentStage, flow?.edges, flow?.nodes, isQARunning, qaStep, setEdges, setNodes]);
 
     useEffect(() => {
         setMounted(true);
     }, []);
-    if (!mounted) return <div className="h-72 w-full bg-muted/20" />;
+    if (!mounted) return <div className="size-full min-h-0 bg-muted/20" />;
 
     return (
         <ReactFlowProvider>
-            <div className="relative h-72 w-full overflow-hidden">
+            <section className="relative size-full min-h-0 overflow-hidden" aria-label={t('label')}>
+                <div
+                    className="pointer-events-none absolute left-2 top-2 z-10 inline-flex max-w-[calc(100%-1rem)] items-center rounded-md border bg-background/95 px-2 py-1 text-[11px] font-medium text-foreground shadow-sm"
+                    role="status"
+                    aria-live="polite"
+                    data-workflow-state={
+                        isComplete ? 'completed' : isQARunning ? 'active' : 'pending'
+                    }
+                >
+                    <span className="truncate">{status}</span>
+                </div>
                 <ReactFlow
                     nodes={nodes}
                     edges={edges}
                     onNodesChange={onNodesChange}
                     onEdgesChange={onEdgesChange}
-                    onConnect={onConnect}
+                    onNodeClick={preserveWorkflowPromptNodeClicks}
                     edgeTypes={edgeTypes}
                     nodeTypes={nodeTypes}
-                    fitView
-                    fitViewOptions={{ padding: 1.0 }}
-                    minZoom={0.2}
-                    maxZoom={2}
-                    defaultViewport={{ x: 0, y: 0, zoom: 0.4 }}
-                    nodesDraggable={false}
-                    nodesConnectable={false}
+                    {...readOnlyWorkflowDiagramProps}
+                    ariaLabelConfig={{ 'controls.fitView.ariaLabel': t('resetView') }}
                     className="node-sm h-full w-full"
                 >
+                    <Controls
+                        aria-label={t('controlsLabel')}
+                        position="bottom-right"
+                        showZoom={false}
+                        showInteractive={false}
+                        fitViewOptions={workflowDiagramFitViewOptions}
+                    />
                     <Background
                         color={theme === 'dark' ? '#334155' : '#94a3b8'}
                         gap={12}
@@ -88,7 +125,7 @@ export default function QAWorkflowPanel() {
                         variant={'dots' as BackgroundVariant}
                     />
                 </ReactFlow>
-            </div>
+            </section>
         </ReactFlowProvider>
     );
 }
