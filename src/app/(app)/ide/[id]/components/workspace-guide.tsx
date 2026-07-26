@@ -127,10 +127,7 @@ function WorkspaceGuideOverlay({
     const nextDisabled = isFirstStep && !hasActiveSegment;
 
     useEffect(() => {
-        if (!open) {
-            setTargetRect(null);
-            return;
-        }
+        if (!open) return;
 
         let frame = 0;
         const updateTarget = () => {
@@ -140,7 +137,6 @@ function WorkspaceGuideOverlay({
         const observer = new ResizeObserver(updateTarget);
         const target = document.querySelector<HTMLElement>(step.target);
 
-        updateTarget();
         observer.observe(document.body);
         if (target) observer.observe(target);
         window.addEventListener('resize', updateTarget);
@@ -328,31 +324,24 @@ export function WorkspaceGuideProvider({ children }: { children: React.ReactNode
         setIsOpen(false);
     }, [markGuideSeen]);
 
+    const visibleStepIndex =
+        stepIndex === 0 && selectedDuringThisTourRef.current && hasActiveSegment
+            ? 1
+            : stepIndex;
+
     const nextStep = useCallback(() => {
-        if (stepIndex === 0 && !hasActiveSegment) return;
-        if (stepIndex === GUIDE_STEPS.length - 1) {
+        if (visibleStepIndex === 0 && !hasActiveSegment) return;
+        if (visibleStepIndex === GUIDE_STEPS.length - 1) {
             closeGuide();
             return;
         }
-        setStepIndex(current => Math.min(current + 1, GUIDE_STEPS.length - 1));
-    }, [closeGuide, hasActiveSegment, stepIndex]);
+        setStepIndex(Math.min(visibleStepIndex + 1, GUIDE_STEPS.length - 1));
+    }, [closeGuide, hasActiveSegment, visibleStepIndex]);
 
     const previousStep = useCallback(() => {
-        setStepIndex(current => Math.max(current - 1, 0));
-    }, []);
-
-    useEffect(() => {
-        if (
-            !isOpen ||
-            stepIndex !== 0 ||
-            !selectedDuringThisTourRef.current ||
-            !hasActiveSegment
-        ) {
-            return;
-        }
-        const frame = window.requestAnimationFrame(() => setStepIndex(1));
-        return () => window.cancelAnimationFrame(frame);
-    }, [hasActiveSegment, isOpen, stepIndex]);
+        if (visibleStepIndex === 1) selectedDuringThisTourRef.current = false;
+        setStepIndex(Math.max(visibleStepIndex - 1, 0));
+    }, [visibleStepIndex]);
 
     useEffect(() => {
         if (status === 'loading' || !storageKey || autoOpenKeyRef.current === storageKey) return;
@@ -375,7 +364,7 @@ export function WorkspaceGuideProvider({ children }: { children: React.ReactNode
             {children}
             <WorkspaceGuideOverlay
                 open={isOpen}
-                stepIndex={stepIndex}
+                stepIndex={visibleStepIndex}
                 hasActiveSegment={hasActiveSegment}
                 onBack={previousStep}
                 onNext={nextStep}
