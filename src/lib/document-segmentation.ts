@@ -294,7 +294,7 @@ export function buildSemanticSegmentationBlocks(
         sourceParagraphIndex < (input || []).length;
         sourceParagraphIndex += 1
     ) {
-        const sourceParagraph = input[sourceParagraphIndex];
+        const sourceParagraph = input[sourceParagraphIndex]!;
         const expanded = expandEmbeddedStructuralLines(sourceParagraph);
         for (let unitIndex = 0; unitIndex < expanded.length; unitIndex += 1) {
             const paragraph = expanded[unitIndex]!;
