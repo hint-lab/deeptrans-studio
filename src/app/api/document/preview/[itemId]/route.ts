@@ -17,7 +17,8 @@ export async function GET(
         if (!item || !item.document)
             return NextResponse.json({ error: 'Not found' }, { status: 404 });
         const doc: any = item.document;
-        const body = await getReadableDocumentSourceBufferForOwner(doc.name, authCtx);
+        const sourceBuffer = await getReadableDocumentSourceBufferForOwner(doc.name, authCtx);
+        const body = new Uint8Array(sourceBuffer);
         return new NextResponse(body, {
             headers: {
                 'Content-Type': doc.mimeType || 'application/octet-stream',
