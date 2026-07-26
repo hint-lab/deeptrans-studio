@@ -17,6 +17,7 @@ import {
     signOffPostEditReviewWithDeps,
     startQualityAssureWithDeps,
     startPreTranslationWithDeps,
+    startPreTranslationWithSourceDraftDeps,
 } from './document-item';
 
 const version = new Date('2026-07-26T08:00:00.000Z');
@@ -159,6 +160,63 @@ test('does not let a second tab repeat MT or claim a stale row', async () => {
         /原文已更新/
     );
     assert.equal(staleSourceWrites, 0);
+});
+
+test('saves the visible source draft atomically when starting pre-translation', async () => {
+    const item = preTranslationItem({ targetText: null, sourceText: 'Saved source' });
+    let write: any;
+
+    const result = await startPreTranslationWithSourceDraftDeps(
+        'item-1',
+        { expectedSourceText: 'Saved source', sourceText: 'Visible source draft' },
+        {
+            requireWritableDocumentItem: async () => item,
+            updateDocumentItem: async next => {
+                write = next;
+                return { count: 1 };
+            },
+            createRunId: () => 'run-draft',
+        }
+    );
+
+    assert.equal(result.sourceText, 'Visible source draft');
+    assert.deepEqual(write, {
+        where: {
+            id: 'item-1',
+            status: 'NOT_STARTED',
+            sourceText: 'Saved source',
+            updatedAt: version,
+        },
+        data: {
+            sourceText: 'Visible source draft',
+            status: 'MT',
+            metadata: {
+                preTranslateSourceRevision: sourceRevision('Saved source'),
+                targetSourceRevision: sourceRevision('Saved source'),
+                preTranslateRunId: 'run-draft',
+            },
+        },
+    });
+});
+
+test('does not overwrite a newer source when starting from a local draft', async () => {
+    let writes = 0;
+    await assert.rejects(
+        startPreTranslationWithSourceDraftDeps(
+            'item-1',
+            { expectedSourceText: 'Saved source', sourceText: 'Visible source draft' },
+            {
+                requireWritableDocumentItem: async () =>
+                    preTranslationItem({ sourceText: 'Updated elsewhere' }),
+                updateDocumentItem: async () => {
+                    writes += 1;
+                    return { count: 1 };
+                },
+            }
+        ),
+        /原文已更新/
+    );
+    assert.equal(writes, 0);
 });
 
 test('requires a current durable pre-translation before MT_REVIEW', async () => {

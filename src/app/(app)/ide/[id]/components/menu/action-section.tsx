@@ -4,7 +4,7 @@ import {
     extractMonolingualTermsAction,
     lookupDictionaryAction,
 } from '@/actions/pre-translate';
-import { useTargetEditor } from '@/hooks/useEditor';
+import { getSourceEditorInstance, useTargetEditor } from '@/hooks/useEditor';
 import { useTranslationContent, useTranslationState } from '@/hooks/useTranslation';
 import { toast } from 'sonner';
 import { PostEditMenu } from './components/post-edit-menu';
@@ -111,6 +111,8 @@ export function ActionSection() {
         sourceText,
         persistedSourceText,
         targetText,
+        setPersistedSourceTranslationText,
+        setSourceTranslationText,
         setTargetTranslationText,
     } = useTranslationContent();
     const targetEditor = useTargetEditor();
@@ -429,17 +431,23 @@ export function ActionSection() {
             }
 
             // 检查文本内容
-            const currentText = String(persistedSourceText || '');
-            if (String(sourceText || '') !== currentText) {
-                toast.error('原文有未保存修改，请先保存原文后再启动预翻译');
-                return;
-            }
+            const expectedSourceText = String(persistedSourceText || '');
+            let currentText = String(sourceText || '');
+            try {
+                const sourceEditor = getSourceEditorInstance();
+                if (
+                    sourceEditor?.view.dom.getAttribute('data-deeptrans-editor-item-id') === id &&
+                    sourceEditor.view.dom.getAttribute('data-deeptrans-editor-job') === 'rawtext' &&
+                    sourceEditor.view.dom.getAttribute('data-deeptrans-editor-dirty') === 'true'
+                ) {
+                    currentText = sourceEditor.getHTML();
+                }
+            } catch {}
             if (!currentText.trim()) {
                 toast.error('原文内容为空，无法进行预翻译');
                 return;
             }
-            const isCurrentItem = () =>
-                activeItemIdRef.current === id && sourceTextRef.current === currentText;
+            const isCurrentItem = () => activeItemIdRef.current === id;
             logAgent('翻译开始');
 
             setIsRunning(true);
@@ -448,14 +456,38 @@ export function ActionSection() {
             // Claim MT on the server before any model call. A generic
             // MT->MT update is intentionally not enough here: it would let
             // two browser tabs run and later compete to publish a result.
-            const startedItem = await startPreTranslationAction(id, currentText);
+            try {
+                const sourceEditor = getSourceEditorInstance();
+                if (
+                    sourceEditor?.view.dom.getAttribute('data-deeptrans-editor-item-id') === id &&
+                    sourceEditor.view.dom.getAttribute('data-deeptrans-editor-job') === 'rawtext'
+                ) {
+                    sourceEditor.setEditable(false);
+                }
+            } catch {}
+            const startedItem = await startPreTranslationAction(id, expectedSourceText, currentText);
+            const claimedSourceText = String((startedItem as any)?.sourceText ?? currentText);
             const expectedTargetText = String((startedItem as any)?.targetText || '');
             const preTranslateRunId = String((startedItem as any)?.preTranslateRunId || '').trim();
             if (!preTranslateRunId) {
                 throw new Error('预翻译运行标识缺失，请刷新后重试');
             }
             syncLocalStatusById(id, 'MT');
-            if (isCurrentItem()) setCurrentStage('MT');
+            if (isCurrentItem()) {
+                setSourceTranslationText(claimedSourceText);
+                setPersistedSourceTranslationText(claimedSourceText);
+                try {
+                    const sourceEditor = getSourceEditorInstance();
+                    if (
+                        sourceEditor?.view.dom.getAttribute('data-deeptrans-editor-item-id') === id &&
+                        sourceEditor.view.dom.getAttribute('data-deeptrans-editor-job') === 'rawtext' &&
+                        sourceEditor.getHTML() === claimedSourceText
+                    ) {
+                        sourceEditor.view.dom.setAttribute('data-deeptrans-editor-dirty', 'false');
+                    }
+                } catch {}
+                setCurrentStage('MT');
+            }
 
             let terms: any[] = [];
             let dict: any[] = [];
@@ -465,7 +497,7 @@ export function ActionSection() {
                 setPreRunning(true);
                 setPreStep('mono-term-extract');
                 logAgent('预翻译 · 术语抽取');
-                terms = await extractMonolingualTermsAction(currentText, {
+                terms = await extractMonolingualTermsAction(claimedSourceText, {
                     locale: locale,
                 });
                 if (isCurrentItem()) setPreOutputs({ itemId: id, terms });
@@ -485,7 +517,7 @@ export function ActionSection() {
                             String((explorerTabs as any)?.projectId || '').trim() || undefined,
                     });
                 } else {
-                    const tokens = currentText
+                    const tokens = claimedSourceText
                         .split(/[\s,.;，。；、]+/)
                         .filter(Boolean)
                         .slice(0, 10);
@@ -502,7 +534,7 @@ export function ActionSection() {
                 setPreStep('term-embed-trans');
                 logAgent('预翻译 · 术语嵌入');
                 embedded = await embedAndTranslateAction(
-                    currentText,
+                    claimedSourceText,
                     sourceLanguage || 'auto',
                     targetLanguage || 'auto',
                     dict,
@@ -533,7 +565,7 @@ export function ActionSection() {
                         embedded,
                         targetText: translatedText,
                     },
-                    currentText,
+                    claimedSourceText,
                     expectedTargetText,
                     preTranslateRunId
                 );

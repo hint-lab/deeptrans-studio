@@ -433,6 +433,7 @@ export default function StageWorkbench({
     const workflowAvailable = Boolean(
         workflowKey && (renderWorkflow || onWorkflowOpenChange || workflowOpen !== undefined)
     );
+    const shouldRenderWorkflow = Boolean(renderWorkflow && isWorkflowOpen && workflowKey);
 
     const toggleWorkflow = () => {
         const nextOpen = !isWorkflowOpen;
@@ -457,22 +458,28 @@ export default function StageWorkbench({
             data-current-stage={activeStage}
         >
             {kind === 'automatic' ? (
-                <div className="flex min-h-0 flex-1 items-center overflow-auto p-3 sm:p-5">
-                    <AutomaticStageBody
-                        stage={activeStage}
-                        stageLabel={stageLabel}
-                        workflowLabel={workflowLabel}
-                        workflowAvailable={workflowAvailable}
-                        workflowOpen={isWorkflowOpen}
-                        onToggleWorkflow={toggleWorkflow}
-                        documentLabel={documentLabel}
-                        segmentLabel={segmentLabel}
-                        guidance={guidance}
-                        workflowPanelId={workflowPanelId}
-                    >
-                        {shouldShowPostEditQueryEvidence(activeStage) && <PostEditQueryProgress />}
-                    </AutomaticStageBody>
-                </div>
+                shouldRenderWorkflow ? (
+                    <div id={workflowPanelId} className="min-h-0 flex-1 bg-muted/15 p-2">
+                        {renderWorkflow?.(workflowContext)}
+                    </div>
+                ) : (
+                    <div className="flex min-h-0 flex-1 items-center overflow-auto p-3 sm:p-5">
+                        <AutomaticStageBody
+                            stage={activeStage}
+                            stageLabel={stageLabel}
+                            workflowLabel={workflowLabel}
+                            workflowAvailable={workflowAvailable}
+                            workflowOpen={isWorkflowOpen}
+                            onToggleWorkflow={toggleWorkflow}
+                            documentLabel={documentLabel}
+                            segmentLabel={segmentLabel}
+                            guidance={guidance}
+                            workflowPanelId={workflowPanelId}
+                        >
+                            {shouldShowPostEditQueryEvidence(activeStage) && <PostEditQueryProgress />}
+                        </AutomaticStageBody>
+                    </div>
+                )
             ) : (
                 <>
                     <StageReviewHeader
@@ -493,7 +500,7 @@ export default function StageWorkbench({
                 </>
             )}
 
-            {renderWorkflow && isWorkflowOpen && workflowKey && (
+            {kind !== 'automatic' && shouldRenderWorkflow && (
                 <div
                     id={workflowPanelId}
                     className="min-h-0 shrink basis-[45%] border-t bg-muted/15 p-2"

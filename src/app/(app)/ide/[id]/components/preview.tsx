@@ -1,7 +1,6 @@
 'use client';
 
 import { fetchDocumentPreviewByDocIdAction } from '@/actions/document';
-import { getFileUrlAction } from '@/actions/upload';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useActiveDocumentItem } from '@/hooks/useActiveDocumentItem';
@@ -225,11 +224,10 @@ const PreviewCard: React.FC = () => {
             try {
                 const info = await fetchDocumentPreviewByDocIdAction(docId);
                 if (!isCurrentRequest()) return;
-                if (!info?.name) throw new Error('Missing preview file name');
-                const r = await getFileUrlAction(String(info?.name));
-                const fetchUrl = (r as any)?.data?.fileUrl || null;
+                if (!info?.name || !info.fileUrl) throw new Error('Missing preview file URL');
+                const fetchUrl = info.fileUrl;
                 if (!isCurrentRequest()) return;
-                logger.info('Fetched preview URL:', fetchUrl);
+                logger.info('Fetched owner-scoped preview URL');
                 if (!fetchUrl) {
                     setError(t('previewError'));
                     setLoading(false);

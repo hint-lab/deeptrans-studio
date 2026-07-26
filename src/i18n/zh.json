@@ -1964,6 +1964,7 @@
             "nextAction": "下一步：{action}",
             "workbenchLabel": "翻译工作台：{stage}",
             "workflowProgress": "翻译流程进度",
+            "workflowPrompt": "流程 / Prompt",
             "loadingSegment": "正在加载当前分段…",
             "topActionHint": "请在上方点击“{action}”。",
             "actions": {

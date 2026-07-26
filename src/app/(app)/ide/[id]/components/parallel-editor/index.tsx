@@ -124,6 +124,7 @@ export default function ParallelEditor({ className }: { className?: string }) {
     const { activeDocumentItem, setActiveDocumentItem } = useActiveDocumentItem();
     const { isBottomPanelOpen, toggleBottomPanel, setBottomPanelOpen } = useBottomPanel();
     const { currentStage, setCurrentStage } = useTranslationState();
+    const [workflowOpen, setWorkflowOpen] = useState(false);
     const { sourceLanguage, targetLanguage } = useTranslationLanguage();
     const [stackLayout, setStackLayout] = useState<'vertical' | 'horizontal'>('vertical');
     const { explorerTabs } = useExplorerTabs();
@@ -162,10 +163,9 @@ export default function ParallelEditor({ className }: { className?: string }) {
     targetTextRef.current = String(targetText || '');
     currentStageRef.current = currentStage;
 
-    // The lower workbench is for review and optional workflow/Prompt
-    // inspection, not a second way to start translation. Close it whenever a
-    // new automatic stage is opened; show it again only once human review is
-    // ready. A user can still open it deliberately with the panel button.
+    // Keep the lower workbench closed initially, but do not close it again
+    // when the user explicitly opens a workflow/Prompt view during an
+    // automatic stage. Review still opens it as a useful default.
     useEffect(() => {
         const itemId = String(activeDocumentItem?.id || '');
         if (!itemId) {
@@ -181,9 +181,7 @@ export default function ParallelEditor({ className }: { className?: string }) {
         const previousWasAutomatic =
             !previous || getStageWorkbenchKind(previous.stage) === 'automatic';
 
-        if (isAutomatic) {
-            setBottomPanelOpen(false);
-        } else if (previousWasAutomatic) {
+        if (!isAutomatic && previousWasAutomatic) {
             setBottomPanelOpen(true);
         }
 
@@ -207,8 +205,11 @@ export default function ParallelEditor({ className }: { className?: string }) {
         // starts, any late baseline response must no longer be allowed to write.
         baselineRequestRef.current += 1;
         const inputText = String(options.expectedSourceText ?? sourceText ?? '');
-        const isCurrentItem = () =>
-            activeItemIdRef.current === itemId && sourceTextRef.current === inputText;
+        // The formal start action has already claimed this exact source/run on
+        // the server. Do not require React's source snapshot to have rendered
+        // before the result can update the still-visible segment: a one-click
+        // source save and start intentionally runs before that render.
+        const isCurrentItem = () => activeItemIdRef.current === itemId;
         try {
             logAgent('MT');
             setPreRunning(true);
@@ -759,6 +760,10 @@ export default function ParallelEditor({ className }: { className?: string }) {
                                     runPostEdit={runPostEdit}
                                     clearQAOutputs={clearQAOutputs}
                                     clearPostEditOutputs={clearPostEditOutputs}
+                                    onOpenWorkflow={() => {
+                                        setWorkflowOpen(true);
+                                        setBottomPanelOpen(true);
+                                    }}
                                     saveRecord={async (stage, actor, status) => {
                                         const event =
                                             await recordGoToNextTranslationProcessEventAction(
@@ -967,7 +972,13 @@ export default function ParallelEditor({ className }: { className?: string }) {
                         <>
                             <ResizableHandle className="h-1 bg-secondary" />
                             <ResizablePanel defaultSize={40} minSize={20} maxSize={60}>
-                                <TranslationProcessPanel />
+                                <TranslationProcessPanel
+                                    workflowOpen={workflowOpen}
+                                    onWorkflowOpenChange={open => {
+                                        setWorkflowOpen(open);
+                                        if (open) setBottomPanelOpen(true);
+                                    }}
+                                />
                             </ResizablePanel>
                         </>
                     )}

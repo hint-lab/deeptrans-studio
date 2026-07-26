@@ -20,7 +20,7 @@ import {
     getTranslationStageLabel,
 } from '@/constants/translationStages';
 import { useActiveDocumentItem } from '@/hooks/useActiveDocumentItem';
-import { getTargetEditorInstance } from '@/hooks/useEditor';
+import { getSourceEditorInstance, getTargetEditorInstance } from '@/hooks/useEditor';
 import { useExplorerTabs } from '@/hooks/useExplorerTabs';
 import { useRunningState } from '@/hooks/useRunning';
 import { useTranslationContent, useTranslationState } from '@/hooks/useTranslation';
@@ -29,8 +29,9 @@ import { resolvePreTranslationStartFailure } from '@/lib/ide-client-error';
 import { resolvePostEditReviewDraft } from '@/lib/post-edit-review-draft-client';
 import { getTranslationStageGuidance } from '@/lib/translation-stage-guidance';
 import { getTranslationStageRejectionPlan } from '@/lib/translation-stage-rejection-plan';
+import { getStageWorkbenchWorkflowKey } from '@/lib/stage-workbench';
 import type { TranslationStage } from '@/store/features/translationSlice';
-import { Check, ChevronRight, FileText, Loader2, Play, Undo2 } from 'lucide-react';
+import { Check, ChevronRight, FileText, Loader2, Play, Undo2, Workflow } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import React, { useEffect, useRef } from 'react';
 import { toast } from 'sonner';
@@ -63,6 +64,7 @@ export type StageBadgeBarProps = {
     runPostEdit: () => Promise<void>;
     clearQAOutputs: (itemId: string) => void;
     clearPostEditOutputs: (itemId: string) => void;
+    onOpenWorkflow: () => void;
     saveRecord: (
         stage: TranslationStage,
         actorType: 'AGENT' | 'USER',
@@ -93,6 +95,7 @@ const StageBadgeBar: React.FC<StageBadgeBarProps> = ({
     runPostEdit,
     clearQAOutputs,
     clearPostEditOutputs,
+    onOpenWorkflow,
     saveRecord,
 }) => {
     const t = useTranslations('IDE.parallelEditor');
@@ -106,7 +109,9 @@ const StageBadgeBar: React.FC<StageBadgeBarProps> = ({
         persistedSourceText,
         targetText,
         persistedTargetText,
+        setPersistedSourceTranslationText,
         setPersistedTargetTranslationText,
+        setSourceTranslationText,
         setTargetTranslationText,
     } = useTranslationContent();
     const { activeDocumentItem, setActiveDocumentItem } = useActiveDocumentItem();
@@ -177,6 +182,36 @@ const StageBadgeBar: React.FC<StageBadgeBarProps> = ({
 
     const shouldDisableButtons = (): boolean => {
         return isRunning || !activeDocumentItem.id || !contentReady;
+    };
+
+    // Redux normally mirrors TipTap immediately. During composition or a
+    // same-tick click, however, its latest dispatch can still lag the visible
+    // editor. Read that draft only when it belongs to this source editor and
+    // was explicitly marked dirty; otherwise preserve the durable snapshot.
+    const getVisibleSourceDraft = (itemId: string) => {
+        const fallback = String(sourceTextRef.current || '');
+        try {
+            const editor = getSourceEditorInstance();
+            const editorItemId = editor?.view.dom.getAttribute('data-deeptrans-editor-item-id');
+            const editorJob = editor?.view.dom.getAttribute('data-deeptrans-editor-job');
+            const dirty = editor?.view.dom.getAttribute('data-deeptrans-editor-dirty') === 'true';
+            if (editor && editorItemId === itemId && editorJob === 'rawtext' && dirty) {
+                return editor.getHTML();
+            }
+        } catch {}
+        return fallback;
+    };
+
+    const lockVisibleSourceEditor = (itemId: string) => {
+        try {
+            const editor = getSourceEditorInstance();
+            if (
+                editor?.view.dom.getAttribute('data-deeptrans-editor-item-id') === itemId &&
+                editor.view.dom.getAttribute('data-deeptrans-editor-job') === 'rawtext'
+            ) {
+                editor.setEditable(false);
+            }
+        } catch {}
     };
 
     const syncLocalStatus = (itemId: string, status: string) => {
@@ -311,20 +346,46 @@ const StageBadgeBar: React.FC<StageBadgeBarProps> = ({
                     // Claim the executable MT stage before calling the model.
                     // Do not use the generic status action here: it permits a
                     // repeated MT write, which lets stale tabs run in parallel.
-                    const currentSourceText = String(sourceTextRef.current || '');
+                    const currentSourceText = getVisibleSourceDraft(operationItemId);
                     const savedSourceText = String(persistedSourceTextRef.current || '');
-                    if (currentSourceText !== savedSourceText) {
-                        throw new Error('原文有未保存修改，请先保存原文后再启动预翻译');
-                    }
+                    // React needs a render to apply `readOnly`; lock the live
+                    // editor before awaiting the claim so no keystroke can
+                    // diverge from the source snapshot being started.
+                    lockVisibleSourceEditor(operationItemId);
                     const claimed = await startPreTranslationAction(
                         operationItemId,
-                        savedSourceText
+                        savedSourceText,
+                        currentSourceText
+                    );
+                    const claimedSourceText = String(
+                        (claimed as any)?.sourceText ?? currentSourceText
                     );
                     const preTranslateRunId = String(
                         (claimed as any)?.preTranslateRunId || ''
                     ).trim();
                     if (!preTranslateRunId) {
                         throw new Error('预翻译运行标识缺失，请刷新后重试');
+                    }
+                    if (
+                        contentItemIdRef.current === operationItemId &&
+                        String(activeDocumentItemRef.current?.id || '') === operationItemId
+                    ) {
+                        sourceTextRef.current = claimedSourceText;
+                        persistedSourceTextRef.current = claimedSourceText;
+                        setSourceTranslationText(claimedSourceText);
+                        setPersistedSourceTranslationText(claimedSourceText);
+                        try {
+                            const editor = getSourceEditorInstance();
+                            if (
+                                editor?.view.dom.getAttribute('data-deeptrans-editor-item-id') ===
+                                    operationItemId &&
+                                editor.view.dom.getAttribute('data-deeptrans-editor-job') ===
+                                    'rawtext' &&
+                                editor.getHTML() === claimedSourceText
+                            ) {
+                                editor.view.dom.setAttribute('data-deeptrans-editor-dirty', 'false');
+                            }
+                        } catch {}
                     }
                     syncLocalStatus(operationItemId, 'MT');
                     setOperationStage('MT');
@@ -333,7 +394,7 @@ const StageBadgeBar: React.FC<StageBadgeBarProps> = ({
                         duration: 4000,
                     });
                     await runTranslate({
-                        expectedSourceText: String((claimed as any)?.sourceText || savedSourceText),
+                        expectedSourceText: claimedSourceText,
                         expectedTargetText: String((claimed as any)?.targetText || ''),
                         preTranslateRunId,
                     });
@@ -625,6 +686,18 @@ const StageBadgeBar: React.FC<StageBadgeBarProps> = ({
                 </ol>
 
                 <div className="ml-auto flex shrink-0 items-center gap-2">
+                    {getStageWorkbenchWorkflowKey(currentStage) && (
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 gap-1 rounded-sm px-2 text-muted-foreground hover:text-foreground"
+                            onClick={onOpenWorkflow}
+                            aria-label={tGuidance('workflowPrompt')}
+                        >
+                            <Workflow className="h-3.5 w-3.5" />
+                            <span>{tGuidance('workflowPrompt')}</span>
+                        </Button>
+                    )}
                     {currentStage !== 'NOT_STARTED' &&
                         currentStage !== 'COMPLETED' &&
                         currentStage !== 'ERROR' &&

@@ -3,7 +3,11 @@
 import { findDocumentItemByIdDB, updateDocumentItemByIdDB } from '@/db/documentItem';
 import { actionableActionError } from '@/lib/actionable-action-error';
 import { rethrowPublicActionError } from '@/lib/action-error-boundary';
-import { requireOwnedDocumentItem, requireWritableDocumentItem } from '@/lib/guards';
+import {
+    requireOwnedDocumentItem,
+    requireUser,
+    requireWritableDocumentItem,
+} from '@/lib/guards';
 import { createLogger } from '@/lib/logger';
 import { prisma } from '@/lib/db';
 import { sourceRevision, withSourceRevisions } from '@/lib/source-revision';
@@ -27,6 +31,7 @@ import {
     type PostEditReviewDraftUpdate,
 } from '@/lib/post-edit-review-draft';
 import { requiresPostEditReviewDraftCAS } from '@/lib/post-edit-review-draft-client';
+import { getReadableDocumentSourceUrlForOwner } from '@/server/uploaded-object';
 import { Prisma, type TranslationStage } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 const logger = createLogger(
@@ -80,6 +85,15 @@ type PreTranslationStageDeps = {
     requireWritableDocumentItem: (itemId: string) => Promise<PreTranslationStageItem>;
     updateDocumentItem: (write: PreTranslationStageWrite) => Promise<{ count: number }>;
     createRunId?: () => string;
+};
+
+export type PreTranslationStartInput = {
+    // The last server-confirmed source snapshot. It protects a local draft
+    // from overwriting a newer version in another tab.
+    expectedSourceText: string;
+    // The source the translator can currently see. It is persisted in the
+    // same compare-and-set that claims MT, so starting is a single action.
+    sourceText?: string;
 };
 
 type QualityAssureStageItem = {
@@ -236,23 +250,25 @@ export async function signOffPostEditReviewWithDeps(
  * The dependency form makes the optimistic compare-and-set contract testable
  * without a database/session.
  */
-export async function startPreTranslationWithDeps(
+export async function startPreTranslationWithSourceDraftDeps(
     itemId: string,
-    expectedSourceText: string,
+    input: PreTranslationStartInput,
     deps: PreTranslationStageDeps
 ) {
     const item = await deps.requireWritableDocumentItem(itemId);
     const currentStatus = isDocumentItemTranslationStage(item.status) ? item.status : 'NOT_STARTED';
     const currentSourceText = String(item.sourceText || '');
+    const expectedSourceText = String(input.expectedSourceText || '');
+    const sourceTextToStart = String(input.sourceText ?? expectedSourceText);
 
     if (currentStatus !== 'NOT_STARTED') {
         throw actionableActionError('当前分段已被其他操作启动，请刷新后重试');
     }
-    if (!currentSourceText.trim()) {
-        throw actionableActionError('原文内容为空，无法进行预翻译');
-    }
-    if (currentSourceText !== String(expectedSourceText || '')) {
+    if (currentSourceText !== expectedSourceText) {
         throw actionableActionError('当前分段原文已更新，请刷新后再启动预翻译');
+    }
+    if (!sourceTextToStart.trim()) {
+        throw actionableActionError('原文内容为空，无法进行预翻译');
     }
     const runId = String(deps.createRunId ? deps.createRunId() : randomUUID()).trim();
     if (!runId) {
@@ -266,22 +282,45 @@ export async function startPreTranslationWithDeps(
     };
     if (item.updatedAt) where.updatedAt = item.updatedAt;
 
+    const data: Record<string, unknown> = {
+        status: 'MT',
+        metadata: withPreTranslationRunId(item.metadata, runId),
+    };
+    if (sourceTextToStart !== currentSourceText) {
+        data.sourceText = sourceTextToStart;
+    }
+
     const updated = await deps.updateDocumentItem({
         where,
-        data: {
-            status: 'MT',
-            metadata: withPreTranslationRunId(item.metadata, runId),
-        },
+        data,
     });
     if (Number(updated?.count || 0) !== 1) {
         throw actionableActionError('当前分段已被其他操作更新，请刷新后重试');
     }
     return {
         ...item,
+        sourceText: sourceTextToStart,
         status: 'MT' as TranslationStage,
         metadata: withPreTranslationRunId(item.metadata, runId),
         preTranslateRunId: runId,
     };
+}
+
+/**
+ * Compatibility helper for callers that are already working with a
+ * server-confirmed source. New UI starts should use the draft-aware helper
+ * above so “start” can save and claim atomically.
+ */
+export async function startPreTranslationWithDeps(
+    itemId: string,
+    expectedSourceText: string,
+    deps: PreTranslationStageDeps
+) {
+    return startPreTranslationWithSourceDraftDeps(
+        itemId,
+        { expectedSourceText, sourceText: expectedSourceText },
+        deps
+    );
 }
 
 /**
@@ -549,14 +588,22 @@ export async function updateDocItemStatusAction(itemId: string, status: Translat
  * action because a repeat MT write would let concurrent IDE tabs both invoke
  * the model pipeline.
  */
-export async function startPreTranslationAction(itemId: string, expectedSourceText: string) {
+export async function startPreTranslationAction(
+    itemId: string,
+    expectedSourceText: string,
+    sourceText?: string
+) {
     try {
-        return await startPreTranslationWithDeps(itemId, expectedSourceText, {
-            requireWritableDocumentItem: async id =>
-                (await requireWritableDocumentItem(id)) as PreTranslationStageItem,
-            updateDocumentItem: async write => prisma.documentItem.updateMany(write as any),
-            createRunId: randomUUID,
-        });
+        return await startPreTranslationWithSourceDraftDeps(
+            itemId,
+            { expectedSourceText, sourceText },
+            {
+                requireWritableDocumentItem: async id =>
+                    (await requireWritableDocumentItem(id)) as PreTranslationStageItem,
+                updateDocumentItem: async write => prisma.documentItem.updateMany(write as any),
+                createRunId: randomUUID,
+            }
+        );
     } catch (error) {
         logger.error('启动预翻译失败:', error);
         rethrowPublicActionError(error, '启动预翻译失败，请刷新后重试');
@@ -730,10 +777,17 @@ export const getContentByIdAction = async (id: string) => {
 // Server Action: 通过分段ID获取所属文档的云端预览信息
 export async function getDocumentPreviewByItemIdAction(itemId: string) {
     try {
-        const item = await requireOwnedDocumentItem(itemId);
+        const authCtx = await requireUser();
+        const item = await requireOwnedDocumentItem(itemId, authCtx);
         const doc = item.document;
         if (!doc) return null;
-        return { documentId: doc.id, url: doc.url, mimeType: doc.mimeType, name: doc.originalName };
+        const fileUrl = await getReadableDocumentSourceUrlForOwner(doc.name, authCtx);
+        return {
+            documentId: doc.id,
+            fileUrl,
+            mimeType: doc.mimeType,
+            name: doc.originalName || doc.name,
+        };
     } catch (error) {
         logger.error('获取预览信息失败:', error);
         return null;

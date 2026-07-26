@@ -12,8 +12,14 @@ import {
     type DocumentItem,
 } from '@/db/documentItem';
 import { createLogger } from '@/lib/logger';
-import { requireOwnedDocument, requireOwnedProject, requireWritableDocument } from '@/lib/guards';
+import {
+    requireOwnedDocument,
+    requireOwnedProject,
+    requireUser,
+    requireWritableDocument,
+} from '@/lib/guards';
 import { DocumentStatus } from '@/types/enums';
+import { getReadableDocumentSourceUrlForOwner } from '@/server/uploaded-object';
 const logger = createLogger(
     {
         type: 'actions:document',
@@ -249,13 +255,16 @@ export async function getLatestDocumentStatusForProjectAction(projectId: string)
 // Server Action: 通过doc ID获取所属文档的云端预览信息
 export async function fetchDocumentPreviewByDocIdAction(docId: string) {
     try {
-        const doc = await requireOwnedDocument(docId);
-        if (!doc) return null;
+        const authCtx = await requireUser();
+        const doc = await requireOwnedDocument(docId, authCtx);
+        const fileUrl = await getReadableDocumentSourceUrlForOwner(doc.name, authCtx);
         return {
-            documentId: doc?.id,
-            url: doc?.url,
-            mimeType: doc?.mimeType,
-            name: doc?.originalName || doc?.name,
+            documentId: doc.id,
+            // The signed URL is resolved inside the owner-scoped server
+            // boundary. `name` below is display text only, never an object key.
+            fileUrl,
+            mimeType: doc.mimeType,
+            name: doc.originalName || doc.name,
         };
     } catch (error) {
         logger.error('获取预览信息失败:', error);

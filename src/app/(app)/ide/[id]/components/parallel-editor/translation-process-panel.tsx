@@ -51,11 +51,23 @@ function renderWorkflow({ stage, workflowLabel }: StageWorkbenchWorkflowContext)
     }
 }
 
-export const TranslationProcessPanel: React.FC = () => {
+type TranslationProcessPanelProps = {
+    workflowOpen?: boolean;
+    onWorkflowOpenChange?: (open: boolean, stage: TranslationStage) => void;
+};
+
+export const TranslationProcessPanel: React.FC<TranslationProcessPanelProps> = ({
+    workflowOpen,
+    onWorkflowOpenChange,
+}) => {
     return (
         <WorkflowPromptProvider>
             <div className="size-full">
-                <StageWorkbench renderWorkflow={renderWorkflow} />
+                <StageWorkbench
+                    renderWorkflow={renderWorkflow}
+                    workflowOpen={workflowOpen}
+                    onWorkflowOpenChange={onWorkflowOpenChange}
+                />
             </div>
         </WorkflowPromptProvider>
     );

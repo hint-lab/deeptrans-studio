@@ -43,6 +43,7 @@ const RichTextEditor = ({
     const {
         contentItemId,
         sourceText,
+        persistedSourceText,
         persistedTargetText,
         setPersistedSourceTranslationText,
         setPersistedTargetTranslationText,
@@ -125,6 +126,24 @@ const RichTextEditor = ({
             editor.view.dom.setAttribute('data-deeptrans-editor-dirty', 'false');
         }
     }, [editor, editorId, initialContent, setContent]);
+
+    // Starting pre-translation now persists the visible source in the same
+    // server-side claim. Once that snapshot returns, close the source editor
+    // instead of leaving a stale manual-save toolbar over a locked segment.
+    useEffect(() => {
+        if (
+            job !== 'rawtext' ||
+            !editor ||
+            !isEditMode ||
+            String(sourceText || '') !== String(persistedSourceText || '') ||
+            editor.getHTML() !== String(persistedSourceText || '')
+        ) {
+            return;
+        }
+        lastLocalContentRef.current = String(persistedSourceText || '');
+        editor.view.dom.setAttribute('data-deeptrans-editor-dirty', 'false');
+        setIsEditMode(false);
+    }, [editor, isEditMode, job, persistedSourceText, sourceText]);
 
     // 设置编辑器实例
     useEffect(() => {

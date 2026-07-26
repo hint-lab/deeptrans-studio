@@ -1964,6 +1964,7 @@
             "nextAction": "Next: {action}",
             "workbenchLabel": "Translation workbench: {stage}",
             "workflowProgress": "Translation workflow progress",
+            "workflowPrompt": "Flow / Prompt",
             "loadingSegment": "Loading the current segment…",
             "topActionHint": "Use {action} in the top bar.",
             "actions": {
