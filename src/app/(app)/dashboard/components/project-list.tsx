@@ -2,16 +2,7 @@
 import { Button } from '@/components/ui/button';
 import { formatDistanceToNow } from 'date-fns/formatDistanceToNow';
 import { enUS, zhCN } from 'date-fns/locale';
-import {
-    AlertTriangle,
-    ArrowRight,
-    BookMarked,
-    Edit2,
-    FileText,
-    Library,
-    Lock,
-    Trash2,
-} from 'lucide-react';
+import { BookMarked, ChevronRight, Edit2, Library, Lock, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
 import { ProjectDictionariesDialog, ProjectMemoriesDialog } from './project-resource-dialogs';
@@ -29,9 +20,7 @@ import { Input } from '@/components/ui/input';
 import { createLogger } from '@/lib/logger';
 import {
     getProjectDashboardHandoff,
-    type ProjectDashboardRiskKey,
     type ProjectDashboardStatusKey,
-    type ProjectDashboardStatusTone,
 } from '@/lib/project-dashboard-entry';
 import { useLocale, useTranslations } from 'next-intl';
 import { toast } from 'sonner';
@@ -57,47 +46,34 @@ type Project = {
 };
 type ProjectWithDoc = Project & { documents?: { id: string; status?: string }[] };
 
-function getProjectStatusToneClasses(tone: ProjectDashboardStatusTone): string {
-    switch (tone) {
-        case 'active':
-            return 'border-l-blue-500 bg-blue-500/5 text-blue-700 dark:border-l-blue-400 dark:text-blue-300';
-        case 'ready':
-            return 'border-l-emerald-500 bg-emerald-500/5 text-emerald-700 dark:border-l-emerald-400 dark:text-emerald-300';
-        case 'danger':
-            return 'border-l-red-500 bg-red-500/5 text-red-700 dark:border-l-red-400 dark:text-red-300';
-        case 'attention':
-            return 'border-l-amber-500 bg-amber-500/5 text-amber-800 dark:border-l-amber-400 dark:text-amber-200';
-        case 'neutral':
-        default:
-            return 'border-l-slate-400 bg-slate-500/5 text-slate-700 dark:border-l-slate-500 dark:text-slate-300';
-    }
+function getProjectIconText(name?: string | null) {
+    const trimmed = name?.trim();
+    if (!trimmed) return '?';
+
+    const firstChar = trimmed.charAt(0);
+    if (/[^\x00-\x7F]/.test(firstChar)) return firstChar;
+
+    return (trimmed.split(/[\s-_]+/)[0] ?? firstChar).slice(0, 2).toUpperCase();
 }
 
-function getProjectActionToneClasses(tone: ProjectDashboardStatusTone): string {
-    switch (tone) {
-        case 'active':
-            return 'border-blue-300/80 bg-blue-50 text-blue-800 hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-950/45 dark:text-blue-100 dark:hover:bg-blue-950/70';
-        case 'ready':
-            return 'border-emerald-300/80 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/45 dark:text-emerald-100 dark:hover:bg-emerald-950/70';
-        case 'danger':
-            return 'border-red-300/80 bg-red-50 text-red-800 hover:bg-red-100 dark:border-red-800 dark:bg-red-950/45 dark:text-red-100 dark:hover:bg-red-950/70';
-        case 'attention':
-            return 'border-amber-300/80 bg-amber-50 text-amber-900 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/45 dark:text-amber-100 dark:hover:bg-amber-950/70';
-        case 'neutral':
-        default:
-            return 'border-slate-300/80 bg-slate-50 text-slate-800 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-100 dark:hover:bg-slate-900';
-    }
-}
-
-function getProjectRiskToneClasses(riskKey: ProjectDashboardRiskKey): string {
-    switch (riskKey) {
+function getCompactStatusClasses(statusKey: ProjectDashboardStatusKey) {
+    switch (statusKey) {
+        case 'completed':
+            return 'text-emerald-600 dark:text-emerald-400';
+        case 'preprocessed':
+            return 'text-violet-600 dark:text-violet-400';
+        case 'translating':
+            return 'text-blue-600 dark:text-blue-400';
+        case 'parsing':
+        case 'segmenting':
+        case 'termsExtracting':
+            return 'text-amber-600 dark:text-amber-400';
         case 'error':
-            return 'border-red-300/80 bg-red-50/80 text-red-900 dark:border-red-900/70 dark:bg-red-950/35 dark:text-red-100';
+            return 'text-destructive';
+        case 'waiting':
         case 'unknown':
-            return 'border-amber-300/80 bg-amber-50/80 text-amber-950 dark:border-amber-900/70 dark:bg-amber-950/35 dark:text-amber-100';
-        case 'readOnly':
         default:
-            return 'border-slate-300/80 bg-slate-50/80 text-slate-800 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-100';
+            return 'text-muted-foreground';
     }
 }
 
@@ -356,18 +332,6 @@ export default function ProjectList({
         }
     };
 
-    const getProjectRiskLabel = (riskKey: ProjectDashboardRiskKey) => {
-        switch (riskKey) {
-            case 'error':
-                return t('risk.error');
-            case 'unknown':
-                return t('risk.unknown');
-            case 'readOnly':
-            default:
-                return t('risk.readOnly');
-        }
-    };
-
     const formatProjectDate = (date: string | Date) => {
         try {
             return formatDistanceToNow(new Date(date), {
@@ -380,7 +344,7 @@ export default function ProjectList({
     };
     return (
         <>
-            <div className="flex flex-col gap-3 pt-4" role="list" aria-label={t('projectList')}>
+            <div className="flex flex-col gap-2 pt-4" role="list" aria-label={t('projectList')}>
                 {projects.map((project, index) => {
                     const projectName = project.name?.trim() || t('unnamedProject');
                     const entry = getProjectDashboardHandoff(
@@ -390,184 +354,159 @@ export default function ProjectList({
                     );
                     const statusLabel = getProjectStatusLabel(entry.statusKey);
                     const nextActionLabel = getProjectActionLabel(entry.actionKey);
-                    const riskIds = entry.riskKeys.map(
-                        riskKey => `project-${index}-risk-${riskKey}`
+                    const projectCard = (
+                        <>
+                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-violet-700 text-xs font-semibold text-white shadow-sm">
+                                {getProjectIconText(project.name)}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                                <div className="flex min-w-0 items-center gap-2">
+                                    <h3 className="truncate text-sm font-semibold text-foreground">
+                                        {projectName}
+                                    </h3>
+                                    {!project.canWrite && (
+                                        <span
+                                            className="inline-flex shrink-0 items-center text-amber-700 dark:text-amber-300"
+                                            title={t('risk.readOnly')}
+                                            aria-label={t('readOnlyLabel')}
+                                        >
+                                            <Lock className="size-3.5" aria-hidden="true" />
+                                        </span>
+                                    )}
+                                </div>
+                                <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+                                    <span className="whitespace-nowrap">
+                                        {project.sourceLanguage || '—'} →{' '}
+                                        {project.targetLanguage || '—'}
+                                    </span>
+                                    <span
+                                        className="h-2 w-px bg-muted-foreground/50"
+                                        aria-hidden="true"
+                                    />
+                                    <span className="whitespace-nowrap">
+                                        {formatProjectDate(project.date)}
+                                    </span>
+                                    <span
+                                        className="h-2 w-px bg-muted-foreground/50"
+                                        aria-hidden="true"
+                                    />
+                                    <span
+                                        className={`whitespace-nowrap font-medium ${getCompactStatusClasses(entry.statusKey)}`}
+                                    >
+                                        {statusLabel}
+                                    </span>
+                                </div>
+                            </div>
+                        </>
                     );
 
                     return (
                         <article
                             key={project.id}
                             role="listitem"
-                            className={`flex animate-slide-in-left flex-col overflow-hidden rounded-lg border border-l-[3px] bg-card shadow-sm transition-[border-color,background-color,box-shadow] hover:border-muted-foreground/35 hover:shadow-md sm:flex-row ${getProjectStatusToneClasses(entry.statusTone)}`}
+                            className="flex min-h-20 animate-slide-in-left items-center rounded-md border border-border bg-secondary px-3 py-3 text-left text-sm transition-[border-color,background-color,box-shadow] hover:border-primary hover:bg-secondary/60 hover:shadow-sm"
                             style={{ animationDelay: `${index * 50}ms` }}
                         >
-                            <div className="flex min-w-0 flex-1 flex-col gap-3 p-4">
-                                <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                                    <div className="flex min-w-0 items-start gap-3">
-                                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border bg-background/75 text-primary shadow-sm">
-                                            <FileText className="h-4 w-4" aria-hidden="true" />
-                                        </div>
-
-                                        <div className="min-w-0 flex-1">
-                                            <div className="flex min-w-0 flex-wrap items-center gap-2">
-                                                <h3 className="min-w-0 flex-1 truncate text-sm font-semibold leading-5 text-foreground">
-                                                    {projectName}
-                                                </h3>
-                                                {!project.canWrite && (
-                                                    <span
-                                                        className="inline-flex shrink-0 items-center gap-1 rounded-full border border-amber-300/80 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
-                                                        aria-label={t('risk.readOnly')}
-                                                    >
-                                                        <Lock
-                                                            className="size-3"
-                                                            aria-hidden="true"
-                                                        />
-                                                        {t('readOnlyLabel')}
-                                                    </span>
-                                                )}
-                                            </div>
-
-                                            <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] leading-4 text-muted-foreground">
-                                                <span className="max-w-[9rem] truncate rounded-sm border bg-background/70 px-1.5 py-0.5 font-medium text-foreground/85">
-                                                    {project.sourceLanguage || '—'}
-                                                </span>
-                                                <ArrowRight
-                                                    className="h-3.5 w-3.5 shrink-0 text-primary"
-                                                    aria-hidden="true"
-                                                />
-                                                <span className="max-w-[9rem] truncate rounded-sm border bg-background/70 px-1.5 py-0.5 font-medium text-foreground/85">
-                                                    {project.targetLanguage || '—'}
-                                                </span>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <p className="shrink-0 text-xs text-muted-foreground">
-                                        {t('updated', { time: formatProjectDate(project.date) })}
-                                    </p>
-                                </div>
-
-                                <div className="flex flex-col gap-2 border-t border-foreground/10 pt-3 lg:flex-row lg:items-center lg:justify-between">
-                                    <div className="inline-flex min-w-0 items-center gap-2">
-                                        <span className="shrink-0 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                                            {t('currentStage')}
-                                        </span>
-                                        <span className="min-w-0 truncate text-sm font-semibold text-foreground">
-                                            {statusLabel}
-                                        </span>
-                                    </div>
-                                    {entry.canOpen ? (
-                                        <Link
-                                            href={entry.href}
-                                            aria-label={t('openProject', {
-                                                name: projectName,
-                                                status: statusLabel,
-                                                action: nextActionLabel,
-                                            })}
-                                            aria-describedby={
-                                                riskIds.length > 0 ? riskIds.join(' ') : undefined
-                                            }
-                                            className={`inline-flex min-h-9 shrink-0 items-center justify-center gap-2 rounded-md border px-3 py-2 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${getProjectActionToneClasses(entry.statusTone)}`}
-                                        >
-                                            <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] opacity-75">
-                                                {t('nextAction.label')}
-                                            </span>
-                                            <span>{nextActionLabel}</span>
-                                            <ArrowRight
-                                                className="size-4 shrink-0"
-                                                aria-hidden="true"
-                                            />
-                                        </Link>
-                                    ) : (
-                                        <div
-                                            className="inline-flex min-h-9 shrink-0 items-center justify-center gap-2 rounded-md border border-slate-300/80 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-800 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-100"
-                                            aria-describedby={riskIds.join(' ')}
-                                        >
-                                            <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] opacity-75">
-                                                {t('nextAction.label')}
-                                            </span>
-                                            <span>{nextActionLabel}</span>
-                                        </div>
-                                    )}
-                                </div>
-
-                                {entry.riskKeys.length > 0 && (
-                                    <div className="space-y-1.5">
-                                        {entry.riskKeys.map((riskKey, riskIndex) => (
-                                            <p
-                                                key={riskKey}
-                                                id={riskIds[riskIndex]}
-                                                className={`flex items-start gap-2 rounded-md border px-3 py-2 text-xs leading-5 ${getProjectRiskToneClasses(riskKey)}`}
-                                            >
-                                                <AlertTriangle
-                                                    className="mt-0.5 size-3.5 shrink-0"
-                                                    aria-hidden="true"
-                                                />
-                                                <span>
-                                                    <span className="mr-1 font-semibold">
-                                                        {t('risk.label')}
-                                                    </span>
-                                                    {getProjectRiskLabel(riskKey)}
-                                                </span>
-                                            </p>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-
-                            {project.canWrite && (
-                                <div
-                                    className="flex shrink-0 items-center justify-end gap-0.5 border-t bg-card/75 p-1.5 sm:border-l sm:border-t-0"
-                                    role="group"
-                                    aria-label={t('projectActions', { name: projectName })}
+                            {entry.canOpen ? (
+                                <Link
+                                    href={entry.href}
+                                    aria-label={t('openProject', {
+                                        name: projectName,
+                                        status: statusLabel,
+                                        action: nextActionLabel,
+                                    })}
+                                    className="flex min-w-0 flex-1 items-center gap-5 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                                 >
-                                    <button
-                                        type="button"
-                                        className="rounded-md p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                                        title={t('configureDictionaries')}
-                                        aria-label={t('configureDictionaries')}
-                                        onClick={() => setDictDialog(project.id)}
-                                    >
-                                        <BookMarked size={16} aria-hidden="true" />
-                                    </button>
-                                    <button
-                                        type="button"
-                                        className="rounded-md p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                                        title={t('configureMemories')}
-                                        aria-label={t('configureMemories')}
-                                        onClick={() => setMemDialog(project.id)}
-                                    >
-                                        <Library size={16} aria-hidden="true" />
-                                    </button>
-                                    <button
-                                        type="button"
-                                        className="rounded-md p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                                        title={t('editProject')}
-                                        aria-label={t('editProject')}
-                                        onClick={() => {
-                                            setEditTarget({
-                                                id: project.id,
-                                                name: project.name ?? '',
-                                            });
-                                            setEditName(project.name ?? '');
-                                            toast.info(t('editingProjectName'), {
-                                                description: project.name ?? '',
-                                            });
-                                        }}
-                                    >
-                                        <Edit2 size={16} aria-hidden="true" />
-                                    </button>
-                                    <button
-                                        type="button"
-                                        className="rounded-md p-2 text-destructive transition-colors hover:bg-destructive/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive"
-                                        title={t('deleteProject')}
-                                        aria-label={t('deleteProject')}
-                                        onClick={() => void handleDeleteClick(project)}
-                                    >
-                                        <Trash2 size={16} aria-hidden="true" />
-                                    </button>
+                                    {projectCard}
+                                </Link>
+                            ) : (
+                                <div
+                                    className="flex min-w-0 flex-1 items-center gap-5"
+                                    aria-label={t('openProject', {
+                                        name: projectName,
+                                        status: statusLabel,
+                                        action: nextActionLabel,
+                                    })}
+                                >
+                                    {projectCard}
                                 </div>
                             )}
+
+                            <div
+                                className="ml-auto flex shrink-0 items-center gap-1 pl-3"
+                                role="group"
+                                aria-label={t('projectActions', { name: projectName })}
+                            >
+                                {project.canWrite && (
+                                    <>
+                                        <button
+                                            type="button"
+                                            className="rounded p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                            title={t('configureDictionaries')}
+                                            aria-label={t('configureDictionaries')}
+                                            onClick={() => setDictDialog(project.id)}
+                                        >
+                                            <BookMarked size={16} aria-hidden="true" />
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="rounded p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                            title={t('configureMemories')}
+                                            aria-label={t('configureMemories')}
+                                            onClick={() => setMemDialog(project.id)}
+                                        >
+                                            <Library size={16} aria-hidden="true" />
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="rounded p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                            title={t('editProject')}
+                                            aria-label={t('editProject')}
+                                            onClick={() => {
+                                                setEditTarget({
+                                                    id: project.id,
+                                                    name: project.name ?? '',
+                                                });
+                                                setEditName(project.name ?? '');
+                                                toast.info(t('editingProjectName'), {
+                                                    description: project.name ?? '',
+                                                });
+                                            }}
+                                        >
+                                            <Edit2 size={16} aria-hidden="true" />
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="rounded p-2 text-destructive transition-colors hover:bg-destructive/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive"
+                                            title={t('deleteProject')}
+                                            aria-label={t('deleteProject')}
+                                            onClick={() => void handleDeleteClick(project)}
+                                        >
+                                            <Trash2 size={16} aria-hidden="true" />
+                                        </button>
+                                    </>
+                                )}
+                                {entry.canOpen ? (
+                                    <Link
+                                        href={entry.href}
+                                        className="rounded p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                        aria-label={t('openProject', {
+                                            name: projectName,
+                                            status: statusLabel,
+                                            action: nextActionLabel,
+                                        })}
+                                    >
+                                        <ChevronRight size={16} aria-hidden="true" />
+                                    </Link>
+                                ) : (
+                                    <span
+                                        className="p-2 text-muted-foreground/45"
+                                        aria-hidden="true"
+                                    >
+                                        <ChevronRight size={16} />
+                                    </span>
+                                )}
+                            </div>
                         </article>
                     );
                 })}
