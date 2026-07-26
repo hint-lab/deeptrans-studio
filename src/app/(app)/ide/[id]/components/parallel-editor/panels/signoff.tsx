@@ -33,6 +33,12 @@ export type SignoffTimelineStep = {
 
 export type SignoffEventLoadState = 'idle' | 'loading' | 'ready' | 'error';
 
+// NOT_STARTED is a document state, not an auditable workflow step. The
+// timeline begins with the first piece of work a translator can complete.
+const SIGNOFF_TIMELINE_STAGES = TRANSLATION_STAGES_SEQUENCE.filter(
+    stage => stage !== 'NOT_STARTED'
+);
+
 type BuildSignoffTimelineOptions = {
     /**
      * The document's current stage is only a safe fallback after a successful
@@ -197,7 +203,7 @@ export default function SignoffPanel() {
     }, [documentItemId, currentStatus, reloadVersion]); // 监听 status 变化重新拉取
 
     const timeline = useMemo(() => {
-        const stages: TranslationStage[] = TRANSLATION_STAGES_SEQUENCE;
+        const stages = SIGNOFF_TIMELINE_STAGES;
         const results = buildSignoffTimelineForLoadState(
             events,
             currentStatus,
