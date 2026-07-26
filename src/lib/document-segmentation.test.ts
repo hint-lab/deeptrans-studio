@@ -17,7 +17,7 @@ test('normalizes segmentation profiles and defaults to balanced', () => {
     assert.equal(normalizeSegmentGranularity('unknown'), 'balanced');
     assert.equal(sentencesPerSegment('fine'), 1);
     assert.equal(sentencesPerSegment('balanced'), 2);
-    assert.equal(sentencesPerSegment('coarse'), 4);
+    assert.equal(sentencesPerSegment('coarse'), Number.MAX_SAFE_INTEGER);
 });
 
 test('recognizes both Chinese and English sentence boundaries', () => {
@@ -49,7 +49,7 @@ test('three profiles group sentences without crossing paragraph boundaries', () 
     assert.equal(coarse[0]?.sourceText, 'One. Two. Three. Four.');
     assert.equal(coarse[1]?.sourceText, 'Five. Six.');
     assert.equal(
-        fine.map(segment => segment.sourceText).join(' '),
+        fine.map(segment => segment.sourceText.trim()).join(' '),
         'One. Two. Three. Four. Five. Six.'
     );
 });
@@ -67,6 +67,56 @@ test('headings and list items remain whole at every profile', () => {
             ['Heading. Still heading.', 'List item. More detail.']
         );
     }
+});
+
+test('recognizes Markdown and legal structures before applying a segmentation profile', () => {
+    const paragraphs = [
+        { text: '# 中华人民共和国学前教育法', styleName: 'Normal' },
+        { text: '## 第一章 总则', styleName: 'Normal' },
+        {
+            text: '第一条 为了保障适龄儿童接受学前教育。规范学前教育实施。促进普及普惠。',
+            styleName: 'Normal',
+        },
+        { text: '（一） 建立保障机制。', styleName: 'Normal' },
+    ];
+
+    const fine = segmentStructuredParagraphs(paragraphs, 'fine');
+    const coarse = segmentStructuredParagraphs(paragraphs, 'coarse');
+
+    assert.deepEqual(
+        fine.map(segment => segment.type),
+        ['HEADING-1', 'CHAPTER', 'ARTICLE', 'ARTICLE', 'ARTICLE', 'CLAUSE']
+    );
+    assert.equal(fine[0]?.sourceText, '中华人民共和国学前教育法');
+    assert.equal(fine[1]?.sourceText, '第一章 总则');
+    assert.equal(coarse.length, 4);
+    assert.equal(
+        coarse[2]?.sourceText,
+        '第一条 为了保障适龄儿童接受学前教育。规范学前教育实施。促进普及普惠。'
+    );
+    assert.equal(
+        (coarse[2]?.metadata?.structure as { kind?: string } | undefined)?.kind,
+        'article'
+    );
+});
+
+test('splits only embedded structural lines, not ordinary PDF line wraps', () => {
+    const segments = segmentStructuredParagraphs(
+        [
+            {
+                text: '第一条 为了保障适龄儿童接受学前教育。\n规范学前教育实施。\n第二条 在中华人民共和国境内实施学前教育。',
+                styleName: 'Normal',
+            },
+        ],
+        'coarse'
+    );
+
+    assert.deepEqual(
+        segments.map(segment => segment.type),
+        ['ARTICLE', 'ARTICLE']
+    );
+    assert.equal(segments[0]?.sourceText, '第一条 为了保障适龄儿童接受学前教育。\n规范学前教育实施。');
+    assert.equal(segments[1]?.sourceText, '第二条 在中华人民共和国境内实施学前教育。');
 });
 
 test('a long sentence is not cut by an arbitrary character limit', () => {

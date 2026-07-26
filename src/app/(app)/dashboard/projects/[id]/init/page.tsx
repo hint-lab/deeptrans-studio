@@ -291,7 +291,6 @@ export default function ProjectInitPage() {
         termApplyGateRef.current.cancel();
         if (applyTimerRef.current) clearTimeout(applyTimerRef.current);
         if (termApplyTimerRef.current) clearTimeout(termApplyTimerRef.current);
-        if (segDebounceRef.current) clearTimeout(segDebounceRef.current);
         if (statusAbortRef.current) statusAbortRef.current.abort();
 
         segPctRef.current = 0;
@@ -314,10 +313,13 @@ export default function ProjectInitPage() {
         setSegmentDocumentId('');
         setSegItems([]);
         setSegBodyCount(0);
+        setSegAverageCharacters(null);
         setSegLoading(false);
         setSegError(null);
         setSegmentShowFull(false);
         setSegmentGranularity('balanced');
+        setSegmentPlanId('');
+        setSegmentPlanner(null);
         setApplying(false);
         setShowApplyModal(false);
         setApplyingTerms(false);
@@ -396,12 +398,16 @@ export default function ProjectInitPage() {
     // segment 预览交互（与 segment-preview 页面对齐）
     const [segItems, setSegItems] = useState<PreviewSegmentItem[]>([]);
     const [segBodyCount, setSegBodyCount] = useState(0);
+    const [segAverageCharacters, setSegAverageCharacters] = useState<number | null>(null);
     const [segLoading, setSegLoading] = useState(false);
     const [segError, setSegError] = useState<string | null>(null);
     const [segmentShowFull, setSegmentShowFull] = useState(false);
     const [segmentGranularity, setSegmentGranularity] = useState<SegmentGranularity>('balanced');
+    const [segmentPlanId, setSegmentPlanId] = useState('');
+    const [segmentPlanner, setSegmentPlanner] = useState<
+        'llm' | 'mixed' | 'structure-fallback' | null
+    >(null);
     const [segmentDocumentId, setSegmentDocumentId] = useState<string>('');
-    const segDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const segRequestRef = useRef(0);
     const [applying, setApplying] = useState(false);
     const [showApplyModal, setShowApplyModal] = useState(false);
@@ -734,7 +740,10 @@ export default function ProjectInitPage() {
 
     // 提取 Button 内联的“应用到文档”逻辑为独立函数
     function handleApplySegmentsClick() {
-        if (!segmentDocumentId || !segItems.length) return;
+        if (!segmentDocumentId || !segItems.length || !segmentPlanId) {
+            toast.error(t('segmentPlanRequired'));
+            return;
+        }
         const scope = captureRequestScope();
         if (!isRequestCurrent(scope)) return;
         // 打开模态并延迟启动，允许用户在极短时间内取消
@@ -752,7 +761,7 @@ export default function ProjectInitPage() {
                 const response = await fetch(uPost.toString(), {
                     method: 'POST',
                     headers: { 'content-type': 'application/json' },
-                    body: JSON.stringify({ segment: { granularity: segmentGranularity } }),
+                    body: JSON.stringify({ segment: { planId: segmentPlanId } }),
                 });
                 const result = await response.json().catch(() => ({}));
                 if (
@@ -903,7 +912,11 @@ export default function ProjectInitPage() {
         }
     }, [termPct, showTermApplyModal, termFlow]);
 
-    async function loadSegPreview(opts?: { all?: boolean; regenerate?: boolean }) {
+    async function loadSegPreview(opts?: {
+        all?: boolean;
+        generate?: boolean;
+        planId?: string;
+    }) {
         if (!projectId || !batchId) return;
         const scope = captureRequestScope();
         if (!isRequestCurrent(scope)) return;
@@ -911,7 +924,14 @@ export default function ProjectInitPage() {
         setSegLoading(true);
         setSegError(null);
         try {
-            if (opts?.regenerate !== false) {
+            let planId = opts?.planId || segmentPlanId;
+            if (opts?.generate === true) {
+                setSegmentPlanId('');
+                setSegmentPlanner(null);
+                setSegItems([]);
+                setSegBodyCount(0);
+                setSegAverageCharacters(null);
+                setSegmentShowFull(false);
                 const uPost = new URL(`/api/projects/${projectId}/segment`, window.location.origin);
                 uPost.searchParams.set('batchId', batchId);
                 uPost.searchParams.set('preview', '1');
@@ -923,17 +943,38 @@ export default function ProjectInitPage() {
                 const previewResult = await previewResponse.json().catch(() => ({}));
                 if (!isRequestCurrent(scope) || requestId !== segRequestRef.current) return;
                 if (!previewResponse.ok) throw createProjectInitApiError(previewResult);
+                planId = String(previewResult?.planId || '');
+                if (!planId) throw createProjectInitStateError('retry');
+                setSegmentPlanId(planId);
+                const planner = String(previewResult?.planner || '');
+                setSegmentPlanner(
+                    planner === 'llm' || planner === 'mixed' || planner === 'structure-fallback'
+                        ? planner
+                        : null
+                );
             }
+            if (!planId) return;
 
             const u = new URL(`/api/projects/${projectId}/segment`, window.location.origin);
             u.searchParams.set('batchId', batchId);
             u.searchParams.set('preview', '1');
-            u.searchParams.set('granularity', segmentGranularity);
+            u.searchParams.set('planId', planId);
             if (opts?.all ?? segmentShowFull) u.searchParams.set('all', '1');
             const response = await fetch(u.toString());
             const result = await response.json().catch(() => ({}));
             if (!response.ok) throw createProjectInitApiError(result);
             if (isRequestCurrent(scope) && requestId === segRequestRef.current) {
+                if (result?.status === 'running') {
+                    window.setTimeout(() => {
+                        if (isRequestCurrent(scope) && requestId === segRequestRef.current) {
+                            void loadSegPreview({
+                                all: opts?.all ?? segmentShowFull,
+                                planId,
+                            });
+                        }
+                    }, 800);
+                    return;
+                }
                 setSegItems(Array.isArray(result?.segments) ? result.segments : []);
                 setSegBodyCount(
                     Number(
@@ -943,8 +984,21 @@ export default function ProjectInitPage() {
                                       (item: PreviewSegmentItem) =>
                                           String(item?.type || '').toUpperCase() !== 'TITLE'
                                   ).length
-                                : 0)
+                        : 0)
                     )
+                );
+                const resultAverageCharacters = Number(result?.averageCharacters);
+                setSegAverageCharacters(
+                    Number.isFinite(resultAverageCharacters) && resultAverageCharacters >= 0
+                        ? Math.round(resultAverageCharacters)
+                        : null
+                );
+                setSegmentPlanId(String(result?.planId || planId));
+                const planner = String(result?.planner || '');
+                setSegmentPlanner(
+                    planner === 'llm' || planner === 'mixed' || planner === 'structure-fallback'
+                        ? planner
+                        : null
                 );
             }
         } catch (error: unknown) {
@@ -964,27 +1018,17 @@ export default function ProjectInitPage() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [currentStep]);
 
-    // 进入步骤或粒度变化时刷新一次预览；快速滑动时仅保留最后一次请求。
-    useEffect(() => {
-        if (currentStep !== 'segment' || !segmentDocumentId) return;
-        if (segDebounceRef.current) clearTimeout(segDebounceRef.current);
-        segDebounceRef.current = setTimeout(() => {
-            loadSegPreview();
-        }, 350);
-        return () => {
-            if (segDebounceRef.current) clearTimeout(segDebounceRef.current);
-        };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentStep, segmentDocumentId, segmentGranularity]);
-
     // 顶部步骤条使用统一 Stepper 组件
     const hasCurrentProjectView = localProjectId === projectId;
     const visibleStarting = hasCurrentProjectView ? starting : false;
     const visiblePreviewHtml = hasCurrentProjectView ? previewHtml : '';
     const visibleSegItems = hasCurrentProjectView ? segItems : [];
     const visibleSegBodyCount = hasCurrentProjectView ? segBodyCount : 0;
+    const visibleSegAverageCharacters = hasCurrentProjectView ? segAverageCharacters : null;
     const visibleSegLoading = !hasCurrentProjectView || segLoading;
     const visibleSegError = hasCurrentProjectView ? segError : null;
+    const visibleSegmentPlanId = hasCurrentProjectView ? segmentPlanId : '';
+    const visibleSegmentPlanner = hasCurrentProjectView ? segmentPlanner : null;
     const visibleTerms = hasCurrentProjectView ? terms : [];
     const visibleTermPreview = hasCurrentProjectView ? termPreview : [];
     const visibleTermPreviewLoading = !hasCurrentProjectView || termPreviewLoading;
@@ -1015,9 +1059,13 @@ export default function ProjectInitPage() {
                                         setPreview('');
                                         setPreviewHtml('');
                                         setSegItems([]);
+                                        setSegBodyCount(0);
+                                        setSegAverageCharacters(null);
                                         setSegError(null);
                                         setSegmentShowFull(false);
                                         setSegmentGranularity('balanced');
+                                        setSegmentPlanId('');
+                                        setSegmentPlanner(null);
                                         setTermPreview([]);
                                         setTermPreviewError(null);
                                         resetTermApplyResult();
@@ -1074,21 +1122,45 @@ export default function ProjectInitPage() {
                             <SegmentPanel
                                 segItems={visibleSegItems}
                                 bodyCount={visibleSegBodyCount}
+                                averageCharacters={visibleSegAverageCharacters ?? undefined}
                                 segLoading={visibleSegLoading}
                                 segError={visibleSegError}
                                 granularity={segmentGranularity}
                                 onGranularityChange={value => {
-                                    if (hasCurrentProjectView) setSegmentGranularity(value);
+                                    if (!hasCurrentProjectView || value === segmentGranularity) return;
+                                    setSegmentGranularity(value);
+                                    setSegmentPlanId('');
+                                    setSegmentPlanner(null);
+                                    setSegItems([]);
+                                    setSegBodyCount(0);
+                                    setSegAverageCharacters(null);
+                                    setSegmentShowFull(false);
                                 }}
                                 showFull={hasCurrentProjectView ? segmentShowFull : false}
                                 onShowFullChange={value => {
                                     if (!hasCurrentProjectView) return;
                                     setSegmentShowFull(value);
-                                    if (segmentDocumentId)
+                                    if (segmentDocumentId && segmentPlanId)
                                         void loadSegPreview({
                                             all: value,
-                                            regenerate: false,
+                                            planId: segmentPlanId,
                                         });
+                                }}
+                                hasPlan={Boolean(visibleSegmentPlanId)}
+                                planner={visibleSegmentPlanner}
+                                onGenerate={() => {
+                                    if (hasCurrentProjectView && segmentDocumentId) {
+                                        void loadSegPreview({ generate: true });
+                                    }
+                                }}
+                                onPromptChanged={() => {
+                                    if (!hasCurrentProjectView) return;
+                                    setSegmentPlanId('');
+                                    setSegmentPlanner(null);
+                                    setSegItems([]);
+                                    setSegBodyCount(0);
+                                    setSegAverageCharacters(null);
+                                    setSegmentShowFull(false);
                                 }}
                                 busy={
                                     !hasCurrentProjectView || visibleSegLoading || visibleStarting
@@ -1192,7 +1264,7 @@ export default function ProjectInitPage() {
                                         variant="outline"
                                         onClick={() => {
                                             if (hasCurrentProjectView && segmentDocumentId)
-                                                void loadSegPreview();
+                                                void loadSegPreview({ generate: true });
                                         }}
                                         disabled={
                                             !hasCurrentProjectView ||
@@ -1207,6 +1279,7 @@ export default function ProjectInitPage() {
                                         disabled={
                                             !hasCurrentProjectView ||
                                             !visibleSegItems.length ||
+                                            !visibleSegmentPlanId ||
                                             visibleApplying ||
                                             visibleStarting
                                         }

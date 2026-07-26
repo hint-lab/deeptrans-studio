@@ -1,4 +1,5 @@
 export const WORKFLOW_PROMPT_KEYS = [
+    'document-segmentation',
     'mono-term-extract',
     'term-embed-trans',
     'syntax-evaluate',
@@ -82,6 +83,7 @@ export function omitClientWorkflowPrompt<T extends object>(
 }
 
 export const WORKFLOW_STAGE_PROMPT_KEYS: Record<string, WorkflowPromptKey[]> = {
+    SEGMENT: ['document-segmentation'],
     MT: ['mono-term-extract', 'term-embed-trans'],
     QA: ['syntax-evaluate', 'syntax-advice-embed'],
     POST_EDIT: ['discourse-evaluate', 'discourse-embed'],

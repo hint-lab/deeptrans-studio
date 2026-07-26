@@ -65,7 +65,6 @@ export async function chatText(
     if (!response.ok) {
         logger.error('LLM request failed', {
             status: response.status,
-            body: typeof text === 'string' ? text.slice(0, 1000) : '',
         });
         throw new Error(`LLM请求失败: ${response.status}`);
     }
