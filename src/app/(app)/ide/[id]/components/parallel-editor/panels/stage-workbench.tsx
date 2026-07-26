@@ -505,7 +505,7 @@ export default function StageWorkbench({
                     id={workflowPanelId}
                     className="min-h-0 shrink basis-[45%] border-t bg-muted/15 p-2"
                 >
-                    {renderWorkflow(workflowContext)}
+                    {renderWorkflow?.(workflowContext)}
                 </div>
             )}
         </section>
