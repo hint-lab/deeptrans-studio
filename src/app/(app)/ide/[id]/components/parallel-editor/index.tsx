@@ -720,7 +720,7 @@ export default function ParallelEditor({ className }: { className?: string }) {
             {activeDocumentItem.id === null ||
             activeDocumentItem.id === undefined ||
             activeDocumentItem.id === '' ? (
-                <div className="relative size-full">
+                <div className="relative size-full bg-secondary">
                     <TranslationGuideButton className="absolute right-3 top-3" />
                 </div>
             ) : (
